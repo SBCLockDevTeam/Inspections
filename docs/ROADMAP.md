@@ -20,6 +20,8 @@
 - Implement Points List rules.
 - Implement Event History rules.
 - Implement point matching and first-event selection.
+- Support multiple categorized, immutable Points Lists per inspection.
+- Support repeated Event History uploads with cumulative mapping retention.
 - Add fixture-based tests from real but sanitized files.
 
 ## Phase 3 Review workflow
@@ -33,8 +35,9 @@
 ## Phase 4 Export
 
 - Implement the approved Initiating Devices template.
-- Generate Excel output.
-- Add PDF export only after Excel output is validated.
+- Block export until results and mappings are complete.
+- Generate the required category-aware PDF filename.
+- Add PDF layout verification against the approved template.
 - Add export verification and download history.
 
 ## Phase 5 PDF input
@@ -49,4 +52,3 @@
 - Use AI only for flagged descriptions, column mapping suggestions, or location suggestions.
 - Require human acceptance and store the prompt, model, response, and decision when AI is enabled.
 - Add token budgets, caching, and batch review to prevent excessive usage.
-

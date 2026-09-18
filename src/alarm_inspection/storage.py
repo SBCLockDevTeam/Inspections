@@ -27,6 +27,17 @@ class Inspection(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
+class PointList(Base):
+    __tablename__ = "point_lists"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    inspection_id: Mapped[str] = mapped_column(String(36), index=True)
+    category: Mapped[str] = mapped_column(String(40))
+    filename: Mapped[str] = mapped_column(String(255))
+    path: Mapped[str] = mapped_column(String(1000))
+    accepted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
 class SourceFile(Base):
     __tablename__ = "source_files"
 

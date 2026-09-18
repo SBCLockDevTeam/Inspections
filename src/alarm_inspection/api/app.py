@@ -6,7 +6,7 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
-from alarm_inspection.storage import Inspection, SourceFile, open_store
+from alarm_inspection.storage import Inspection, PointList, SourceFile, open_store
 
 try:
     from fastapi import FastAPI, File, Form, UploadFile
@@ -27,10 +27,11 @@ _HTML = """<!doctype html>
 <label for="address">Address</label><input id="address" required>
 <label for="start_date">Inspection start date</label><input id="start_date" type="date" required>
 <label for="completion_date">Inspection completion date</label><input id="completion_date" type="date" required>
-<label for="points_file">Points List</label><input id="points_file" type="file" accept=".xls,.xlsx,.pdf" required>
+<label for="category">Points List category</label><select id="category" required><option>Fire</option><option>Burglar</option><option>Combo</option><option>Gas Station</option></select>
+<label for="points_file">Points Lists (one per security panel)</label><input id="points_file" type="file" accept=".xls,.xlsx,.pdf" multiple required>
 <label for="event_file">Event History (optional for now)</label><input id="event_file" type="file" accept=".xls,.xlsx,.pdf">
 <button>Create inspection</button></form><div id="message"></div></div>
-<script>const form=document.querySelector('#inspection-form');const msg=document.querySelector('#message');form.addEventListener('submit',async(e)=>{e.preventDefault();msg.textContent='Uploading...';const data=new FormData();for(const id of ['store_number','address','start_date','completion_date'])data.append(id,document.querySelector('#'+id).value);data.append('points_file',document.querySelector('#points_file').files[0]);const event=document.querySelector('#event_file').files[0];if(event)data.append('event_file',event);const r=await fetch('/api/inspections',{method:'POST',body:data});const j=await r.json();msg.textContent=r.ok?'Inspection created: '+j.id:'Error: '+(j.detail||'Upload failed');});</script>
+<script>const form=document.querySelector('#inspection-form');const msg=document.querySelector('#message');form.addEventListener('submit',async(e)=>{e.preventDefault();msg.textContent='Uploading...';const data=new FormData();for(const id of ['store_number','address','start_date','completion_date','category'])data.append(id,document.querySelector('#'+id).value);for(const file of document.querySelector('#points_file').files)data.append('points_files',file);const event=document.querySelector('#event_file').files[0];if(event)data.append('event_file',event);const r=await fetch('/api/inspections',{method:'POST',body:data});const j=await r.json();msg.textContent=r.ok?'Inspection created: '+j.id:'Error: '+(j.detail||'Upload failed');});</script>
 </body></html>"""
 
 
@@ -54,20 +55,24 @@ def create_app():
         address: str = Form(...),
         start_date: date = Form(...),
         completion_date: date = Form(...),
-        points_file: UploadFile = File(...),
+        category: str = Form(...),
+        points_files: list[UploadFile] = File(...),
         event_file: UploadFile | None = File(None),
     ) -> dict:
         inspection_id = str(uuid4())
         target = _UPLOAD_ROOT / inspection_id
         target.mkdir(parents=True, exist_ok=True)
         files = []
-        for upload in (points_file, event_file):
+        point_file_names = set()
+        for upload in (*points_files, event_file):
             if upload is None:
                 continue
             filename = Path(upload.filename or "upload.bin").name
             destination = target / filename
             destination.write_bytes(await upload.read())
             files.append(filename)
+            if upload in points_files:
+                point_file_names.add(filename)
         created_at = datetime.now(timezone.utc)
         with store.begin() as session:
             session.add(Inspection(id=inspection_id, store_number=store_number, address=address,
@@ -75,7 +80,12 @@ def create_app():
                                    status="received", created_at=created_at))
             for filename in files:
                 session.add(SourceFile(id=str(uuid4()), inspection_id=inspection_id,
-                                       filename=filename, path=str(target / filename), kind="source"))
+                                       filename=filename, path=str(target / filename),
+                                       kind="points_list" if filename in point_file_names else "event_history"))
+            for filename in point_file_names:
+                session.add(PointList(id=str(uuid4()), inspection_id=inspection_id,
+                                      category=category, filename=filename,
+                                      path=str(target / filename), accepted_at=created_at))
         return {"id": inspection_id, "status": "received", "files": files}
 
     @app.get("/api/inspections")
@@ -86,6 +96,19 @@ def create_app():
                      "start_date": row.start_date.isoformat(),
                      "completion_date": row.completion_date.isoformat(),
                      "status": row.status, "created_at": row.created_at.isoformat()} for row in rows]
+
+    @app.post("/api/inspections/{inspection_id}/event-history")
+    async def add_event_history(inspection_id: str, event_file: UploadFile = File(...)) -> dict:
+        target = _UPLOAD_ROOT / inspection_id
+        if not target.exists():
+            return {"error": "inspection not found"}
+        filename = Path(event_file.filename or "event-history.bin").name
+        destination = target / filename
+        destination.write_bytes(await event_file.read())
+        with store.begin() as session:
+            session.add(SourceFile(id=str(uuid4()), inspection_id=inspection_id,
+                                   filename=filename, path=str(destination), kind="event_history"))
+        return {"inspection_id": inspection_id, "filename": filename, "status": "received"}
 
     return app
 

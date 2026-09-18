@@ -46,16 +46,18 @@ Browser
 ## Domain model
 
 - Inspection
-- SourceFile
+- PointList
+- EventHistoryUpload
 - PointRecord
 - EventRecord
 - InitiatingDevice
+- MappingResult
 - ProcessingRun
 - Exception
 - Export
 - RuleSetVersion
 
-Use stable internal IDs. Treat point address as a normalized business key, not as the database primary key.
+Use stable internal IDs. Treat point address as a normalized business key, not as the database primary key. Each inspection owns many PointLists and EventHistoryUploads. PointLists are immutable after acceptance. MappingResults are durable and retain the evidence upload and timestamp that produced each accepted mapping.
 
 ## Security
 
@@ -66,4 +68,3 @@ Use stable internal IDs. Treat point address as a normalized business key, not a
 - Store secrets only in deployment secret storage.
 - Never commit API keys, DigitalOcean tokens, database passwords, or `.env` files.
 - Log metadata and processing decisions, not sensitive file contents.
-

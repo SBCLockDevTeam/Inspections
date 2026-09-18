@@ -2,7 +2,7 @@
 
 These rules are the executable interpretation of the inspection specification. Implement them as tested functions, not as prompts.
 
-## Points List
+## Points Lists
 
 1. Detect the point and text columns using header aliases and sampled values.
 2. Ignore blank columns between source columns without depending on their letters.
@@ -12,6 +12,8 @@ These rules are the executable interpretation of the inspection specification. I
 6. When text is wrapped across following rows, append continuation text to the preceding valid point until the next point or structural boundary.
 7. Keep only the normalized point address and point text for the point-processing output.
 8. Preserve raw values and a decision reason in the audit record.
+9. Store each uploaded Points List as a separate panel source with category `Fire`, `Burglar`, `Combo`, or `Gas Station`.
+10. Once accepted, do not silently replace or mutate a Points List.
 
 ## Initiating Devices
 
@@ -30,6 +32,14 @@ These rules are the executable interpretation of the inspection specification. I
 5. Select the earliest qualifying timestamp for each point.
 6. Preserve all candidate events in the audit trail.
 7. Flag malformed timestamps, missing addresses, duplicate point definitions, and points without a qualifying event.
+8. Treat every Event History upload as an additional evidence batch.
+9. Keep prior successful mappings. A later batch may fill an unmapped point but must not replace a successful mapping without an explicit correction action and audit entry.
+
+## Completion and PDF export
+
+- The inspection is export-ready only when every accepted initiating-device point has a valid result and required manual mappings are complete.
+- If any point is unmapped, missing a qualifying event, or awaiting review, block PDF creation and show the exact exceptions.
+- Sanitize store number, city, and state before constructing the filename.
 
 ## Open decisions to confirm with sample files
 
@@ -38,4 +48,3 @@ These rules are the executable interpretation of the inspection specification. I
 - Tie-breaking when two qualifying events have the same timestamp.
 - Whether PDF input is text-based or scanned and therefore requires OCR.
 - Complete list of device-type and location rules.
-

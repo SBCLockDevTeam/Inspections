@@ -16,3 +16,14 @@ AI will be added later through a provider interface for suggestions and exceptio
 
 The new application will use separate service names, secrets, storage, database access, and deployment configuration on the same DigitalOcean server.
 
+## 2026 09 18 Multiple panel point lists
+
+An inspection may contain multiple Points Lists, one per security panel. Each list is categorized as Fire, Burglar, Combo, or Gas Station and is immutable after acceptance.
+
+## 2026 09 18 Incremental event history
+
+Event History uploads are cumulative. Successful point-to-time mappings are retained across uploads until all mappings are complete.
+
+## 2026 09 18 Gated PDF export
+
+The final PDF is not created until all results and mappings are complete. The filename includes store, city, state, category, and inspection date.
