@@ -6,7 +6,7 @@ This deployment is intentionally separate from the existing Work_Order deploymen
 
 Create a dedicated directory such as `/opt/inspections`, a dedicated Compose project name `inspections`, and a dedicated environment file `.env.inspections`. Do not place these files in the Work_Order directory.
 
-The reverse proxy should forward a new hostname or path to `127.0.0.1:18080`. Do not reuse the existing application's port or Compose project.
+Until a domain is available, the API can be reached at `http://SERVER_IP:18080`. Later, a reverse proxy can forward a hostname or path to port 18080. Do not reuse the existing application's port or Compose project.
 
 ## Required environment values
 
@@ -41,4 +41,3 @@ Do not commit `.env.inspections`.
 ## Rollback
 
 Set `INSPECTIONS_IMAGE` to the previous image tag and run `docker compose -p inspections ... up -d`. Never roll back by changing or restarting the Work_Order Compose project.
-

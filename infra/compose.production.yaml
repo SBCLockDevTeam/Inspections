@@ -4,7 +4,7 @@ services:
     restart: unless-stopped
     env_file: .env.inspections
     ports:
-      - "127.0.0.1:18080:8000"
+      - "18080:8000"
     depends_on:
       - db
       - redis
@@ -25,4 +25,3 @@ services:
 
 volumes:
   inspections_postgres:
-
