@@ -7,6 +7,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from alarm_inspection.storage import Inspection, PointList, SourceFile, open_store
+from alarm_inspection.intake.points_list import parse_xlsx
 
 try:
     from fastapi import FastAPI, File, Form, UploadFile
@@ -108,6 +109,21 @@ def create_app():
             session.add(SourceFile(id=str(uuid4()), inspection_id=inspection_id,
                                    filename=filename, path=str(destination), kind="event_history"))
         return {"inspection_id": inspection_id, "filename": filename, "status": "received"}
+
+    @app.post("/api/point-lists/preview")
+    async def preview_points_list(points_file: UploadFile = File(...)) -> dict:
+        filename = Path(points_file.filename or "points.xlsx").name
+        if not filename.lower().endswith(".xlsx"):
+            return {"error": "The first parser supports XLSX files; PDF and legacy XLS need a separate adapter."}
+        preview_path = _UPLOAD_ROOT / f"preview-{uuid4()}-{filename}"
+        preview_path.parent.mkdir(parents=True, exist_ok=True)
+        preview_path.write_bytes(await points_file.read())
+        try:
+            rows = parse_xlsx(preview_path)
+            return {"filename": filename, "accepted": sum(row["accepted"] for row in rows),
+                    "rejected": sum(not row["accepted"] for row in rows), "rows": rows}
+        except ValueError as exc:
+            return {"error": str(exc)}
 
     return app
 
