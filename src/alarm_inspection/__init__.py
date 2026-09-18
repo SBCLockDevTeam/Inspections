@@ -1,0 +1,2 @@
+"""Alarm inspection processing application."""
+

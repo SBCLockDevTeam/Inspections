@@ -1,0 +1,23 @@
+services:
+  api:
+    build: .
+    env_file: .env
+    ports:
+      - "127.0.0.1:18080:8000"
+    depends_on:
+      - db
+      - redis
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: inspection
+      POSTGRES_USER: inspection
+      POSTGRES_PASSWORD: inspection
+    volumes:
+      - inspection-db:/var/lib/postgresql/data
+  redis:
+    image: redis:7-alpine
+
+volumes:
+  inspection-db:
+
