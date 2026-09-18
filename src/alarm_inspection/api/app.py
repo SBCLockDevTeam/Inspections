@@ -12,7 +12,7 @@ from alarm_inspection.intake.points_list import parse_xlsx
 
 try:
     from fastapi import FastAPI, File, Form, UploadFile
-    from fastapi.responses import HTMLResponse
+    from fastapi.responses import HTMLResponse, Response
 except ImportError:  # Allows domain tests to run without web dependencies.
     FastAPI = None
 
@@ -48,7 +48,12 @@ def create_app():
 
     @app.get("/", response_class=HTMLResponse)
     def home() -> str:
-        return _HTML
+        return _HTML.replace("</body>", "<script src='/review.js'></script></body>")
+
+    @app.get("/review.js")
+    def review_script() -> Response:
+        script = Path(__file__).with_name("review.js").read_text(encoding="utf-8")
+        return Response(content=script, media_type="application/javascript")
 
     @app.post("/api/inspections")
     async def create_inspection(
