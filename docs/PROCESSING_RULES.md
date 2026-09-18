@@ -14,6 +14,7 @@ These rules are the executable interpretation of the inspection specification. I
 8. Preserve raw values and a decision reason in the audit record.
 9. Store each uploaded Points List as a separate panel source with category `Fire`, `Burglar`, `Combo`, or `Gas Station`.
 10. Once accepted, do not silently replace or mutate a Points List.
+11. Loading is not approval. Require explicit technician approval after the parsed preview is reviewed.
 
 ## Initiating Devices
 

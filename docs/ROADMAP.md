@@ -30,6 +30,7 @@
 - Add upload progress and processing status.
 - Add accepted/review/rejected summaries.
 - Add a review screen for exceptions and locations.
+- Require explicit approval of the initial Points List parse before acceptance.
 - Add immutable processing-run results.
 
 ## Phase 4 Export

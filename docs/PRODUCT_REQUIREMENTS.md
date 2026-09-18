@@ -28,6 +28,7 @@ The user creates an inspection, enters store number, address, inspection start a
 - Ambiguous records must be sent to a review queue.
 - Successful mappings must survive later Event History uploads and reprocessing.
 - A Points List becomes immutable after it is accepted into the inspection; corrections require an explicit replacement/version action.
+- Loading a Points List creates the inspection in `pending_points_review`; the technician must explicitly approve the parsed data before normal processing continues.
 - Reprocessing the same source files must be deterministic.
 - AI API integration is not part of the first release.
 

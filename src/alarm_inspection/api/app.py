@@ -31,7 +31,7 @@ _HTML = """<!doctype html>
 <label>Points Lists by security panel</label><div id="point-lists"><div class="point-list"><select name="point_list_category"><option>Fire</option><option>Burglar</option><option>Combo</option><option>Gas Station</option></select><input name="points_files" type="file" accept=".xls,.xlsx,.pdf" required></div></div><button type="button" id="add-list">Add another Points List</button><button type="button" id="preview-list">Preview first Points List</button><div id="preview"></div>
 <label for="event_file">Event History (optional for now)</label><input id="event_file" type="file" accept=".xls,.xlsx,.pdf">
 <button type="submit">Create inspection</button></form><div id="message"></div></div>
-<script>const form=document.querySelector('#inspection-form');const msg=document.querySelector('#message');const lists=document.querySelector('#point-lists');const preview=document.querySelector('#preview');document.querySelector('#add-list').onclick=()=>{const row=lists.firstElementChild.cloneNode(true);row.querySelector('input').value='';row.querySelector('input').required=true;lists.appendChild(row)};document.querySelector('#preview-list').onclick=async()=>{const file=lists.querySelector('input').files[0];if(!file){preview.textContent='Choose an XLSX file first.';return}const data=new FormData();data.append('points_file',file);preview.textContent='Analyzing...';const r=await fetch('/api/point-lists/preview',{method:'POST',body:data});const j=await r.json();preview.textContent=j.error||('Accepted: '+j.accepted+' | Needs review: '+j.rejected+'\n'+j.rows.slice(0,10).map(x=>'Point '+(x.address??'?')+': '+x.text+' ['+x.reason+']').join('\n'));};form.addEventListener('submit',async(e)=>{e.preventDefault();msg.textContent='Uploading...';const data=new FormData();for(const id of ['store_number','address','start_date','completion_date'])data.append(id,document.querySelector('#'+id).value);for(const row of document.querySelectorAll('.point-list')){data.append('point_list_categories',row.querySelector('select').value);data.append('points_files',row.querySelector('input').files[0]);}const event=document.querySelector('#event_file').files[0];if(event)data.append('event_file',event);const r=await fetch('/api/inspections',{method:'POST',body:data});const j=await r.json();msg.textContent=r.ok?'Inspection created: '+j.id+'. Additional Event History can be uploaded to /api/inspections/'+j.id+'/event-history':'Error: '+(j.detail||'Upload failed');});</script>
+<script>const form=document.querySelector('#inspection-form');const msg=document.querySelector('#message');const lists=document.querySelector('#point-lists');const preview=document.querySelector('#preview');document.querySelector('#add-list').onclick=()=>{const row=lists.firstElementChild.cloneNode(true);row.querySelector('input').value='';row.querySelector('input').required=true;lists.appendChild(row)};document.querySelector('#preview-list').onclick=async()=>{const file=lists.querySelector('input').files[0];if(!file){preview.textContent='Choose an XLSX file first.';return}const data=new FormData();data.append('points_file',file);preview.textContent='Analyzing...';const r=await fetch('/api/point-lists/preview',{method:'POST',body:data});const j=await r.json();preview.textContent=j.error||('Accepted: '+j.accepted+' | Needs review: '+j.rejected+'\n'+j.rows.slice(0,10).map(x=>'Point '+(x.address??'?')+': '+x.text+' ['+x.reason+']').join('\n'));};form.addEventListener('submit',async(e)=>{e.preventDefault();msg.textContent='Uploading and parsing...';const data=new FormData();for(const id of ['store_number','address','start_date','completion_date'])data.append(id,document.querySelector('#'+id).value);for(const row of document.querySelectorAll('.point-list')){data.append('point_list_categories',row.querySelector('select').value);data.append('points_files',row.querySelector('input').files[0]);}const event=document.querySelector('#event_file').files[0];if(event)data.append('event_file',event);const r=await fetch('/api/inspections',{method:'POST',body:data});const j=await r.json();if(!r.ok){msg.textContent='Error: '+(j.detail||'Upload failed');return}msg.textContent='Inspection '+j.id+' is ready for approval. Review the parsed data, then approve it.';const approve=document.createElement('button');approve.textContent='Approve parsed Points Lists';approve.onclick=async()=>{const a=await fetch('/api/inspections/'+j.id+'/approve-points',{method:'POST'});const result=await a.json();msg.textContent=result.status==='points_approved'?'Points Lists approved.':'Approval error: '+(result.error||'unknown error');};msg.appendChild(document.createElement('br'));msg.appendChild(approve);});</script>
 </body></html>"""
 
 
@@ -74,6 +74,7 @@ def create_app():
             if upload in points_files:
                 point_file_names.append(filename)
         created_at = datetime.now(timezone.utc)
+        previews = []
         with store.begin() as session:
             session.add(Inspection(id=inspection_id, store_number=store_number, address=address,
                                    start_date=start_date, completion_date=completion_date,
@@ -86,7 +87,10 @@ def create_app():
                 session.add(PointList(id=str(uuid4()), inspection_id=inspection_id,
                                       category=list_category, filename=filename,
                                       path=str(target / filename), accepted_at=created_at))
-        return {"id": inspection_id, "status": "received", "files": files}
+        for filename in point_file_names:
+            if filename.lower().endswith(".xlsx"):
+                previews.append({"filename": filename, "rows": parse_xlsx(target / filename)})
+        return {"id": inspection_id, "status": "pending_points_review", "files": files, "previews": previews}
 
     @app.get("/api/inspections")
     def list_inspections() -> list[dict]:
@@ -109,6 +113,17 @@ def create_app():
             session.add(SourceFile(id=str(uuid4()), inspection_id=inspection_id,
                                    filename=filename, path=str(destination), kind="event_history"))
         return {"inspection_id": inspection_id, "filename": filename, "status": "received"}
+
+    @app.post("/api/inspections/{inspection_id}/approve-points")
+    def approve_points(inspection_id: str) -> dict:
+        with store.begin() as session:
+            row = session.get(Inspection, inspection_id)
+            if row is None:
+                return {"error": "inspection not found"}
+            if row.status != "pending_points_review":
+                return {"error": "inspection is not awaiting points review", "status": row.status}
+            row.status = "points_approved"
+        return {"id": inspection_id, "status": "points_approved"}
 
     @app.post("/api/point-lists/preview")
     async def preview_points_list(points_file: UploadFile = File(...)) -> dict:
