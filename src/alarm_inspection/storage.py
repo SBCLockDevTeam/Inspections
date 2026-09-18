@@ -38,6 +38,18 @@ class PointList(Base):
     accepted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
+class PointDecision(Base):
+    __tablename__ = "point_decisions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    inspection_id: Mapped[str] = mapped_column(String(36), index=True)
+    address: Mapped[int | None] = mapped_column(nullable=True)
+    text: Mapped[str] = mapped_column(String(500))
+    accepted: Mapped[bool] = mapped_column(default=True)
+    deleted: Mapped[bool] = mapped_column(default=False)
+    reason: Mapped[str] = mapped_column(String(200), default="technician review")
+
+
 class SourceFile(Base):
     __tablename__ = "source_files"
 
