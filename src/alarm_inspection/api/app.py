@@ -6,6 +6,8 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
+from alarm_inspection.storage import Inspection, SourceFile, open_store
+
 try:
     from fastapi import FastAPI, File, Form, UploadFile
     from fastapi.responses import HTMLResponse
@@ -13,7 +15,6 @@ except ImportError:  # Allows domain tests to run without web dependencies.
     FastAPI = None
 
 
-_INSPECTIONS: dict[str, dict] = {}
 _UPLOAD_ROOT = Path("/tmp/alarm-inspection-uploads")
 
 _HTML = """<!doctype html>
@@ -37,6 +38,7 @@ def create_app():
     if FastAPI is None:
         raise RuntimeError("Install the 'web' optional dependencies to run the API")
     app = FastAPI(title="Alarm Inspection Processor", version="0.1.0")
+    store = open_store()
 
     @app.get("/health")
     def health() -> dict[str, str]:
@@ -66,21 +68,24 @@ def create_app():
             destination = target / filename
             destination.write_bytes(await upload.read())
             files.append(filename)
-        _INSPECTIONS[inspection_id] = {
-            "id": inspection_id,
-            "store_number": store_number,
-            "address": address,
-            "start_date": start_date.isoformat(),
-            "completion_date": completion_date.isoformat(),
-            "files": files,
-            "status": "received",
-            "created_at": datetime.now(timezone.utc).isoformat(),
-        }
-        return _INSPECTIONS[inspection_id]
+        created_at = datetime.now(timezone.utc)
+        with store.begin() as session:
+            session.add(Inspection(id=inspection_id, store_number=store_number, address=address,
+                                   start_date=start_date, completion_date=completion_date,
+                                   status="received", created_at=created_at))
+            for filename in files:
+                session.add(SourceFile(id=str(uuid4()), inspection_id=inspection_id,
+                                       filename=filename, path=str(target / filename), kind="source"))
+        return {"id": inspection_id, "status": "received", "files": files}
 
     @app.get("/api/inspections")
     def list_inspections() -> list[dict]:
-        return list(_INSPECTIONS.values())
+        with store() as session:
+            rows = session.query(Inspection).order_by(Inspection.created_at.desc()).all()
+            return [{"id": row.id, "store_number": row.store_number, "address": row.address,
+                     "start_date": row.start_date.isoformat(),
+                     "completion_date": row.completion_date.isoformat(),
+                     "status": row.status, "created_at": row.created_at.isoformat()} for row in rows]
 
     return app
 
