@@ -60,6 +60,16 @@ class SourceFile(Base):
     kind: Mapped[str] = mapped_column(String(40))
 
 
+class EventPointDate(Base):
+    __tablename__ = "event_point_dates"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    inspection_id: Mapped[str] = mapped_column(String(36), index=True)
+    point_address: Mapped[int] = mapped_column(index=True)
+    event_timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    source_filename: Mapped[str] = mapped_column(String(255), default="")
+
+
 def open_store():
     url = os.getenv("DATABASE_URL", "sqlite:////tmp/alarm-inspection.db")
     engine = create_engine(url, pool_pre_ping=True)

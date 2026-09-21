@@ -1,4 +1,27 @@
 (() => {
+  const homeScreen = document.querySelector('#home-screen');
+  const createScreen = document.querySelector('#create-screen');
+  const inspectionScreen = document.querySelector('#inspection-screen');
+
+  const startCreateButton = document.querySelector('#start-create');
+  const backHomeFromCreate = document.querySelector('#back-home-from-create');
+  const backHomeFromInspection = document.querySelector('#back-home-from-inspection');
+  const refreshInspectionsButton = document.querySelector('#refresh-inspections');
+  const inspectionPicker = document.querySelector('#inspection-picker');
+  const openInspectionButton = document.querySelector('#open-inspection');
+  const homeMessage = document.querySelector('#home-message');
+
+  const inspectionTitle = document.querySelector('#inspection-title');
+  const inspectionMeta = document.querySelector('#inspection-meta');
+  const acceptedPointsBody = document.querySelector('#accepted-points-body');
+  const inspectionMessage = document.querySelector('#inspection-message');
+  const refreshInspectionButton = document.querySelector('#refresh-inspection');
+  const eventHistoryForm = document.querySelector('#event-history-form');
+  const eventFile = document.querySelector('#event-file');
+  const saveEventDatesButton = document.querySelector('#save-event-dates');
+  const clearEventDatesButton = document.querySelector('#clear-event-dates');
+  const toggleMissingPointsButton = document.querySelector('#toggle-missing-points');
+
   const form = document.querySelector('#inspection-form');
   const previewButton = document.querySelector('#preview-list');
   const modal = document.querySelector('#preview-modal');
@@ -6,16 +29,180 @@
   const summary = document.querySelector('#preview-summary');
   const message = document.querySelector('#message');
   const decisionField = document.querySelector('#point-decisions');
-  const saveButton = document.querySelector('#save-review');
-  const acceptButton = document.querySelector('#accept-review');
-  const deleteButton = document.querySelector('#delete-review');
+  const saveButtons = [...document.querySelectorAll('.save-review-action')];
+  const acceptButtons = [...document.querySelectorAll('.accept-review-action')];
+  const deleteButtons = [...document.querySelectorAll('.delete-review-action')];
   const lists = document.querySelector('#point-lists');
   const listSelector = document.querySelector('#preview-list-selector');
-  if (!form || !previewButton || !modal || !body) return;
+  const closePreviewButton = document.querySelector('#close-preview');
+
+  if (!form || !previewButton || !modal || !body || !homeScreen || !createScreen || !inspectionScreen) {
+    return;
+  }
 
   let previewLists = [];
   let selectedListIndex = 0;
   let renderedListIndex = null;
+  let previewInputSignature = null;
+  let currentInspectionId = null;
+  let reviewSaved = false;
+  let inspectionPoints = [];
+  let pendingEventDates = new Map();
+  let showMissingOnly = false;
+
+  function showScreen(name) {
+    homeScreen.classList.toggle('hidden', name !== 'home');
+    createScreen.classList.toggle('hidden', name !== 'create');
+    inspectionScreen.classList.toggle('hidden', name !== 'inspection');
+  }
+
+  function clearPreviewState() {
+    previewLists = [];
+    selectedListIndex = 0;
+    renderedListIndex = null;
+    previewInputSignature = null;
+    decisionField.value = '[]';
+    reviewSaved = false;
+  }
+
+  function resetCreateForm() {
+    form.reset();
+    const rows = [...lists.querySelectorAll('.point-list')];
+    for (const row of rows.slice(1)) {
+      row.remove();
+    }
+    clearPreviewState();
+    message.textContent = '';
+  }
+
+  function formatInspectionLabel(inspection) {
+    return `${inspection.store_number} | ${inspection.address} | ${inspection.status}`;
+  }
+
+  async function loadInspections() {
+    const response = await fetch('/api/inspections');
+    const items = await response.json();
+    inspectionPicker.replaceChildren();
+    if (!items.length) {
+      inspectionPicker.add(new Option('No inspections yet', ''));
+      return;
+    }
+    for (const item of items) {
+      inspectionPicker.add(new Option(formatInspectionLabel(item), item.id));
+    }
+  }
+
+  async function createInspection() {
+    message.textContent = 'Creating inspection...';
+    const data = new FormData();
+    for (const id of ['store_number', 'address']) {
+      data.append(id, document.querySelector(`#${id}`).value);
+    }
+    for (const row of document.querySelectorAll('.point-list')) {
+      const category = row.querySelector('select')?.value || '';
+      const file = row.querySelector('input[type=file]')?.files?.[0];
+      if (!file) {
+        message.textContent = 'Choose an XLSX file for each Points List first.';
+        return false;
+      }
+      data.append('point_list_categories', category);
+      data.append('points_files', file);
+    }
+    data.append('point_decisions', decisionField.value || '[]');
+    const response = await fetch('/api/inspections', { method: 'POST', body: data });
+    const result = await response.json();
+    if (!response.ok || result.error) {
+      message.textContent = result.error || result.detail || 'Inspection creation failed.';
+      return false;
+    }
+    await loadInspections();
+    showScreen('home');
+    inspectionPicker.value = result.id;
+    homeMessage.textContent = `Inspection created and saved. Select it and click Open Inspection.`;
+    resetCreateForm();
+    return true;
+  }
+
+  function renderVisibleAcceptedPoints() {
+    acceptedPointsBody.replaceChildren();
+    const pointsToRender = showMissingOnly
+      ? inspectionPoints.filter((point) => {
+          const pointKey = Number(point.address);
+          const pending = Number.isFinite(pointKey) ? pendingEventDates.get(pointKey) : undefined;
+          return !(point.event_date || pending);
+        })
+      : inspectionPoints;
+
+    if (!pointsToRender.length) {
+      const row = document.createElement('tr');
+      const cell = document.createElement('td');
+      cell.colSpan = 3;
+      cell.textContent = showMissingOnly
+        ? 'All accepted points currently have dates.'
+        : 'No accepted points recorded yet.';
+      row.append(cell);
+      acceptedPointsBody.append(row);
+      return;
+    }
+    for (const point of pointsToRender) {
+      const row = document.createElement('tr');
+      const address = document.createElement('td');
+      address.textContent = point.address ?? '';
+      const text = document.createElement('td');
+      text.textContent = point.text ?? '';
+      const eventDate = document.createElement('td');
+      const pointKey = Number(point.address);
+      const pending = Number.isFinite(pointKey) ? pendingEventDates.get(pointKey) : undefined;
+      eventDate.textContent = point.event_date ?? (pending ? `${pending} (pending)` : '');
+      row.append(address, text, eventDate);
+      acceptedPointsBody.append(row);
+    }
+  }
+
+  function renderAcceptedPoints(points) {
+    inspectionPoints = points;
+    renderVisibleAcceptedPoints();
+  }
+
+  function syncMissingToggleLabel() {
+    if (!toggleMissingPointsButton) {
+      return;
+    }
+    toggleMissingPointsButton.textContent = showMissingOnly ? 'Show All Points' : 'Show Missing Points Only';
+  }
+
+  async function openInspection(inspectionId) {
+    if (!inspectionId) {
+      return;
+    }
+    const response = await fetch(`/api/inspections/${inspectionId}`);
+    const inspection = await response.json();
+    if (inspection.error) {
+      inspectionMessage.textContent = inspection.error;
+      return;
+    }
+    pendingEventDates = new Map();
+    currentInspectionId = inspection.id;
+    inspectionTitle.textContent = `Inspection ${inspection.store_number}`;
+    inspectionMeta.textContent = `${inspection.address} | ${inspection.status}`;
+    renderAcceptedPoints(inspection.accepted_points || []);
+    syncMissingToggleLabel();
+    const uploaded = (inspection.event_history_files || []).join(', ');
+    inspectionMessage.textContent = uploaded ? `Event History uploads: ${uploaded}` : '';
+    showScreen('inspection');
+  }
+
+  function buildUploadSignature(uploads) {
+    return uploads.map((upload) => {
+      const file = upload.file;
+      return [
+        upload.category || '',
+        file?.name || '',
+        file?.size || 0,
+        file?.lastModified || 0,
+      ].join('::');
+    }).join('||');
+  }
 
   function renderRows(rows) {
     body.replaceChildren();
@@ -47,9 +234,7 @@
         row.classList.toggle('review-row', !accepted);
       });
       statusCell.append(status);
-      const reason = document.createElement('td');
-      reason.textContent = item.reason ?? '';
-      row.append(point, descriptionCell, statusCell, reason);
+      row.append(point, descriptionCell, statusCell);
       body.append(row);
     }
   }
@@ -58,7 +243,7 @@
     return rows.map((item) => ({
       address: item.address ?? null,
       text: item.text ?? '',
-      accepted: Boolean(item.accepted),
+      accepted: item.accepted === true,
       deleted: false,
       reason: item.reason || 'technician review',
     }));
@@ -94,16 +279,72 @@
     renderedListIndex = index;
   }
 
+  closePreviewButton?.addEventListener('click', () => modal.classList.remove('open'));
+
+  startCreateButton?.addEventListener('click', () => {
+    resetCreateForm();
+    homeMessage.textContent = '';
+    showScreen('create');
+  });
+
+  backHomeFromCreate?.addEventListener('click', async () => {
+    await loadInspections();
+    showScreen('home');
+  });
+
+  backHomeFromInspection?.addEventListener('click', async () => {
+    await loadInspections();
+    showScreen('home');
+  });
+
+  refreshInspectionsButton?.addEventListener('click', async () => {
+    await loadInspections();
+  });
+
+  openInspectionButton?.addEventListener('click', async () => {
+    homeMessage.textContent = '';
+    await openInspection(inspectionPicker.value);
+  });
+
+  refreshInspectionButton?.addEventListener('click', async () => {
+    if (!currentInspectionId) {
+      return;
+    }
+    await openInspection(currentInspectionId);
+  });
+
   previewButton.addEventListener('click', async (event) => {
     event.preventDefault();
     event.stopImmediatePropagation();
+    if (!form.reportValidity()) {
+      message.textContent = 'Enter store number, address, and panel details before previewing.';
+      return;
+    }
     const pointListRows = [...(lists?.querySelectorAll('.point-list') || [])];
     const uploads = pointListRows.map((row) => ({
       category: row.querySelector('select')?.value || '',
       file: row.querySelector('input[type=file]')?.files?.[0],
     }));
-    if (!uploads.length || uploads.some((item) => !item.file)) {
-      message.textContent = 'Choose an XLSX file for each Points List first.';
+    if (!uploads.length || uploads.some((item) => !item.file || !item.category)) {
+      message.textContent = 'Choose an XLSX file and panel for each Points List first.';
+      return;
+    }
+    const signature = buildUploadSignature(uploads);
+    if (previewLists.length && previewInputSignature === signature) {
+      if (renderedListIndex !== null && previewLists[renderedListIndex]) {
+        selectedListIndex = renderedListIndex;
+        persistSelectedList();
+      }
+      listSelector.replaceChildren();
+      for (const [index, item] of previewLists.entries()) {
+        const option = new Option(`${item.category ? `${item.category} · ` : ''}${item.filename}`, String(index));
+        listSelector.add(option);
+      }
+      listSelector.hidden = previewLists.length < 2;
+      renderList(Math.min(selectedListIndex, previewLists.length - 1));
+      listSelector.value = String(selectedListIndex);
+      modal.classList.add('open');
+      message.textContent = 'Loaded saved preview decisions.';
       return;
     }
     message.textContent = 'Analyzing...';
@@ -122,6 +363,7 @@
       rejected: result.rejected,
       rows: result.rows,
     }];
+    previewInputSignature = signature;
     renderedListIndex = null;
     selectedListIndex = 0;
     listSelector.replaceChildren();
@@ -137,15 +379,15 @@
 
   listSelector?.addEventListener('change', () => renderList(Number(listSelector.value)));
 
-  deleteButton?.addEventListener('click', (event) => {
+  function deleteReviewRows(event) {
     event.preventDefault();
     event.stopImmediatePropagation();
     for (const row of [...body.querySelectorAll('tr')]) {
       if (row.querySelector('.review-status').dataset.accepted !== 'true') row.remove();
     }
-  }, true);
+  }
 
-  acceptButton?.addEventListener('click', (event) => {
+  function acceptReviewRows(event) {
     event.preventDefault();
     event.stopImmediatePropagation();
     for (const status of body.querySelectorAll('.review-status')) {
@@ -156,14 +398,157 @@
       status.closest('tr').classList.add('accepted-row');
       status.closest('tr').classList.remove('review-row');
     }
-  }, true);
+  }
 
-  saveButton?.addEventListener('click', (event) => {
+  async function saveReviewDecisions(event) {
     event.preventDefault();
     event.stopImmediatePropagation();
     persistSelectedList();
     decisionField.value = JSON.stringify(previewLists.flatMap((item) => rowDecisions(item.rows)));
+    reviewSaved = true;
     modal.classList.remove('open');
-    message.textContent = 'Review decisions saved. Creating the inspection will commit them.';
-  }, true);
+    if (!form.reportValidity()) {
+      message.textContent = 'Review saved. Complete required inspection fields to create the inspection.';
+      return;
+    }
+    await createInspection();
+  }
+
+  for (const button of deleteButtons) {
+    button.addEventListener('click', deleteReviewRows, true);
+  }
+  for (const button of acceptButtons) {
+    button.addEventListener('click', acceptReviewRows, true);
+  }
+  for (const button of saveButtons) {
+    button.addEventListener('click', saveReviewDecisions, true);
+  }
+
+  document.querySelector('#add-list')?.addEventListener('click', () => {
+    const row = lists.firstElementChild?.cloneNode(true);
+    if (!row) {
+      return;
+    }
+    const panelSelect = row.querySelector('select');
+    const fileInput = row.querySelector('input[type=file]');
+    if (panelSelect) {
+      panelSelect.value = 'Combo';
+      panelSelect.required = true;
+    }
+    if (fileInput) {
+      fileInput.value = '';
+      fileInput.required = true;
+    }
+    lists.append(row);
+  });
+
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    await createInspection();
+  });
+
+  eventHistoryForm?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (!currentInspectionId) {
+      inspectionMessage.textContent = 'No inspection selected.';
+      return;
+    }
+    const file = eventFile?.files?.[0];
+    if (!file) {
+      inspectionMessage.textContent = 'Choose an Event History file first.';
+      return;
+    }
+    inspectionMessage.textContent = 'Uploading Event History...';
+    const data = new FormData();
+    data.append('event_file', file);
+    const response = await fetch(`/api/inspections/${currentInspectionId}/event-history`, {
+      method: 'POST',
+      body: data,
+    });
+    const result = await response.json();
+    if (!response.ok || result.error) {
+      inspectionMessage.textContent = result.error || result.detail || 'Event History upload failed.';
+      return;
+    }
+
+    const persistedPoints = new Set(
+      (inspectionPoints || [])
+        .filter((point) => point.event_date && point.address !== null && point.address !== undefined)
+        .map((point) => Number(point.address))
+        .filter((value) => Number.isFinite(value))
+    );
+    for (const match of result.pending_matches || []) {
+      const point = Number(match.point);
+      const timestamp = match.timestamp;
+      if (!Number.isFinite(point) || !timestamp || persistedPoints.has(point)) {
+        continue;
+      }
+      const existingPending = pendingEventDates.get(point);
+      if (!existingPending || timestamp < existingPending) {
+        pendingEventDates.set(point, timestamp);
+      }
+    }
+
+    eventHistoryForm.reset();
+    renderVisibleAcceptedPoints();
+    inspectionMessage.textContent = `Event History uploaded: ${result.filename}. Pending matches: ${pendingEventDates.size}. Click Save Matched Dates to persist.`;
+  });
+
+  toggleMissingPointsButton?.addEventListener('click', () => {
+    showMissingOnly = !showMissingOnly;
+    syncMissingToggleLabel();
+    renderVisibleAcceptedPoints();
+  });
+
+  saveEventDatesButton?.addEventListener('click', async () => {
+    if (!currentInspectionId) {
+      inspectionMessage.textContent = 'No inspection selected.';
+      return;
+    }
+    const matches = [...pendingEventDates.entries()].map(([point, timestamp]) => ({
+      point,
+      timestamp,
+    }));
+    if (!matches.length) {
+      inspectionMessage.textContent = 'No pending dates to save.';
+      return;
+    }
+    inspectionMessage.textContent = 'Saving matched dates...';
+    const response = await fetch(`/api/inspections/${currentInspectionId}/event-dates/save`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ matches }),
+    });
+    const result = await response.json();
+    if (!response.ok || result.error) {
+      inspectionMessage.textContent = result.error || result.detail || 'Saving dates failed.';
+      return;
+    }
+    pendingEventDates = new Map();
+    await openInspection(currentInspectionId);
+    inspectionMessage.textContent = `Saved ${result.saved} new dates. Ignored existing: ${result.ignored_existing}.`;
+  });
+
+  clearEventDatesButton?.addEventListener('click', async () => {
+    if (!currentInspectionId) {
+      inspectionMessage.textContent = 'No inspection selected.';
+      return;
+    }
+    inspectionMessage.textContent = 'Clearing saved dates...';
+    const response = await fetch(`/api/inspections/${currentInspectionId}/event-dates/clear`, {
+      method: 'POST',
+    });
+    const result = await response.json();
+    if (!response.ok || result.error) {
+      inspectionMessage.textContent = result.error || result.detail || 'Clearing dates failed.';
+      return;
+    }
+    pendingEventDates = new Map();
+    await openInspection(currentInspectionId);
+    inspectionMessage.textContent = `Cleared ${result.cleared} saved dates.`;
+  });
+
+  loadInspections();
+  syncMissingToggleLabel();
+  showScreen('home');
 })();

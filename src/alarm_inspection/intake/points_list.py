@@ -47,26 +47,67 @@ def detect_columns(rows: list[list[object]]) -> tuple[int, int, int]:
 def normalize_rows(rows: Iterable[list[object]]) -> list[NormalizedPoint]:
     materialized = list(rows)
     header_row, point_col, text_col = detect_columns(materialized)
-    output: list[NormalizedPoint] = []
-    pending_text: list[str] = []
+    output_rows: list[dict[str, object]] = []
+    orphan_text: list[str] = []
+    orphan_start_row: int | None = None
+    current_point_index: int | None = None
+
+    def flush_orphan_text() -> None:
+        nonlocal orphan_start_row
+        if not orphan_text:
+            return
+        output_rows.append({
+            "point": None,
+            "text": " ".join(orphan_text),
+            "source_row": orphan_start_row if orphan_start_row is not None else len(materialized),
+        })
+        orphan_text.clear()
+        orphan_start_row = None
+
     for row_number, row in enumerate(materialized[header_row + 1 :], header_row + 2):
         point_value = row[point_col] if point_col < len(row) else None
         text_value = row[text_col] if text_col < len(row) else None
         text = "" if text_value is None else str(text_value).strip()
         address = normalize_point(point_value)
-        if address is None and text and point_value in (None, ""):
-            pending_text.append(text)
+
+        if point_value not in (None, ""):
+            flush_orphan_text()
+            output_rows.append({"point": point_value, "text": text, "source_row": row_number})
+            current_point_index = None
+            if address is not None and 1 <= address <= 255:
+                current_point_index = len(output_rows) - 1
             continue
-        combined_text = " ".join(pending_text + ([text] if text else []))
-        pending_text.clear()
-        decision = decide_point({"point": point_value, "text": combined_text})
-        output.append(NormalizedPoint(decision.address, combined_text, decision.accepted,
-                                      decision.reason, row_number))
-    if pending_text:
-        text = " ".join(pending_text)
-        decision = decide_point({"point": None, "text": text})
-        output.append(NormalizedPoint(decision.address, text, decision.accepted,
-                                      decision.reason, len(materialized)))
+
+        if text:
+            if current_point_index is not None:
+                existing = str(output_rows[current_point_index]["text"] or "").strip()
+                output_rows[current_point_index]["text"] = " ".join(
+                    part for part in [existing, text] if part
+                )
+            else:
+                if orphan_start_row is None:
+                    orphan_start_row = row_number
+                orphan_text.append(text)
+            continue
+
+        # Blank row creates a structural boundary for continuation text.
+        flush_orphan_text()
+        current_point_index = None
+
+    flush_orphan_text()
+
+    output: list[NormalizedPoint] = []
+    for item in output_rows:
+        decision = decide_point({"point": item["point"], "text": item["text"]})
+        output.append(
+            NormalizedPoint(
+                decision.address,
+                str(item["text"]),
+                decision.accepted,
+                decision.reason,
+                int(item["source_row"]),
+            )
+        )
     return output
 
 
