@@ -68,6 +68,13 @@ def _parse_saved_timestamp(value: object) -> datetime | None:
             continue
     return None
 
+
+def _event_history_kind(point_list_id: str | None) -> str:
+    if not point_list_id:
+        return "event_history"
+    # Keep kind within the existing varchar(40) limit in production DB.
+    return f"event_history:{point_list_id[:12]}"
+
 _HTML = """<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Alarm Inspection Processor</title>
@@ -283,7 +290,7 @@ def create_app():
                     .all()
                 )
 
-            selected_kind = f"event_history:{selected_point_list_id}" if selected_point_list_id else "event_history"
+            selected_kind = _event_history_kind(selected_point_list_id)
             event_history_files = (
                 session.query(SourceFile)
                 .filter(SourceFile.inspection_id == inspection_id, SourceFile.kind == selected_kind)
@@ -375,7 +382,7 @@ def create_app():
         with store.begin() as session:
             session.add(SourceFile(id=str(uuid4()), inspection_id=inspection_id,
                                    filename=filename, path=str(destination),
-                                   kind=f"event_history:{point_list_id}"))
+                                   kind=_event_history_kind(point_list_id)))
         return {
             "inspection_id": inspection_id,
             "point_list_id": point_list_id,
