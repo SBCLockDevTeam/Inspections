@@ -9,7 +9,11 @@
   const saveButton = document.querySelector('#save-review');
   const deleteButton = document.querySelector('#delete-review');
   const lists = document.querySelector('#point-lists');
+  const listSelector = document.querySelector('#preview-list-selector');
   if (!form || !previewButton || !modal || !body) return;
+
+  let previewLists = [];
+  let selectedListIndex = 0;
 
   function renderRows(rows) {
     body.replaceChildren();
@@ -40,32 +44,82 @@
     }
   }
 
-  function decisions() {
+  function rowDecisions(rows) {
+    return rows.map((item) => ({
+      address: item.address ?? null,
+      text: item.text ?? '',
+      accepted: Boolean(item.accepted),
+      deleted: false,
+      reason: item.reason || 'technician review',
+    }));
+  }
+
+  function renderedRows() {
     return [...body.querySelectorAll('tr')].map((row) => ({
       address: row.dataset.address ? Number(row.dataset.address) : null,
       text: row.querySelector('.review-description').value,
       accepted: row.querySelector('.review-status').value === 'accept',
-      deleted: false,
       reason: row.dataset.reason || 'technician review',
     }));
+  }
+
+  function persistSelectedList() {
+    const index = selectedListIndex;
+    if (!previewLists[index]) return;
+    previewLists[index].rows = renderedRows();
+    previewLists[index].accepted = previewLists[index].rows.filter((item) => item.accepted).length;
+    previewLists[index].rejected = previewLists[index].rows.filter((item) => !item.accepted).length;
+  }
+
+  function renderList(index) {
+    persistSelectedList();
+    const selected = previewLists[index];
+    if (!selected) return;
+    selectedListIndex = index;
+    summary.textContent = `${selected.category ? `${selected.category} · ` : ''}${selected.filename} — Accepted: ${selected.accepted} | Needs review: ${selected.rejected}`;
+    renderRows(selected.rows);
   }
 
   previewButton.addEventListener('click', async (event) => {
     event.preventDefault();
     event.stopImmediatePropagation();
-    const file = lists?.querySelector('input[type=file]')?.files?.[0];
-    if (!file) { message.textContent = 'Choose an XLSX file first.'; return; }
+    const pointListRows = [...(lists?.querySelectorAll('.point-list') || [])];
+    const uploads = pointListRows.map((row) => ({
+      category: row.querySelector('select')?.value || '',
+      file: row.querySelector('input[type=file]')?.files?.[0],
+    }));
+    if (!uploads.length || uploads.some((item) => !item.file)) {
+      message.textContent = 'Choose an XLSX file for each Points List first.';
+      return;
+    }
     message.textContent = 'Analyzing...';
     const data = new FormData();
-    data.append('points_file', file);
+    for (const upload of uploads) {
+      data.append('points_files', upload.file);
+      data.append('point_list_categories', upload.category);
+    }
     const response = await fetch('/api/point-lists/preview', { method: 'POST', body: data });
     const result = await response.json();
     if (result.error) { message.textContent = result.error; return; }
-    summary.textContent = `Accepted: ${result.accepted} | Needs review: ${result.rejected} | File: ${result.filename}`;
-    renderRows(result.rows);
+    previewLists = result.lists || [{
+      filename: result.filename,
+      category: '',
+      accepted: result.accepted,
+      rejected: result.rejected,
+      rows: result.rows,
+    }];
+    listSelector.replaceChildren();
+    for (const [index, item] of previewLists.entries()) {
+      const option = new Option(`${item.category ? `${item.category} · ` : ''}${item.filename}`, String(index));
+      listSelector.add(option);
+    }
+    listSelector.hidden = previewLists.length < 2;
+    renderList(0);
     modal.classList.add('open');
     message.textContent = '';
   }, true);
+
+  listSelector?.addEventListener('change', () => renderList(Number(listSelector.value)));
 
   deleteButton?.addEventListener('click', (event) => {
     event.preventDefault();
@@ -78,7 +132,8 @@
   saveButton?.addEventListener('click', (event) => {
     event.preventDefault();
     event.stopImmediatePropagation();
-    decisionField.value = JSON.stringify(decisions());
+    persistSelectedList();
+    decisionField.value = JSON.stringify(previewLists.flatMap((item) => rowDecisions(item.rows)));
     modal.classList.remove('open');
     message.textContent = 'Review decisions saved. Creating the inspection will commit them.';
   }, true);

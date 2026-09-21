@@ -29,11 +29,11 @@ _HTML = """<!doctype html>
 <label for="address">Address</label><input id="address" required>
 <label for="start_date">Inspection start date</label><input id="start_date" type="date" required>
 <label for="completion_date">Inspection completion date</label><input id="completion_date" type="date" required>
-<label>Points Lists by security panel</label><div id="point-lists"><div class="point-list"><select name="point_list_category"><option>Fire</option><option>Burglar</option><option>Combo</option><option>Gas Station</option></select><input name="points_files" type="file" accept=".xls,.xlsx,.pdf" required></div></div><button type="button" id="add-list">Add another Points List</button><button type="button" id="preview-list">Preview first Points List</button><div id="preview"></div>
+<label>Points Lists by security panel</label><div id="point-lists"><div class="point-list"><select name="point_list_category"><option>Fire</option><option>Burglar</option><option>Combo</option><option>Gas Station</option></select><input name="points_files" type="file" accept=".xls,.xlsx,.pdf" required></div></div><button type="button" id="add-list">Add another Points List</button><button type="button" id="preview-list">Preview Points Lists</button><div id="preview"></div>
 <label for="event_file">Event History (optional for now)</label><input id="event_file" type="file" accept=".xls,.xlsx,.pdf">
-<input type="hidden" name="point_decisions" id="point-decisions" value="[]"><button type="submit">Create inspection</button></form><div id="message"></div></div><div id="preview-modal" class="modal"><div class="modal-card"><button class="close" id="close-preview">Close</button><h2>Points List Review</h2><p id="preview-summary"></p><p>Edit descriptions and change each status to Accept or Review. Rows that remain Review can be removed with the button below.</p><table><thead><tr><th>Point</th><th>Description</th><th>Status</th><th>Reason</th></tr></thead><tbody id="preview-body"></tbody></table><button type="button" id="delete-review">Delete all Review rows</button><button type="button" id="save-review">Save review decisions</button></div></div>
-<script>const form=document.querySelector('#inspection-form');const msg=document.querySelector('#message');const lists=document.querySelector('#point-lists');const modal=document.querySelector('#preview-modal');const body=document.querySelector('#preview-body');const summary=document.querySelector('#preview-summary');document.querySelector('#close-preview').onclick=()=>modal.classList.remove('open');document.querySelector('#add-list').onclick=()=>{const row=lists.firstElementChild.cloneNode(true);row.querySelector('input').value='';row.querySelector('input').required=true;lists.appendChild(row)};document.querySelector('#preview-list').onclick=async()=>{const file=lists.querySelector('input').files[0];if(!file){msg.textContent='Choose an XLSX file first.';return}const data=new FormData();data.append('points_file',file);msg.textContent='Analyzing...';const r=await fetch('/api/point-lists/preview',{method:'POST',body:data});const j=await r.json();if(j.error){msg.textContent=j.error;return}summary.textContent='Accepted: '+j.accepted+' | Needs review: '+j.rejected+' | File: '+j.filename;body.innerHTML='';for(const row of j.rows){const tr=document.createElement('tr');tr.innerHTML='<td>'+String(row.address??'')+'</td><td>'+String(row.text??'')+'</td><td class="'+(row.accepted?'accepted':'review')+'">'+(row.accepted?'Accepted':'Review')+'</td><td>'+String(row.reason??'')+'</td><td>'+String(row.source_row??'')+'</td>';body.appendChild(tr)}modal.classList.add('open');msg.textContent='';};form.addEventListener('submit',async(e)=>{e.preventDefault();msg.textContent='Uploading and parsing...';const data=new FormData();for(const id of ['store_number','address','start_date','completion_date'])data.append(id,document.querySelector('#'+id).value);for(const row of document.querySelectorAll('.point-list')){data.append('point_list_categories',row.querySelector('select').value);data.append('points_files',row.querySelector('input').files[0]);}const event=document.querySelector('#event_file').files[0];if(event)data.append('event_file',event);const r=await fetch('/api/inspections',{method:'POST',body:data});const j=await r.json();if(!r.ok){msg.textContent='Error: '+(j.detail||'Upload failed');return}msg.textContent='Inspection '+j.id+' is ready for approval. Review the parsed data, then approve it.';const approve=document.createElement('button');approve.textContent='Approve parsed Points Lists';approve.onclick=async()=>{const a=await fetch('/api/inspections/'+j.id+'/approve-points',{method:'POST'});const result=await a.json();msg.textContent=result.status==='points_approved'?'Points Lists approved.':'Approval error: '+(result.error||'unknown error');};msg.appendChild(document.createElement('br'));msg.appendChild(approve);});</script>
-</script><script>const body2=document.querySelector('#preview-body');const field2=document.querySelector('#point-decisions');const preview2=document.querySelector('#preview-list');const save2=document.querySelector('#save-review');const delete2=document.querySelector('#delete-review');preview2.addEventListener('click',()=>setTimeout(()=>{for(const row of body2.querySelectorAll('tr')){const cells=row.querySelectorAll('td');if(cells.length===5)cells[4].remove();if(cells.length===4){const accepted=cells[2].textContent==='Accepted';cells[1].innerHTML='<input class="review-description" value="'+cells[1].textContent.replaceAll('"','&quot;')+'">';cells[2].innerHTML='<select class="review-status"><option value="accept" '+(accepted?'selected':'')+'>Accept</option><option value="review" '+(!accepted?'selected':'')+'>Review</option></select>'}}},800));delete2.addEventListener('click',()=>{for(const row of [...body2.querySelectorAll('tr')]){const status=row.querySelector('.review-status');if(status&&status.value==='review')row.remove()}});save2.addEventListener('click',()=>{field2.value=JSON.stringify([...body2.querySelectorAll('tr')].map(row=>{const cells=row.querySelectorAll('td');return {address:cells[0].textContent?Number(cells[0].textContent):null,text:cells[1].querySelector('input').value,accepted:cells[2].querySelector('select').value==='accept',deleted:false,reason:cells[3].textContent}}))});</script></body></html>"""
+<input type="hidden" name="point_decisions" id="point-decisions" value="[]"><button type="submit">Create inspection</button></form><div id="message"></div></div><div id="preview-modal" class="modal"><div class="modal-card"><button class="close" id="close-preview">Close</button><h2>Points List Review</h2><label for="preview-list-selector">Points List</label><select id="preview-list-selector"></select><p id="preview-summary"></p><p>Edit descriptions and change each status to Accept or Review. Rows that remain Review can be removed with the button below.</p><table><thead><tr><th>Point</th><th>Description</th><th>Status</th><th>Reason</th></tr></thead><tbody id="preview-body"></tbody></table><button type="button" id="delete-review">Delete all Review rows</button><button type="button" id="save-review">Save review decisions</button></div></div>
+<script>const form=document.querySelector('#inspection-form');const msg=document.querySelector('#message');const lists=document.querySelector('#point-lists');const modal=document.querySelector('#preview-modal');const body=document.querySelector('#preview-body');const summary=document.querySelector('#preview-summary');document.querySelector('#close-preview').onclick=()=>modal.classList.remove('open');document.querySelector('#add-list').onclick=()=>{const row=lists.firstElementChild.cloneNode(true);row.querySelector('input').value='';row.querySelector('input').required=true;lists.appendChild(row)};form.addEventListener('submit',async(e)=>{e.preventDefault();msg.textContent='Uploading and parsing...';const data=new FormData();for(const id of ['store_number','address','start_date','completion_date'])data.append(id,document.querySelector('#'+id).value);for(const row of document.querySelectorAll('.point-list')){data.append('point_list_categories',row.querySelector('select').value);data.append('points_files',row.querySelector('input').files[0]);}const event=document.querySelector('#event_file').files[0];if(event)data.append('event_file',event);const r=await fetch('/api/inspections',{method:'POST',body:data});const j=await r.json();if(!r.ok){msg.textContent='Error: '+(j.detail||'Upload failed');return}msg.textContent='Inspection '+j.id+' is ready for approval. Review the parsed data, then approve it.';const approve=document.createElement('button');approve.textContent='Approve parsed Points Lists';approve.onclick=async()=>{const a=await fetch('/api/inspections/'+j.id+'/approve-points',{method:'POST'});const result=await a.json();msg.textContent=result.status==='points_approved'?'Points Lists approved.':'Approval error: '+(result.error||'unknown error');};msg.appendChild(document.createElement('br'));msg.appendChild(approve);});</script>
+</script></body></html>"""
 
 
 def create_app():
@@ -139,19 +139,43 @@ def create_app():
         return {"id": inspection_id, "status": "points_approved"}
 
     @app.post("/api/point-lists/preview")
-    async def preview_points_list(points_file: UploadFile = File(...)) -> dict:
-        filename = Path(points_file.filename or "points.xlsx").name
-        if not filename.lower().endswith(".xlsx"):
-            return {"error": "The first parser supports XLSX files; PDF and legacy XLS need a separate adapter."}
-        preview_path = _UPLOAD_ROOT / f"preview-{uuid4()}-{filename}"
-        preview_path.parent.mkdir(parents=True, exist_ok=True)
-        preview_path.write_bytes(await points_file.read())
-        try:
-            rows = parse_xlsx(preview_path)
-            return {"filename": filename, "accepted": sum(row["accepted"] for row in rows),
-                    "rejected": sum(not row["accepted"] for row in rows), "rows": rows}
-        except ValueError as exc:
-            return {"error": str(exc)}
+    async def preview_points_list(
+        points_files: list[UploadFile] = File(...),
+        point_list_categories: list[str] = Form(default=[]),
+    ) -> dict:
+        if point_list_categories and len(point_list_categories) != len(points_files):
+            return {"error": "Each Points List must have a matching security-panel category."}
+
+        previews = []
+        for index, points_file in enumerate(points_files):
+            filename = Path(points_file.filename or f"points-{index + 1}.xlsx").name
+            if not filename.lower().endswith(".xlsx"):
+                return {"error": "The first parser supports XLSX files; PDF and legacy XLS need a separate adapter."}
+            preview_path = _UPLOAD_ROOT / f"preview-{uuid4()}-{filename}"
+            preview_path.parent.mkdir(parents=True, exist_ok=True)
+            preview_path.write_bytes(await points_file.read())
+            try:
+                rows = parse_xlsx(preview_path)
+            except ValueError as exc:
+                return {"error": f"{filename}: {exc}"}
+            previews.append({
+                "filename": filename,
+                "category": point_list_categories[index] if point_list_categories else "",
+                "accepted": sum(row["accepted"] for row in rows),
+                "rejected": sum(not row["accepted"] for row in rows),
+                "rows": rows,
+            })
+
+        accepted = sum(item["accepted"] for item in previews)
+        rejected = sum(item["rejected"] for item in previews)
+        first = previews[0] if len(previews) == 1 else None
+        return {
+            "filename": first["filename"] if first else None,
+            "accepted": accepted,
+            "rejected": rejected,
+            "rows": first["rows"] if first else [],
+            "lists": previews,
+        }
 
     return app
 
