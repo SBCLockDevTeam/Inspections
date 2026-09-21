@@ -9,6 +9,7 @@
   const refreshInspectionsButton = document.querySelector('#refresh-inspections');
   const inspectionPicker = document.querySelector('#inspection-picker');
   const openInspectionButton = document.querySelector('#open-inspection');
+  const deleteInspectionButton = document.querySelector('#delete-inspection');
   const homeMessage = document.querySelector('#home-message');
 
   const inspectionTitle = document.querySelector('#inspection-title');
@@ -36,6 +37,11 @@
   const lists = document.querySelector('#point-lists');
   const listSelector = document.querySelector('#preview-list-selector');
   const closePreviewButton = document.querySelector('#close-preview');
+  const deleteInspectionModal = document.querySelector('#delete-inspection-modal');
+  const deleteInspectionSelector = document.querySelector('#delete-inspection-selector');
+  const closeDeleteInspectionButton = document.querySelector('#close-delete-inspection');
+  const cancelDeleteInspectionButton = document.querySelector('#cancel-delete-inspection');
+  const confirmDeleteInspectionButton = document.querySelector('#confirm-delete-inspection');
 
   if (!form || !previewButton || !modal || !body || !homeScreen || !createScreen || !inspectionScreen) {
     return;
@@ -51,6 +57,7 @@
   let pendingEventDates = new Map();
   let showMissingOnly = false;
   let currentPointListId = null;
+  let inspectionOptions = [];
 
   function showScreen(name) {
     homeScreen.classList.toggle('hidden', name !== 'home');
@@ -98,6 +105,7 @@
   async function loadInspections() {
     const response = await fetch('/api/inspections');
     const items = await response.json();
+    inspectionOptions = items;
     inspectionPicker.replaceChildren();
     if (!items.length) {
       inspectionPicker.add(new Option('No inspections yet', ''));
@@ -106,6 +114,30 @@
     for (const item of items) {
       inspectionPicker.add(new Option(formatInspectionLabel(item), item.id));
     }
+  }
+
+  function openDeleteInspectionModal() {
+    if (!deleteInspectionModal || !deleteInspectionSelector) {
+      return;
+    }
+    deleteInspectionSelector.replaceChildren();
+    if (!inspectionOptions.length) {
+      deleteInspectionSelector.add(new Option('No inspections available', ''));
+      deleteInspectionSelector.disabled = true;
+      confirmDeleteInspectionButton.disabled = true;
+    } else {
+      for (const item of inspectionOptions) {
+        deleteInspectionSelector.add(new Option(formatInspectionLabel(item), item.id));
+      }
+      deleteInspectionSelector.disabled = false;
+      confirmDeleteInspectionButton.disabled = false;
+      deleteInspectionSelector.value = inspectionPicker.value || inspectionOptions[0].id;
+    }
+    deleteInspectionModal.classList.add('open');
+  }
+
+  function closeDeleteInspectionModal() {
+    deleteInspectionModal?.classList.remove('open');
   }
 
   async function createInspection() {
@@ -320,6 +352,45 @@
     resetCreateForm();
     homeMessage.textContent = '';
     showScreen('create');
+  });
+
+  deleteInspectionButton?.addEventListener('click', () => {
+    openDeleteInspectionModal();
+  });
+
+  closeDeleteInspectionButton?.addEventListener('click', closeDeleteInspectionModal);
+  cancelDeleteInspectionButton?.addEventListener('click', closeDeleteInspectionModal);
+
+  confirmDeleteInspectionButton?.addEventListener('click', async () => {
+    const selectedId = deleteInspectionSelector?.value || '';
+    if (!selectedId) {
+      homeMessage.textContent = 'Choose an inspection to delete.';
+      return;
+    }
+    const selected = inspectionOptions.find((item) => item.id === selectedId);
+    const label = selected ? formatInspectionLabel(selected) : selectedId;
+    const confirmed = window.confirm(`Delete this inspection?\n\n${label}\n\nClick OK to confirm or Cancel to keep it.`);
+    if (!confirmed) {
+      return;
+    }
+
+    const response = await fetch(`/api/inspections/${selectedId}`, { method: 'DELETE' });
+    const result = await response.json();
+    if (!response.ok || result.error) {
+      homeMessage.textContent = result.error || result.detail || 'Inspection delete failed.';
+      return;
+    }
+
+    if (currentInspectionId === selectedId) {
+      currentInspectionId = null;
+      currentPointListId = null;
+      pendingEventDates = new Map();
+      showScreen('home');
+    }
+
+    closeDeleteInspectionModal();
+    await loadInspections();
+    homeMessage.textContent = 'Inspection deleted.';
   });
 
   backHomeFromCreate?.addEventListener('click', async () => {

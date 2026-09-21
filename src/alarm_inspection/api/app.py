@@ -5,11 +5,13 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 import json
 from pathlib import Path
+import shutil
 from uuid import uuid4
 
 from alarm_inspection.domain.points import normalize_point
 from alarm_inspection.storage import (
     Inspection,
+    EventPointDate,
     PointDecision,
     PointList,
     PointListDecision,
@@ -69,7 +71,7 @@ def _parse_saved_timestamp(value: object) -> datetime | None:
 _HTML = """<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Alarm Inspection Processor</title>
-<style>body{font-family:system-ui,sans-serif;max-width:980px;margin:40px auto;padding:0 20px;color:#17202a}h1{margin-bottom:8px}label{display:block;margin:14px 0 5px;font-weight:600}input,button,select{font:inherit;padding:9px;width:100%;box-sizing:border-box}button{margin-top:12px;background:#1769aa;color:#fff;border:0;border-radius:4px;cursor:pointer}.secondary{background:#5b6470}.ghost{background:#fff;color:#1769aa;border:1px solid #1769aa}.danger{background:#b3261e}.card{border:1px solid #d7dde3;border-radius:8px;padding:24px;margin-top:16px}.hidden{display:none}.row{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:end}.table{border-collapse:collapse;width:100%;margin-top:16px}.table th,.table td{border:1px solid #ccd3da;padding:8px;text-align:left}.table th{background:#edf2f7}#message,#inspection-message{margin-top:16px;white-space:pre-wrap}.modal{display:none;position:fixed;inset:0;background:#0008;align-items:center;justify-content:center}.modal.open{display:flex}.modal-card{background:white;width:min(1000px,92vw);max-height:85vh;overflow:auto;border-radius:8px;padding:24px}.accepted-row{background:#e8f5e9}.review-row{background:#ffebee}.accepted{color:#176b3a;font-weight:600}.review{color:#a33b00;font-weight:600}.status-toggle{width:auto;margin:0;padding:5px 10px;background:#fff;border:1px solid currentColor}.close{width:auto;float:right;margin:0;background:#5b6470}.nav{display:flex;gap:8px;align-items:center;flex-wrap:nowrap;overflow-x:auto}.nav button{width:auto;margin-top:0;white-space:nowrap}.inline-form{display:flex;gap:8px;align-items:center;margin:0;flex:1 1 auto}.inline-form label{display:none}.inline-form input[type=file]{margin:0;width:320px;max-width:42vw;padding:7px}.inline-form button{width:auto;margin-top:0;white-space:nowrap}.point-list{display:grid;grid-template-columns:180px 1fr auto;gap:8px;align-items:center;margin-top:8px}.point-list select,.point-list input{margin:0}.point-list .remove-point-list{width:auto;margin-top:0;white-space:nowrap}.create-actions{display:flex;gap:8px;align-items:center;flex-wrap:nowrap;overflow-x:auto;margin-top:12px}.create-actions button{width:auto;margin-top:0;white-space:nowrap}</style></head>
+<style>body{font-family:system-ui,sans-serif;max-width:980px;margin:40px auto;padding:0 20px;color:#17202a}h1{margin-bottom:8px}label{display:block;margin:14px 0 5px;font-weight:600}input,button,select{font:inherit;padding:9px;width:100%;box-sizing:border-box}button{margin-top:12px;background:#1769aa;color:#fff;border:0;border-radius:4px;cursor:pointer}.secondary{background:#5b6470}.ghost{background:#fff;color:#1769aa;border:1px solid #1769aa}.danger{background:#b3261e}.card{border:1px solid #d7dde3;border-radius:8px;padding:24px;margin-top:16px}.hidden{display:none}.row{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:end}.table{border-collapse:collapse;width:100%;margin-top:16px}.table th,.table td{border:1px solid #ccd3da;padding:8px;text-align:left}.table th{background:#edf2f7}#message,#inspection-message{margin-top:16px;white-space:pre-wrap}.modal{display:none;position:fixed;inset:0;background:#0008;align-items:center;justify-content:center}.modal.open{display:flex}.modal-card{background:white;width:min(1000px,92vw);max-height:85vh;overflow:auto;border-radius:8px;padding:24px}.accepted-row{background:#e8f5e9}.review-row{background:#ffebee}.accepted{color:#176b3a;font-weight:600}.review{color:#a33b00;font-weight:600}.status-toggle{width:auto;margin:0;padding:5px 10px;background:#fff;border:1px solid currentColor}.close{width:auto;float:right;margin:0;background:#5b6470}.nav{display:flex;gap:8px;align-items:center;flex-wrap:nowrap;overflow-x:auto}.nav button{width:auto;margin-top:0;white-space:nowrap}.inline-form{display:flex;gap:8px;align-items:center;margin:0;flex:1 1 auto}.inline-form label{display:none}.inline-form input[type=file]{margin:0;width:320px;max-width:42vw;padding:7px}.inline-form button{width:auto;margin-top:0;white-space:nowrap}.point-list{display:grid;grid-template-columns:180px 1fr auto;gap:8px;align-items:center;margin-top:8px}.point-list select,.point-list input{margin:0}.point-list .remove-point-list{width:auto;margin-top:0;white-space:nowrap}.create-actions{display:flex;gap:8px;align-items:center;flex-wrap:nowrap;overflow-x:auto;margin-top:12px}.create-actions button{width:auto;margin-top:0;white-space:nowrap}.delete-actions{display:flex;gap:8px;margin-top:14px}.delete-actions button{width:auto;margin-top:0;white-space:nowrap}</style></head>
 <body><h1>Alarm Inspection Processor</h1><p>Choose an existing inspection or create a new one.</p>
 
 <div id="home-screen" class="card">
@@ -78,6 +80,7 @@ _HTML = """<!doctype html>
 <div class="row"><select id="inspection-picker"></select><button type="button" id="open-inspection" class="ghost">Open Inspection</button></div>
 <button type="button" id="refresh-inspections" class="secondary">Refresh List</button>
 <button type="button" id="start-create">Create New Inspection</button>
+<button type="button" id="delete-inspection" class="danger">Delete Inspection</button>
 <div id="home-message"></div>
 </div>
 
@@ -100,6 +103,8 @@ _HTML = """<!doctype html>
 <table class="table"><thead><tr><th>Point</th><th>Description</th><th>Date</th></tr></thead><tbody id="accepted-points-body"></tbody></table>
 <div id="inspection-message"></div>
 </div>
+
+<div id="delete-inspection-modal" class="modal"><div class="modal-card"><button class="close" id="close-delete-inspection">Close</button><h2>Delete Inspection</h2><label for="delete-inspection-selector">Select inspection</label><select id="delete-inspection-selector"></select><div class="delete-actions"><button type="button" id="confirm-delete-inspection" class="danger">Delete</button><button type="button" id="cancel-delete-inspection" class="secondary">Cancel</button></div></div></div>
 
 <div id="preview-modal" class="modal"><div class="modal-card"><button class="close" id="close-preview">Close</button><h2>Points List Review</h2><label for="preview-list-selector">Points List</label><select id="preview-list-selector"></select><p id="preview-summary"></p><p>Edit descriptions and use each row's status button to toggle Accept or Review. Rows remain visible until you delete them.</p><div class="nav"><button type="button" class="accept-review-action">Accept all Review rows</button><button type="button" class="delete-review-action">Delete all Review rows</button><button type="button" class="save-review-action">Save review decisions</button></div><table class="table"><thead><tr><th>Point</th><th>Description</th><th>Status</th></tr></thead><tbody id="preview-body"></tbody></table><div class="nav"><button type="button" class="accept-review-action">Accept all Review rows</button><button type="button" class="delete-review-action">Delete all Review rows</button><button type="button" class="save-review-action">Save review decisions</button></div></div></div>
 <script src="/review.js"></script>
@@ -206,6 +211,37 @@ def create_app():
                      "start_date": row.start_date.isoformat(),
                      "completion_date": row.completion_date.isoformat(),
                      "status": row.status, "created_at": row.created_at.isoformat()} for row in rows]
+
+    @app.delete("/api/inspections/{inspection_id}")
+    def delete_inspection(inspection_id: str) -> dict:
+        upload_path = _UPLOAD_ROOT / inspection_id
+        with store.begin() as session:
+            inspection = session.get(Inspection, inspection_id)
+            if inspection is None:
+                return {"error": "inspection not found"}
+
+            session.query(PointListEventDate).filter(
+                PointListEventDate.inspection_id == inspection_id
+            ).delete(synchronize_session=False)
+            session.query(EventPointDate).filter(
+                EventPointDate.inspection_id == inspection_id
+            ).delete(synchronize_session=False)
+            session.query(PointListDecision).filter(
+                PointListDecision.inspection_id == inspection_id
+            ).delete(synchronize_session=False)
+            session.query(PointDecision).filter(
+                PointDecision.inspection_id == inspection_id
+            ).delete(synchronize_session=False)
+            session.query(PointList).filter(
+                PointList.inspection_id == inspection_id
+            ).delete(synchronize_session=False)
+            session.query(SourceFile).filter(
+                SourceFile.inspection_id == inspection_id
+            ).delete(synchronize_session=False)
+            session.delete(inspection)
+
+        shutil.rmtree(upload_path, ignore_errors=True)
+        return {"id": inspection_id, "status": "deleted"}
 
     @app.get("/api/inspections/{inspection_id}")
     def get_inspection(inspection_id: str, point_list_id: str | None = Query(default=None)) -> dict:
