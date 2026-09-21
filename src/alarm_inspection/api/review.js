@@ -32,8 +32,8 @@
   const message = document.querySelector('#message');
   const decisionField = document.querySelector('#point-decisions');
   const saveButtons = [...document.querySelectorAll('.save-review-action')];
-  const acceptButtons = [...document.querySelectorAll('.accept-review-action')];
   const deleteButtons = [...document.querySelectorAll('.delete-review-action')];
+  const finishReviewButtons = [...document.querySelectorAll('.finish-review-action')];
   const lists = document.querySelector('#point-lists');
   const listSelector = document.querySelector('#preview-list-selector');
   const closePreviewButton = document.querySelector('#close-preview');
@@ -42,6 +42,11 @@
   const closeDeleteInspectionButton = document.querySelector('#close-delete-inspection');
   const cancelDeleteInspectionButton = document.querySelector('#cancel-delete-inspection');
   const confirmDeleteInspectionButton = document.querySelector('#confirm-delete-inspection');
+  const reviewConfirmModal = document.querySelector('#review-confirm-modal');
+  const reviewConfirmSummary = document.querySelector('#review-confirm-summary');
+  const closeReviewConfirmButton = document.querySelector('#close-review-confirm');
+  const cancelFinishReviewButton = document.querySelector('#cancel-finish-review');
+  const confirmFinishReviewButton = document.querySelector('#confirm-finish-review');
 
   if (!form || !previewButton || !modal || !body || !homeScreen || !createScreen || !inspectionScreen) {
     return;
@@ -52,7 +57,6 @@
   let renderedListIndex = null;
   let previewInputSignature = null;
   let currentInspectionId = null;
-  let reviewSaved = false;
   let inspectionPoints = [];
   let pendingEventDates = new Map();
   let showMissingOnly = false;
@@ -71,7 +75,6 @@
     renderedListIndex = null;
     previewInputSignature = null;
     decisionField.value = '[]';
-    reviewSaved = false;
   }
 
   function resetCreateForm() {
@@ -140,7 +143,7 @@
     deleteInspectionModal?.classList.remove('open');
   }
 
-  async function createInspection() {
+  async function createInspection(openAfterCreate = false) {
     message.textContent = 'Creating inspection...';
     const data = new FormData();
     for (const id of ['store_number', 'address']) {
@@ -163,6 +166,16 @@
       message.textContent = result.error || result.detail || 'Inspection creation failed.';
       return false;
     }
+
+    if (openAfterCreate) {
+      modal.classList.remove('open');
+      await loadInspections();
+      await openInspection(result.id);
+      message.textContent = '';
+      resetCreateForm();
+      return true;
+    }
+
     await loadInspections();
     showScreen('home');
     inspectionPicker.value = result.id;
@@ -347,7 +360,32 @@
     renderedListIndex = index;
   }
 
+  function hasUnresolvedReviewRows() {
+    return previewLists.some((list) => (list.rows || []).some((row) => row.accepted === false));
+  }
+
+  function openReviewConfirmation() {
+    if (!previewLists.length) {
+      message.textContent = 'Preview at least one Points List before finishing review.';
+      return;
+    }
+    if (hasUnresolvedReviewRows()) {
+      message.textContent = 'Delete all Review rows or mark them Accepted before finishing the inspection review.';
+      return;
+    }
+    const totalRows = previewLists.reduce((count, list) => count + (list.rows || []).length, 0);
+    const acceptedRows = previewLists.reduce((count, list) => count + (list.rows || []).filter((row) => row.accepted).length, 0);
+    reviewConfirmSummary.textContent = `You are about to commit ${acceptedRows} accepted points across ${totalRows} rows from ${previewLists.length} Points List(s). This is the final review approval step.`;
+    reviewConfirmModal?.classList.add('open');
+  }
+
+  function closeReviewConfirmation() {
+    reviewConfirmModal?.classList.remove('open');
+  }
+
   closePreviewButton?.addEventListener('click', () => modal.classList.remove('open'));
+  closeReviewConfirmButton?.addEventListener('click', closeReviewConfirmation);
+  cancelFinishReviewButton?.addEventListener('click', closeReviewConfirmation);
 
   startCreateButton?.addEventListener('click', () => {
     resetCreateForm();
@@ -503,43 +541,55 @@
     }
   }
 
-  function acceptReviewRows(event) {
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    for (const status of body.querySelectorAll('.review-status')) {
-      status.dataset.accepted = 'true';
-      status.textContent = 'Accepted';
-      status.classList.add('accepted');
-      status.classList.remove('review');
-      status.closest('tr').classList.add('accepted-row');
-      status.closest('tr').classList.remove('review-row');
-    }
-  }
-
   async function saveReviewDecisions(event) {
     event.preventDefault();
     event.stopImmediatePropagation();
     persistSelectedList();
+    const selected = previewLists[selectedListIndex];
+    if (!selected) {
+      message.textContent = 'No Points List is selected to save.';
+      return;
+    }
+    const selectedDecisions = rowDecisions(selected.rows, selected.filename);
+    decisionField.value = JSON.stringify(selectedDecisions);
+    message.textContent = `Saved review decisions for ${selected.filename}.`;
+  }
+
+  async function finishReview(event) {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    if (!previewLists.length) {
+      message.textContent = 'Preview at least one Points List before finishing review.';
+      return;
+    }
+    persistSelectedList();
+    if (hasUnresolvedReviewRows()) {
+      message.textContent = 'Delete all Review rows or mark them Accepted before finishing the inspection review.';
+      return;
+    }
     decisionField.value = JSON.stringify(
       previewLists.flatMap((item) => rowDecisions(item.rows, item.filename))
     );
-    reviewSaved = true;
-    modal.classList.remove('open');
     if (!form.reportValidity()) {
-      message.textContent = 'Review saved. Complete required inspection fields to create the inspection.';
+      message.textContent = 'Complete required inspection fields before finishing review.';
       return;
     }
-    await createInspection();
+    openReviewConfirmation();
   }
+
+  confirmFinishReviewButton?.addEventListener('click', async () => {
+    closeReviewConfirmation();
+    await createInspection(true);
+  });
 
   for (const button of deleteButtons) {
     button.addEventListener('click', deleteReviewRows, true);
   }
-  for (const button of acceptButtons) {
-    button.addEventListener('click', acceptReviewRows, true);
-  }
   for (const button of saveButtons) {
     button.addEventListener('click', saveReviewDecisions, true);
+  }
+  for (const button of finishReviewButtons) {
+    button.addEventListener('click', finishReview, true);
   }
 
   document.querySelector('#add-list')?.addEventListener('click', () => {
@@ -589,7 +639,7 @@
 
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
-    await createInspection();
+    message.textContent = 'Use Preview Points Lists, then click Finish Review to create the inspection.';
   });
 
   eventHistoryForm?.addEventListener('submit', async (event) => {

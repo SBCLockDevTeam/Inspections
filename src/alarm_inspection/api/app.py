@@ -11,8 +11,6 @@ from uuid import uuid4
 from alarm_inspection.domain.points import normalize_point
 from alarm_inspection.storage import (
     Inspection,
-    EventPointDate,
-    PointDecision,
     PointList,
     PointListDecision,
     PointListEventDate,
@@ -78,7 +76,280 @@ def _event_history_kind(point_list_id: str | None) -> str:
 _HTML = """<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Alarm Inspection Processor</title>
-<style>body{font-family:system-ui,sans-serif;max-width:980px;margin:40px auto;padding:0 20px;color:#17202a}h1{margin-bottom:8px}label{display:block;margin:14px 0 5px;font-weight:600}input,button,select{font:inherit;padding:9px;width:100%;box-sizing:border-box}button{margin-top:12px;background:#1769aa;color:#fff;border:0;border-radius:4px;cursor:pointer}.secondary{background:#5b6470}.ghost{background:#fff;color:#1769aa;border:1px solid #1769aa}.danger{background:#b3261e}.card{border:1px solid #d7dde3;border-radius:8px;padding:24px;margin-top:16px}.hidden{display:none}.row{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:end}.table{border-collapse:collapse;width:100%;margin-top:16px}.table th,.table td{border:1px solid #ccd3da;padding:8px;text-align:left}.table th{background:#edf2f7}#message,#inspection-message{margin-top:16px;white-space:pre-wrap}.modal{display:none;position:fixed;inset:0;background:#0008;align-items:center;justify-content:center}.modal.open{display:flex}.modal-card{background:white;width:min(1000px,92vw);max-height:85vh;overflow:auto;border-radius:8px;padding:24px}.accepted-row{background:#e8f5e9}.review-row{background:#ffebee}.accepted{color:#176b3a;font-weight:600}.review{color:#a33b00;font-weight:600}.status-toggle{width:auto;margin:0;padding:5px 10px;background:#fff;border:1px solid currentColor}.close{width:auto;float:right;margin:0;background:#5b6470}.nav{display:flex;gap:8px;align-items:center;flex-wrap:nowrap;overflow-x:auto}.nav button{width:auto;margin-top:0;white-space:nowrap}.inline-form{display:flex;gap:8px;align-items:center;margin:0;flex:1 1 auto}.inline-form label{display:none}.inline-form input[type=file]{margin:0;width:320px;max-width:42vw;padding:7px}.inline-form button{width:auto;margin-top:0;white-space:nowrap}.point-list{display:grid;grid-template-columns:180px 1fr auto;gap:8px;align-items:center;margin-top:8px}.point-list select,.point-list input{margin:0}.point-list .remove-point-list{width:auto;margin-top:0;white-space:nowrap}.create-actions{display:flex;gap:8px;align-items:center;flex-wrap:nowrap;overflow-x:auto;margin-top:12px}.create-actions button{width:auto;margin-top:0;white-space:nowrap}.delete-actions{display:flex;gap:8px;margin-top:14px}.delete-actions button{width:auto;margin-top:0;white-space:nowrap}</style></head>
+<style>
+:root {
+  --bg: #f3f6fb;
+  --panel: #ffffff;
+  --panel-alt: #f8fbff;
+  --border: #dfe7f1;
+  --text: #17202a;
+  --muted: #5b6470;
+  --primary: #1769aa;
+  --primary-strong: #0f4d7a;
+  --secondary: #5b6470;
+  --success-bg: #e8f5e9;
+  --review-bg: #ffebee;
+  --danger: #b3261e;
+  --shadow: 0 12px 28px rgba(23, 41, 58, 0.08);
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  padding: 32px 20px 48px;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+#app-shell {
+  max-width: 1180px;
+  margin: 0 auto;
+}
+h1 { margin: 0 0 8px; font-size: clamp(2rem, 4vw, 2.5rem); }
+body > p {
+  margin: 0 0 16px;
+  color: var(--muted);
+  font-size: 1rem;
+}
+h2, h3 {
+  margin: 0 0 12px;
+  color: var(--text);
+}
+label {
+  display: block;
+  margin: 14px 0 6px;
+  font-weight: 600;
+  color: var(--text);
+}
+input, button, select {
+  font: inherit;
+  border-radius: 8px;
+  box-sizing: border-box;
+}
+input, select {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--text);
+}
+button {
+  width: 100%;
+  padding: 10px 14px;
+  margin-top: 12px;
+  background: var(--primary);
+  color: #fff;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: background 120ms ease, transform 120ms ease, box-shadow 120ms ease;
+}
+button:hover {
+  background: var(--primary-strong);
+}
+button:active {
+  transform: translateY(1px);
+}
+.secondary {
+  background: var(--secondary);
+}
+.secondary:hover {
+  background: #434d5b;
+}
+.ghost {
+  background: #fff;
+  color: var(--primary);
+  border-color: var(--primary);
+}
+.ghost:hover {
+  background: #edf6ff;
+}
+.danger {
+  background: var(--danger);
+}
+.danger:hover {
+  background: #8f241d;
+}
+.card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 22px 20px;
+  margin-top: 18px;
+  box-shadow: var(--shadow);
+}
+.hidden { display: none !important; }
+.row,
+.nav,
+.inline-form,
+.create-actions,
+.delete-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.row {
+  align-items: stretch;
+}
+.row > * {
+  flex: 1 1 0;
+}
+.row button,
+.nav button,
+.inline-form button,
+.create-actions button,
+.delete-actions button {
+  width: auto;
+  margin-top: 0;
+  flex: 0 0 auto;
+}
+.nav {
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+.inline-form {
+  width: 100%;
+  flex: 1 1 auto;
+}
+.inline-form label {
+  display: none;
+}
+.inline-form input[type=file] {
+  min-width: 240px;
+  flex: 1 1 auto;
+}
+.create-actions,
+.delete-actions {
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+#point-lists {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 12px;
+}
+.point-list {
+  display: grid;
+  grid-template-columns: minmax(150px, 180px) minmax(220px, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel-alt);
+}
+.point-list select,
+.point-list input {
+  margin: 0;
+  min-width: 0;
+}
+.point-list .remove-point-list {
+  width: auto;
+  margin: 0;
+  justify-self: end;
+}
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 16px;
+  min-width: 520px;
+}
+.table th,
+.table td {
+  border: 1px solid var(--border);
+  padding: 10px 12px;
+  text-align: left;
+  vertical-align: top;
+}
+.table th {
+  background: #edf2f7;
+  font-weight: 700;
+}
+.table tbody tr:nth-child(even) {
+  background: #fafcff;
+}
+#message,
+#inspection-message,
+#home-message {
+  margin-top: 16px;
+  color: var(--muted);
+  white-space: pre-wrap;
+}
+.modal {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(17, 24, 39, 0.7);
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 10;
+}
+.modal.open {
+  display: flex;
+}
+.modal-card {
+  width: min(1040px, 92vw);
+  max-height: 85vh;
+  overflow: auto;
+  background: #fff;
+  border-radius: 16px;
+  padding: 22px 20px;
+  box-shadow: var(--shadow);
+}
+.close {
+  float: right;
+  width: auto;
+  margin: 0;
+  background: var(--secondary);
+}
+.accepted-row { background: var(--success-bg); }
+.review-row { background: var(--review-bg); }
+.accepted { color: #176b3a; font-weight: 600; }
+.review { color: #a33b00; font-weight: 600; }
+.status-toggle {
+  width: auto;
+  margin: 0;
+  padding: 6px 12px;
+  background: #fff;
+  border: 1px solid currentColor;
+  color: inherit;
+}
+#inspection-point-list-selector {
+  margin-bottom: 8px;
+}
+#inspection-screen .nav:first-of-type {
+  justify-content: flex-start;
+}
+#inspection-meta {
+  margin: 0 0 14px;
+  color: var(--muted);
+}
+@media (max-width: 700px) {
+  body { padding: 20px 12px 40px; }
+  .card, .modal-card { padding: 18px 14px; }
+  .row,
+  .nav,
+  .inline-form,
+  .create-actions,
+  .delete-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+  .point-list {
+    grid-template-columns: 1fr;
+  }
+  .point-list .remove-point-list {
+    justify-self: stretch;
+  }
+  .table {
+    min-width: 440px;
+  }
+}
+</style>
+hite-space:nowrap}.create-actions{display:flex;gap:8px;align-items:center;flex-wrap:nowrap;overflow-x:auto;margin-top:12px}.create-actions button{width:auto;margin-top:0;white-space:nowrap}.delete-actions{display:flex;gap:8px;margin-top:14px}.delete-actions button{width:auto;margin-top:0;white-space:nowrap}</style></head>
 <body><h1>Alarm Inspection Processor</h1><p>Choose an existing inspection or create a new one.</p>
 
 <div id="home-screen" class="card">
@@ -97,7 +368,7 @@ _HTML = """<!doctype html>
 <form id="inspection-form">
 <label for="store_number">Store number</label><input id="store_number" required>
 <label for="address">Address</label><input id="address" required>
-<label>Points Lists by security panel</label><div id="point-lists"><div class="point-list"><select name="point_list_category" required><option>Combo</option><option>Fire</option><option>Burglar</option><option>Gas Station</option></select><input name="points_files" type="file" accept=".xls,.xlsx,.pdf" required><button type="button" class="remove-point-list danger">Delete List</button></div></div><div class="create-actions"><button type="button" id="add-list">Add another Points List</button><button type="button" id="preview-list">Preview Points Lists</button><button type="submit">Create Inspection</button></div><div id="preview"></div>
+<label>Points Lists by security panel</label><div id="point-lists"><div class="point-list"><select name="point_list_category" required><option>Combo</option><option>Fire</option><option>Burglar</option><option>Gas Station</option></select><input name="points_files" type="file" accept=".xls,.xlsx,.pdf" required><button type="button" class="remove-point-list danger">Delete List</button></div></div><div class="create-actions"><button type="button" id="add-list">Add another Points List</button><button type="button" id="preview-list">Preview Points Lists</button></div><div id="preview"></div>
 <input type="hidden" name="point_decisions" id="point-decisions" value="[]"></form><div id="message"></div></div>
 
 <div id="inspection-screen" class="card hidden">
@@ -113,7 +384,9 @@ _HTML = """<!doctype html>
 
 <div id="delete-inspection-modal" class="modal"><div class="modal-card"><button class="close" id="close-delete-inspection">Close</button><h2>Delete Inspection</h2><label for="delete-inspection-selector">Select inspection</label><select id="delete-inspection-selector"></select><div class="delete-actions"><button type="button" id="confirm-delete-inspection" class="danger">Delete</button><button type="button" id="cancel-delete-inspection" class="secondary">Cancel</button></div></div></div>
 
-<div id="preview-modal" class="modal"><div class="modal-card"><button class="close" id="close-preview">Close</button><h2>Points List Review</h2><label for="preview-list-selector">Points List</label><select id="preview-list-selector"></select><p id="preview-summary"></p><p>Edit descriptions and use each row's status button to toggle Accept or Review. Rows remain visible until you delete them.</p><div class="nav"><button type="button" class="accept-review-action">Accept all Review rows</button><button type="button" class="delete-review-action">Delete all Review rows</button><button type="button" class="save-review-action">Save review decisions</button></div><table class="table"><thead><tr><th>Point</th><th>Description</th><th>Status</th></tr></thead><tbody id="preview-body"></tbody></table><div class="nav"><button type="button" class="accept-review-action">Accept all Review rows</button><button type="button" class="delete-review-action">Delete all Review rows</button><button type="button" class="save-review-action">Save review decisions</button></div></div></div>
+<div id="review-confirm-modal" class="modal"><div class="modal-card"><button class="close" id="close-review-confirm">Close</button><h2>Confirm Review</h2><p id="review-confirm-summary">This will commit all reviewed decisions and create the inspection.</p><div class="delete-actions"><button type="button" id="confirm-finish-review" class="primary">Confirm and Create Inspection</button><button type="button" id="cancel-finish-review" class="secondary">Cancel</button></div></div></div>
+
+<div id="preview-modal" class="modal"><div class="modal-card"><button class="close" id="close-preview">Close</button><h2>Points List Review</h2><label for="preview-list-selector">Points List</label><select id="preview-list-selector"></select><p id="preview-summary"></p><p>Edit descriptions and use each row's status button to toggle Accept or Review. Rows remain visible until you delete them.</p><div class="nav"><button type="button" class="delete-review-action">Delete all Review rows</button><button type="button" class="save-review-action">Save review decisions</button><button type="button" class="finish-review-action">Finish Review</button></div><table class="table"><thead><tr><th>Point</th><th>Description</th><th>Status</th></tr></thead><tbody id="preview-body"></tbody></table><div class="nav"><button type="button" class="delete-review-action">Delete all Review rows</button><button type="button" class="save-review-action">Save review decisions</button><button type="button" class="finish-review-action">Finish Review</button></div></div></div>
 <script src="/review.js"></script>
 </body></html>"""
 
@@ -159,13 +432,11 @@ def create_app():
         created_at = datetime.now(timezone.utc)
         inferred_date = date.today()
 
-        parsed_decisions = []
-        for filename in point_file_names:
-            if filename.lower().endswith(".xlsx"):
-                parsed_decisions.extend(parse_xlsx(target / filename))
-
-        submitted_decisions = json.loads(point_decisions)
-        decisions_to_store = submitted_decisions if submitted_decisions else parsed_decisions
+        decisions_to_store = json.loads(point_decisions)
+        if not isinstance(decisions_to_store, list) or not decisions_to_store:
+            return {"error": "Review decisions are required before creating an inspection."}
+        if any(_as_bool(item.get("accepted"), default=False) is False and _as_bool(item.get("deleted"), default=False) is False for item in decisions_to_store):
+            return {"error": "All Review rows must be accepted or deleted before finishing the review."}
 
         with store.begin() as session:
             session.add(Inspection(id=inspection_id, store_number=store_number, address=address,
@@ -187,11 +458,6 @@ def create_app():
             for decision in decisions_to_store:
                 source_filename = str(decision.get("source_filename") or "")
                 point_list_id = point_list_ids_by_filename.get(source_filename, default_list_id)
-                session.add(PointDecision(id=str(uuid4()), inspection_id=inspection_id,
-                                          address=decision.get("address"), text=decision.get("text", ""),
-                                          accepted=_as_bool(decision.get("accepted"), default=False),
-                                          deleted=_as_bool(decision.get("deleted"), default=False),
-                                          reason=decision.get("reason", "technician review")))
                 if point_list_id:
                     session.add(PointListDecision(
                         id=str(uuid4()),
@@ -230,14 +496,8 @@ def create_app():
             session.query(PointListEventDate).filter(
                 PointListEventDate.inspection_id == inspection_id
             ).delete(synchronize_session=False)
-            session.query(EventPointDate).filter(
-                EventPointDate.inspection_id == inspection_id
-            ).delete(synchronize_session=False)
             session.query(PointListDecision).filter(
                 PointListDecision.inspection_id == inspection_id
-            ).delete(synchronize_session=False)
-            session.query(PointDecision).filter(
-                PointDecision.inspection_id == inspection_id
             ).delete(synchronize_session=False)
             session.query(PointList).filter(
                 PointList.inspection_id == inspection_id
@@ -276,19 +536,7 @@ def create_app():
                 .order_by(PointListDecision.address.asc(), PointListDecision.text.asc())
                 .all()
             )
-            if scoped_points:
-                points = scoped_points
-            else:
-                points = (
-                    session.query(PointDecision)
-                    .filter(
-                        PointDecision.inspection_id == inspection_id,
-                        PointDecision.accepted.is_(True),
-                        PointDecision.deleted.is_(False),
-                    )
-                    .order_by(PointDecision.address.asc(), PointDecision.text.asc())
-                    .all()
-                )
+            points = scoped_points
 
             selected_kind = _event_history_kind(selected_point_list_id)
             event_history_files = (
@@ -437,18 +685,6 @@ def create_app():
                 .all()
             )
             allowed_points = {int(item.address) for item in accepted_points if item.address is not None}
-            if not allowed_points:
-                fallback_points = (
-                    session.query(PointDecision)
-                    .filter(
-                        PointDecision.inspection_id == inspection_id,
-                        PointDecision.accepted.is_(True),
-                        PointDecision.deleted.is_(False),
-                        PointDecision.address.is_not(None),
-                    )
-                    .all()
-                )
-                allowed_points = {int(item.address) for item in fallback_points if item.address is not None}
 
             for item in matches:
                 if not isinstance(item, dict):
@@ -507,17 +743,6 @@ def create_app():
             "status": "cleared",
             "cleared": int(cleared),
         }
-
-    @app.post("/api/inspections/{inspection_id}/approve-points")
-    def approve_points(inspection_id: str) -> dict:
-        with store.begin() as session:
-            row = session.get(Inspection, inspection_id)
-            if row is None:
-                return {"error": "inspection not found"}
-            if row.status != "pending_points_review":
-                return {"error": "inspection is not awaiting points review", "status": row.status}
-            row.status = "points_approved"
-        return {"id": inspection_id, "status": "points_approved"}
 
     @app.post("/api/point-lists/preview")
     async def preview_points_list(
