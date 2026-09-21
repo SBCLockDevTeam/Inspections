@@ -70,6 +70,30 @@ class EventPointDate(Base):
     source_filename: Mapped[str] = mapped_column(String(255), default="")
 
 
+class PointListDecision(Base):
+    __tablename__ = "point_list_decisions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    inspection_id: Mapped[str] = mapped_column(String(36), index=True)
+    point_list_id: Mapped[str] = mapped_column(String(36), index=True)
+    address: Mapped[int | None] = mapped_column(nullable=True)
+    text: Mapped[str] = mapped_column(String(500))
+    accepted: Mapped[bool] = mapped_column(default=True)
+    deleted: Mapped[bool] = mapped_column(default=False)
+    reason: Mapped[str] = mapped_column(String(200), default="technician review")
+
+
+class PointListEventDate(Base):
+    __tablename__ = "point_list_event_dates"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    inspection_id: Mapped[str] = mapped_column(String(36), index=True)
+    point_list_id: Mapped[str] = mapped_column(String(36), index=True)
+    point_address: Mapped[int] = mapped_column(index=True)
+    event_timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    source_filename: Mapped[str] = mapped_column(String(255), default="")
+
+
 def open_store():
     url = os.getenv("DATABASE_URL", "sqlite:////tmp/alarm-inspection.db")
     engine = create_engine(url, pool_pre_ping=True)

@@ -14,6 +14,7 @@
   const inspectionTitle = document.querySelector('#inspection-title');
   const inspectionMeta = document.querySelector('#inspection-meta');
   const acceptedPointsBody = document.querySelector('#accepted-points-body');
+  const inspectionPointListSelector = document.querySelector('#inspection-point-list-selector');
   const inspectionMessage = document.querySelector('#inspection-message');
   const refreshInspectionButton = document.querySelector('#refresh-inspection');
   const eventHistoryForm = document.querySelector('#event-history-form');
@@ -49,6 +50,7 @@
   let inspectionPoints = [];
   let pendingEventDates = new Map();
   let showMissingOnly = false;
+  let currentPointListId = null;
 
   function showScreen(name) {
     homeScreen.classList.toggle('hidden', name !== 'home');
@@ -71,8 +73,22 @@
     for (const row of rows.slice(1)) {
       row.remove();
     }
+    syncPointListRemoveButtons();
     clearPreviewState();
     message.textContent = '';
+  }
+
+  function syncPointListRemoveButtons() {
+    const rows = [...lists.querySelectorAll('.point-list')];
+    const disableRemove = rows.length <= 1;
+    for (const row of rows) {
+      const removeButton = row.querySelector('.remove-point-list');
+      if (!removeButton) {
+        continue;
+      }
+      removeButton.disabled = disableRemove;
+      removeButton.title = disableRemove ? 'At least one Points List is required.' : '';
+    }
   }
 
   function formatInspectionLabel(inspection) {
@@ -171,11 +187,27 @@
     toggleMissingPointsButton.textContent = showMissingOnly ? 'Show All Points' : 'Show Missing Points Only';
   }
 
-  async function openInspection(inspectionId) {
+  function renderInspectionPointListSelector(pointLists, selectedPointListId) {
+    if (!inspectionPointListSelector) {
+      return;
+    }
+    inspectionPointListSelector.replaceChildren();
+    for (const item of pointLists || []) {
+      const label = `${item.category || 'Panel'} · ${item.filename || ''}`;
+      inspectionPointListSelector.add(new Option(label, item.id));
+    }
+    if (selectedPointListId) {
+      inspectionPointListSelector.value = selectedPointListId;
+    }
+    inspectionPointListSelector.disabled = (pointLists || []).length < 2;
+  }
+
+  async function openInspection(inspectionId, pointListId = null) {
     if (!inspectionId) {
       return;
     }
-    const response = await fetch(`/api/inspections/${inspectionId}`);
+    const query = pointListId ? `?point_list_id=${encodeURIComponent(pointListId)}` : '';
+    const response = await fetch(`/api/inspections/${inspectionId}${query}`);
     const inspection = await response.json();
     if (inspection.error) {
       inspectionMessage.textContent = inspection.error;
@@ -183,8 +215,10 @@
     }
     pendingEventDates = new Map();
     currentInspectionId = inspection.id;
+    currentPointListId = inspection.selected_point_list_id || null;
     inspectionTitle.textContent = `Inspection ${inspection.store_number}`;
     inspectionMeta.textContent = `${inspection.address} | ${inspection.status}`;
+    renderInspectionPointListSelector(inspection.point_lists || [], inspection.selected_point_list_id || null);
     renderAcceptedPoints(inspection.accepted_points || []);
     syncMissingToggleLabel();
     const uploaded = (inspection.event_history_files || []).join(', ');
@@ -239,13 +273,14 @@
     }
   }
 
-  function rowDecisions(rows) {
+  function rowDecisions(rows, sourceFilename) {
     return rows.map((item) => ({
       address: item.address ?? null,
       text: item.text ?? '',
       accepted: item.accepted === true,
       deleted: false,
       reason: item.reason || 'technician review',
+      source_filename: sourceFilename || '',
     }));
   }
 
@@ -310,7 +345,16 @@
     if (!currentInspectionId) {
       return;
     }
-    await openInspection(currentInspectionId);
+    await openInspection(currentInspectionId, currentPointListId);
+  });
+
+  inspectionPointListSelector?.addEventListener('change', async () => {
+    if (!currentInspectionId) {
+      return;
+    }
+    pendingEventDates = new Map();
+    currentPointListId = inspectionPointListSelector.value || null;
+    await openInspection(currentInspectionId, currentPointListId);
   });
 
   previewButton.addEventListener('click', async (event) => {
@@ -404,7 +448,9 @@
     event.preventDefault();
     event.stopImmediatePropagation();
     persistSelectedList();
-    decisionField.value = JSON.stringify(previewLists.flatMap((item) => rowDecisions(item.rows)));
+    decisionField.value = JSON.stringify(
+      previewLists.flatMap((item) => rowDecisions(item.rows, item.filename))
+    );
     reviewSaved = true;
     modal.classList.remove('open');
     if (!form.reportValidity()) {
@@ -439,7 +485,34 @@
       fileInput.value = '';
       fileInput.required = true;
     }
+    const removeButton = row.querySelector('.remove-point-list');
+    if (removeButton) {
+      removeButton.disabled = false;
+      removeButton.title = '';
+    }
     lists.append(row);
+    syncPointListRemoveButtons();
+  });
+
+  lists?.addEventListener('click', (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement) || !target.classList.contains('remove-point-list')) {
+      return;
+    }
+    event.preventDefault();
+    const rows = [...lists.querySelectorAll('.point-list')];
+    if (rows.length <= 1) {
+      message.textContent = 'At least one Points List is required.';
+      syncPointListRemoveButtons();
+      return;
+    }
+    const row = target.closest('.point-list');
+    if (row) {
+      row.remove();
+      clearPreviewState();
+      message.textContent = 'Points List removed. Preview decisions were reset.';
+    }
+    syncPointListRemoveButtons();
   });
 
   form.addEventListener('submit', async (event) => {
@@ -453,6 +526,10 @@
       inspectionMessage.textContent = 'No inspection selected.';
       return;
     }
+    if (!currentPointListId) {
+      inspectionMessage.textContent = 'Select a Points List first.';
+      return;
+    }
     const file = eventFile?.files?.[0];
     if (!file) {
       inspectionMessage.textContent = 'Choose an Event History file first.';
@@ -460,6 +537,7 @@
     }
     inspectionMessage.textContent = 'Uploading Event History...';
     const data = new FormData();
+    data.append('point_list_id', currentPointListId);
     data.append('event_file', file);
     const response = await fetch(`/api/inspections/${currentInspectionId}/event-history`, {
       method: 'POST',
@@ -505,6 +583,10 @@
       inspectionMessage.textContent = 'No inspection selected.';
       return;
     }
+    if (!currentPointListId) {
+      inspectionMessage.textContent = 'Select a Points List first.';
+      return;
+    }
     const matches = [...pendingEventDates.entries()].map(([point, timestamp]) => ({
       point,
       timestamp,
@@ -517,7 +599,7 @@
     const response = await fetch(`/api/inspections/${currentInspectionId}/event-dates/save`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ matches }),
+      body: JSON.stringify({ point_list_id: currentPointListId, matches }),
     });
     const result = await response.json();
     if (!response.ok || result.error) {
@@ -525,7 +607,7 @@
       return;
     }
     pendingEventDates = new Map();
-    await openInspection(currentInspectionId);
+    await openInspection(currentInspectionId, currentPointListId);
     inspectionMessage.textContent = `Saved ${result.saved} new dates. Ignored existing: ${result.ignored_existing}.`;
   });
 
@@ -534,9 +616,15 @@
       inspectionMessage.textContent = 'No inspection selected.';
       return;
     }
+    if (!currentPointListId) {
+      inspectionMessage.textContent = 'Select a Points List first.';
+      return;
+    }
     inspectionMessage.textContent = 'Clearing saved dates...';
     const response = await fetch(`/api/inspections/${currentInspectionId}/event-dates/clear`, {
       method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ point_list_id: currentPointListId }),
     });
     const result = await response.json();
     if (!response.ok || result.error) {
@@ -544,11 +632,12 @@
       return;
     }
     pendingEventDates = new Map();
-    await openInspection(currentInspectionId);
+    await openInspection(currentInspectionId, currentPointListId);
     inspectionMessage.textContent = `Cleared ${result.cleared} saved dates.`;
   });
 
   loadInspections();
+  syncPointListRemoveButtons();
   syncMissingToggleLabel();
   showScreen('home');
 })();

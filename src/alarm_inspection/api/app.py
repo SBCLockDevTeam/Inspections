@@ -8,12 +8,20 @@ from pathlib import Path
 from uuid import uuid4
 
 from alarm_inspection.domain.points import normalize_point
-from alarm_inspection.storage import EventPointDate, Inspection, PointDecision, PointList, SourceFile, open_store
+from alarm_inspection.storage import (
+    Inspection,
+    PointDecision,
+    PointList,
+    PointListDecision,
+    PointListEventDate,
+    SourceFile,
+    open_store,
+)
 from alarm_inspection.intake.event_history import parse_xlsx as parse_event_history_xlsx
 from alarm_inspection.intake.points_list import parse_xlsx
 
 try:
-    from fastapi import Body, FastAPI, File, Form, UploadFile
+    from fastapi import Body, FastAPI, File, Form, Query, UploadFile
     from fastapi.responses import HTMLResponse, Response
 except ImportError:  # Allows domain tests to run without web dependencies.
     FastAPI = None
@@ -61,7 +69,7 @@ def _parse_saved_timestamp(value: object) -> datetime | None:
 _HTML = """<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Alarm Inspection Processor</title>
-<style>body{font-family:system-ui,sans-serif;max-width:980px;margin:40px auto;padding:0 20px;color:#17202a}h1{margin-bottom:8px}label{display:block;margin:14px 0 5px;font-weight:600}input,button,select{font:inherit;padding:9px;width:100%;box-sizing:border-box}button{margin-top:12px;background:#1769aa;color:#fff;border:0;border-radius:4px;cursor:pointer}.secondary{background:#5b6470}.ghost{background:#fff;color:#1769aa;border:1px solid #1769aa}.card{border:1px solid #d7dde3;border-radius:8px;padding:24px;margin-top:16px}.hidden{display:none}.row{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:end}.table{border-collapse:collapse;width:100%;margin-top:16px}.table th,.table td{border:1px solid #ccd3da;padding:8px;text-align:left}.table th{background:#edf2f7}#message,#inspection-message{margin-top:16px;white-space:pre-wrap}.modal{display:none;position:fixed;inset:0;background:#0008;align-items:center;justify-content:center}.modal.open{display:flex}.modal-card{background:white;width:min(1000px,92vw);max-height:85vh;overflow:auto;border-radius:8px;padding:24px}.accepted-row{background:#e8f5e9}.review-row{background:#ffebee}.accepted{color:#176b3a;font-weight:600}.review{color:#a33b00;font-weight:600}.status-toggle{width:auto;margin:0;padding:5px 10px;background:#fff;border:1px solid currentColor}.close{width:auto;float:right;margin:0;background:#5b6470}.nav{display:flex;gap:8px;align-items:center;flex-wrap:nowrap;overflow-x:auto}.nav button{width:auto;margin-top:0;white-space:nowrap}.inline-form{display:flex;gap:8px;align-items:center;margin:0;flex:1 1 auto}.inline-form label{display:none}.inline-form input[type=file]{margin:0;width:320px;max-width:42vw;padding:7px}.inline-form button{width:auto;margin-top:0;white-space:nowrap}</style></head>
+<style>body{font-family:system-ui,sans-serif;max-width:980px;margin:40px auto;padding:0 20px;color:#17202a}h1{margin-bottom:8px}label{display:block;margin:14px 0 5px;font-weight:600}input,button,select{font:inherit;padding:9px;width:100%;box-sizing:border-box}button{margin-top:12px;background:#1769aa;color:#fff;border:0;border-radius:4px;cursor:pointer}.secondary{background:#5b6470}.ghost{background:#fff;color:#1769aa;border:1px solid #1769aa}.danger{background:#b3261e}.card{border:1px solid #d7dde3;border-radius:8px;padding:24px;margin-top:16px}.hidden{display:none}.row{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:end}.table{border-collapse:collapse;width:100%;margin-top:16px}.table th,.table td{border:1px solid #ccd3da;padding:8px;text-align:left}.table th{background:#edf2f7}#message,#inspection-message{margin-top:16px;white-space:pre-wrap}.modal{display:none;position:fixed;inset:0;background:#0008;align-items:center;justify-content:center}.modal.open{display:flex}.modal-card{background:white;width:min(1000px,92vw);max-height:85vh;overflow:auto;border-radius:8px;padding:24px}.accepted-row{background:#e8f5e9}.review-row{background:#ffebee}.accepted{color:#176b3a;font-weight:600}.review{color:#a33b00;font-weight:600}.status-toggle{width:auto;margin:0;padding:5px 10px;background:#fff;border:1px solid currentColor}.close{width:auto;float:right;margin:0;background:#5b6470}.nav{display:flex;gap:8px;align-items:center;flex-wrap:nowrap;overflow-x:auto}.nav button{width:auto;margin-top:0;white-space:nowrap}.inline-form{display:flex;gap:8px;align-items:center;margin:0;flex:1 1 auto}.inline-form label{display:none}.inline-form input[type=file]{margin:0;width:320px;max-width:42vw;padding:7px}.inline-form button{width:auto;margin-top:0;white-space:nowrap}.point-list{display:grid;grid-template-columns:180px 1fr auto;gap:8px;align-items:center;margin-top:8px}.point-list select,.point-list input{margin:0}.point-list .remove-point-list{width:auto;margin-top:0;white-space:nowrap}.create-actions{display:flex;gap:8px;align-items:center;flex-wrap:nowrap;overflow-x:auto;margin-top:12px}.create-actions button{width:auto;margin-top:0;white-space:nowrap}</style></head>
 <body><h1>Alarm Inspection Processor</h1><p>Choose an existing inspection or create a new one.</p>
 
 <div id="home-screen" class="card">
@@ -79,13 +87,15 @@ _HTML = """<!doctype html>
 <form id="inspection-form">
 <label for="store_number">Store number</label><input id="store_number" required>
 <label for="address">Address</label><input id="address" required>
-<label>Points Lists by security panel</label><div id="point-lists"><div class="point-list"><select name="point_list_category" required><option>Combo</option><option>Fire</option><option>Burglar</option><option>Gas Station</option></select><input name="points_files" type="file" accept=".xls,.xlsx,.pdf" required></div></div><button type="button" id="add-list">Add another Points List</button><button type="button" id="preview-list">Preview Points Lists</button><div id="preview"></div>
-<input type="hidden" name="point_decisions" id="point-decisions" value="[]"><button type="submit">Create Inspection</button></form><div id="message"></div></div>
+<label>Points Lists by security panel</label><div id="point-lists"><div class="point-list"><select name="point_list_category" required><option>Combo</option><option>Fire</option><option>Burglar</option><option>Gas Station</option></select><input name="points_files" type="file" accept=".xls,.xlsx,.pdf" required><button type="button" class="remove-point-list danger">Delete List</button></div></div><div class="create-actions"><button type="button" id="add-list">Add another Points List</button><button type="button" id="preview-list">Preview Points Lists</button><button type="submit">Create Inspection</button></div><div id="preview"></div>
+<input type="hidden" name="point_decisions" id="point-decisions" value="[]"></form><div id="message"></div></div>
 
 <div id="inspection-screen" class="card hidden">
-<div class="nav"><button type="button" id="back-home-from-inspection" class="secondary">Back to Home</button><button type="button" id="refresh-inspection" class="ghost">Refresh Inspection</button><button type="button" id="toggle-missing-points" class="ghost">Show Missing Points Only</button><form id="event-history-form" class="inline-form"><label for="event-file">Event History file</label><input id="event-file" type="file" accept=".xls,.xlsx,.pdf" required><button type="submit">Upload Event History</button></form><button type="button" id="save-event-dates" class="ghost">Save Matched Dates</button><button type="button" id="clear-event-dates" class="secondary">Clear Dates</button></div>
+<div class="nav"><button type="button" id="back-home-from-inspection" class="secondary">Back to Home</button><button type="button" id="refresh-inspection" class="ghost">Refresh Inspection</button><button type="button" id="toggle-missing-points" class="ghost">Show Missing Points Only</button></div>
+<div class="nav"><form id="event-history-form" class="inline-form"><label for="event-file">Event History file</label><input id="event-file" type="file" accept=".xls,.xlsx,.pdf" required><button type="submit">Upload Event History</button></form><button type="button" id="save-event-dates" class="ghost">Save Matched Dates</button><button type="button" id="clear-event-dates" class="secondary">Clear Dates</button></div>
 <h2 id="inspection-title">Inspection</h2>
 <p id="inspection-meta"></p>
+<label for="inspection-point-list-selector">Points List</label><select id="inspection-point-list-selector"></select>
 <h3>Accepted Points</h3>
 <table class="table"><thead><tr><th>Point</th><th>Description</th><th>Date</th></tr></thead><tbody id="accepted-points-body"></tbody></table>
 <div id="inspection-message"></div>
@@ -153,21 +163,39 @@ def create_app():
                 session.add(SourceFile(id=str(uuid4()), inspection_id=inspection_id,
                                        filename=filename, path=str(target / filename),
                                        kind="points_list"))
+            point_list_ids_by_filename: dict[str, str] = {}
             for filename, list_category in zip(point_file_names, point_list_categories, strict=False):
-                session.add(PointList(id=str(uuid4()), inspection_id=inspection_id,
+                point_list_id = str(uuid4())
+                session.add(PointList(id=point_list_id, inspection_id=inspection_id,
                                       category=list_category, filename=filename,
                                       path=str(target / filename), accepted_at=created_at))
+                point_list_ids_by_filename[filename] = point_list_id
+
+            default_list_id = point_list_ids_by_filename.get(point_file_names[0], "") if point_file_names else ""
             for decision in decisions_to_store:
+                source_filename = str(decision.get("source_filename") or "")
+                point_list_id = point_list_ids_by_filename.get(source_filename, default_list_id)
                 session.add(PointDecision(id=str(uuid4()), inspection_id=inspection_id,
                                           address=decision.get("address"), text=decision.get("text", ""),
                                           accepted=_as_bool(decision.get("accepted"), default=False),
                                           deleted=_as_bool(decision.get("deleted"), default=False),
                                           reason=decision.get("reason", "technician review")))
+                if point_list_id:
+                    session.add(PointListDecision(
+                        id=str(uuid4()),
+                        inspection_id=inspection_id,
+                        point_list_id=point_list_id,
+                        address=decision.get("address"),
+                        text=decision.get("text", ""),
+                        accepted=_as_bool(decision.get("accepted"), default=False),
+                        deleted=_as_bool(decision.get("deleted"), default=False),
+                        reason=decision.get("reason", "technician review"),
+                    ))
         return {
             "id": inspection_id,
             "status": "pending_event_history",
             "files": files,
-            "accepted_points": sum(1 for d in decisions_to_store if d.get("accepted")),
+            "accepted_points": sum(1 for d in decisions_to_store if _as_bool(d.get("accepted"), default=False)),
         }
 
     @app.get("/api/inspections")
@@ -180,31 +208,59 @@ def create_app():
                      "status": row.status, "created_at": row.created_at.isoformat()} for row in rows]
 
     @app.get("/api/inspections/{inspection_id}")
-    def get_inspection(inspection_id: str) -> dict:
+    def get_inspection(inspection_id: str, point_list_id: str | None = Query(default=None)) -> dict:
         with store() as session:
             inspection = session.get(Inspection, inspection_id)
             if inspection is None:
                 return {"error": "inspection not found"}
-            points = (
-                session.query(PointDecision)
-                .filter(
-                    PointDecision.inspection_id == inspection_id,
-                    PointDecision.accepted.is_(True),
-                    PointDecision.deleted.is_(False),
-                )
-                .order_by(PointDecision.address.asc(), PointDecision.text.asc())
+
+            point_lists = (
+                session.query(PointList)
+                .filter(PointList.inspection_id == inspection_id)
+                .order_by(PointList.accepted_at.asc(), PointList.filename.asc())
                 .all()
             )
+            selected_point_list_id = point_list_id or (point_lists[0].id if point_lists else None)
+
+            scoped_points = (
+                session.query(PointListDecision)
+                .filter(
+                    PointListDecision.inspection_id == inspection_id,
+                    PointListDecision.point_list_id == selected_point_list_id,
+                    PointListDecision.accepted.is_(True),
+                    PointListDecision.deleted.is_(False),
+                )
+                .order_by(PointListDecision.address.asc(), PointListDecision.text.asc())
+                .all()
+            )
+            if scoped_points:
+                points = scoped_points
+            else:
+                points = (
+                    session.query(PointDecision)
+                    .filter(
+                        PointDecision.inspection_id == inspection_id,
+                        PointDecision.accepted.is_(True),
+                        PointDecision.deleted.is_(False),
+                    )
+                    .order_by(PointDecision.address.asc(), PointDecision.text.asc())
+                    .all()
+                )
+
+            selected_kind = f"event_history:{selected_point_list_id}" if selected_point_list_id else "event_history"
             event_history_files = (
                 session.query(SourceFile)
-                .filter(SourceFile.inspection_id == inspection_id, SourceFile.kind == "event_history")
+                .filter(SourceFile.inspection_id == inspection_id, SourceFile.kind == selected_kind)
                 .order_by(SourceFile.filename.asc())
                 .all()
             )
             saved_event_dates = (
-                session.query(EventPointDate)
-                .filter(EventPointDate.inspection_id == inspection_id)
-                .order_by(EventPointDate.point_address.asc())
+                session.query(PointListEventDate)
+                .filter(
+                    PointListEventDate.inspection_id == inspection_id,
+                    PointListEventDate.point_list_id == selected_point_list_id,
+                )
+                .order_by(PointListEventDate.point_address.asc())
                 .all()
             )
             mapped_dates = {item.point_address: item.event_timestamp for item in saved_event_dates}
@@ -225,14 +281,33 @@ def create_app():
                     }
                     for point in points
                 ],
+                "point_lists": [
+                    {"id": item.id, "category": item.category, "filename": item.filename}
+                    for item in point_lists
+                ],
+                "selected_point_list_id": selected_point_list_id,
                 "event_history_files": [file.filename for file in event_history_files],
             }
 
     @app.post("/api/inspections/{inspection_id}/event-history")
-    async def add_event_history(inspection_id: str, event_file: UploadFile = File(...)) -> dict:
+    async def add_event_history(
+        inspection_id: str,
+        point_list_id: str = Form(...),
+        event_file: UploadFile = File(...),
+    ) -> dict:
         target = _UPLOAD_ROOT / inspection_id
         if not target.exists():
             return {"error": "inspection not found"}
+
+        with store() as session:
+            point_list = (
+                session.query(PointList)
+                .filter(PointList.inspection_id == inspection_id, PointList.id == point_list_id)
+                .first()
+            )
+            if point_list is None:
+                return {"error": "Selected Points List was not found for this inspection."}
+
         filename = Path(event_file.filename or "event-history.bin").name
         if not filename.lower().endswith(".xlsx"):
             return {"error": "Event History processing currently supports XLSX files."}
@@ -246,8 +321,11 @@ def create_app():
 
         with store() as session:
             existing = (
-                session.query(EventPointDate)
-                .filter(EventPointDate.inspection_id == inspection_id)
+                session.query(PointListEventDate)
+                .filter(
+                    PointListEventDate.inspection_id == inspection_id,
+                    PointListEventDate.point_list_id == point_list_id,
+                )
                 .all()
             )
         existing_points = {item.point_address for item in existing}
@@ -260,9 +338,11 @@ def create_app():
 
         with store.begin() as session:
             session.add(SourceFile(id=str(uuid4()), inspection_id=inspection_id,
-                                   filename=filename, path=str(destination), kind="event_history"))
+                                   filename=filename, path=str(destination),
+                                   kind=f"event_history:{point_list_id}"))
         return {
             "inspection_id": inspection_id,
+            "point_list_id": point_list_id,
             "filename": filename,
             "status": "matched",
             "matched_points": len(extracted),
@@ -273,32 +353,59 @@ def create_app():
     @app.post("/api/inspections/{inspection_id}/event-dates/save")
     def save_event_dates(inspection_id: str, payload: dict = Body(default={})) -> dict:
         matches = payload.get("matches", [])
+        point_list_id = str(payload.get("point_list_id") or "").strip()
         if not isinstance(matches, list):
             return {"error": "matches must be a list"}
+        if not point_list_id:
+            return {"error": "point_list_id is required"}
 
         saved = 0
         ignored_existing = 0
         ignored_invalid = 0
 
         with store.begin() as session:
+            point_list = (
+                session.query(PointList)
+                .filter(PointList.inspection_id == inspection_id, PointList.id == point_list_id)
+                .first()
+            )
+            if point_list is None:
+                return {"error": "Selected Points List was not found for this inspection."}
+
             existing_rows = (
-                session.query(EventPointDate)
-                .filter(EventPointDate.inspection_id == inspection_id)
+                session.query(PointListEventDate)
+                .filter(
+                    PointListEventDate.inspection_id == inspection_id,
+                    PointListEventDate.point_list_id == point_list_id,
+                )
                 .all()
             )
             existing_points = {item.point_address for item in existing_rows}
 
             accepted_points = (
-                session.query(PointDecision)
+                session.query(PointListDecision)
                 .filter(
-                    PointDecision.inspection_id == inspection_id,
-                    PointDecision.accepted.is_(True),
-                    PointDecision.deleted.is_(False),
-                    PointDecision.address.is_not(None),
+                    PointListDecision.inspection_id == inspection_id,
+                    PointListDecision.point_list_id == point_list_id,
+                    PointListDecision.accepted.is_(True),
+                    PointListDecision.deleted.is_(False),
+                    PointListDecision.address.is_not(None),
                 )
                 .all()
             )
             allowed_points = {int(item.address) for item in accepted_points if item.address is not None}
+            if not allowed_points:
+                fallback_points = (
+                    session.query(PointDecision)
+                    .filter(
+                        PointDecision.inspection_id == inspection_id,
+                        PointDecision.accepted.is_(True),
+                        PointDecision.deleted.is_(False),
+                        PointDecision.address.is_not(None),
+                    )
+                    .all()
+                )
+                allowed_points = {int(item.address) for item in fallback_points if item.address is not None}
 
             for item in matches:
                 if not isinstance(item, dict):
@@ -316,9 +423,10 @@ def create_app():
                     continue
 
                 session.add(
-                    EventPointDate(
+                    PointListEventDate(
                         id=str(uuid4()),
                         inspection_id=inspection_id,
+                        point_list_id=point_list_id,
                         point_address=point,
                         event_timestamp=timestamp,
                         source_filename=source_filename,
@@ -329,6 +437,7 @@ def create_app():
 
         return {
             "inspection_id": inspection_id,
+            "point_list_id": point_list_id,
             "status": "saved",
             "saved": saved,
             "ignored_existing": ignored_existing,
@@ -336,14 +445,25 @@ def create_app():
         }
 
     @app.post("/api/inspections/{inspection_id}/event-dates/clear")
-    def clear_event_dates(inspection_id: str) -> dict:
+    def clear_event_dates(inspection_id: str, payload: dict = Body(default={})) -> dict:
+        point_list_id = str(payload.get("point_list_id") or "").strip()
+        if not point_list_id:
+            return {"error": "point_list_id is required"}
         with store.begin() as session:
             cleared = (
-                session.query(EventPointDate)
-                .filter(EventPointDate.inspection_id == inspection_id)
+                session.query(PointListEventDate)
+                .filter(
+                    PointListEventDate.inspection_id == inspection_id,
+                    PointListEventDate.point_list_id == point_list_id,
+                )
                 .delete(synchronize_session=False)
             )
-        return {"inspection_id": inspection_id, "status": "cleared", "cleared": int(cleared)}
+        return {
+            "inspection_id": inspection_id,
+            "point_list_id": point_list_id,
+            "status": "cleared",
+            "cleared": int(cleared),
+        }
 
     @app.post("/api/inspections/{inspection_id}/approve-points")
     def approve_points(inspection_id: str) -> dict:
