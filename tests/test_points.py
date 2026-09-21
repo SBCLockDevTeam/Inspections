@@ -1,13 +1,21 @@
 from datetime import datetime
 
 from alarm_inspection.domain.points import decide_point, first_event_by_point, normalize_point
+from alarm_inspection.intake.points_list import normalize_rows
 
 
 def test_normalize_point_accepts_common_formats():
     assert normalize_point("Point 2") == 2
     assert normalize_point("PT  17") == 17
     assert normalize_point("P200") == 200
+    assert normalize_point(17.0) == 17
     assert normalize_point("not a point") is None
+
+
+def test_normalize_rows_keeps_excel_numeric_point_values():
+    rows = normalize_rows([["Point Number", "Description"], [17.0, "Smoke detector"]])
+    assert rows[0].address == 17
+    assert rows[0].accepted is True
 
 
 def test_decision_rejects_unassigned_and_out_of_range_rows():

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from numbers import Integral, Real
 from dataclasses import dataclass
 from typing import Iterable, Mapping
 
@@ -23,8 +24,10 @@ def normalize_point(value: object) -> int | None:
         return None
     if isinstance(value, bool):
         return None
-    if isinstance(value, int):
-        return value
+    if isinstance(value, Integral):
+        return int(value)
+    if isinstance(value, Real) and float(value).is_integer():
+        return int(value)
     text = str(value).strip()
     if text.isdigit():
         return int(text)

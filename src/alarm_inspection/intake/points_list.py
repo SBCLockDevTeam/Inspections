@@ -25,7 +25,10 @@ def _header_score(value: object, aliases: set[str]) -> int:
 
 def detect_columns(rows: list[list[object]]) -> tuple[int, int, int]:
     """Return header row, point column, and text column indexes."""
-    point_aliases = {"point", "points", "point assignment", "point assignments", "address"}
+    point_aliases = {
+        "point", "points", "point assignment", "point assignments", "point number",
+        "point numbers", "point #", "point no", "address",
+    }
     text_aliases = {"text", "point text", "description", "device", "device type"}
     best = (-1, 0, 0, 0)
     for row_index, row in enumerate(rows[:30]):
