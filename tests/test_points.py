@@ -18,6 +18,13 @@ def test_normalize_rows_keeps_excel_numeric_point_values():
     assert rows[0].accepted is True
 
 
+def test_normalize_rows_keeps_unassigned_points_for_review():
+    rows = normalize_rows([["Point", "Description"], ["Unassigned", "Door contact"]])
+    assert len(rows) == 1
+    assert rows[0].accepted is False
+    assert rows[0].text == "Door contact"
+
+
 def test_decision_rejects_unassigned_and_out_of_range_rows():
     assert not decide_point({"point": "Point 2", "text": "unassigned"}).accepted
     assert not decide_point({"point": "Point 256", "text": "Motion"}).accepted

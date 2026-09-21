@@ -7,6 +7,7 @@
   const message = document.querySelector('#message');
   const decisionField = document.querySelector('#point-decisions');
   const saveButton = document.querySelector('#save-review');
+  const acceptButton = document.querySelector('#accept-review');
   const deleteButton = document.querySelector('#delete-review');
   const lists = document.querySelector('#point-lists');
   const listSelector = document.querySelector('#preview-list-selector');
@@ -19,6 +20,7 @@
     body.replaceChildren();
     for (const item of rows) {
       const row = document.createElement('tr');
+      row.className = item.accepted ? 'accepted-row' : 'review-row';
       row.dataset.address = item.address ?? '';
       row.dataset.reason = item.reason ?? '';
       const point = document.createElement('td');
@@ -29,13 +31,20 @@
       description.value = item.text ?? '';
       descriptionCell.append(description);
       const statusCell = document.createElement('td');
-      const status = document.createElement('select');
-      status.className = 'review-status';
-      for (const [value, label] of [['accept', 'Accept'], ['review', 'Review']]) {
-        const option = new Option(label, value);
-        option.selected = (value === 'accept') === Boolean(item.accepted);
-        status.add(option);
-      }
+      const status = document.createElement('button');
+      status.type = 'button';
+      status.className = `review-status status-toggle ${item.accepted ? 'accepted' : 'review'}`;
+      status.textContent = item.accepted ? 'Accepted' : 'Review';
+      status.dataset.accepted = String(Boolean(item.accepted));
+      status.addEventListener('click', () => {
+        const accepted = status.dataset.accepted !== 'true';
+        status.dataset.accepted = String(accepted);
+        status.textContent = accepted ? 'Accepted' : 'Review';
+        status.classList.toggle('accepted', accepted);
+        status.classList.toggle('review', !accepted);
+        row.classList.toggle('accepted-row', accepted);
+        row.classList.toggle('review-row', !accepted);
+      });
       statusCell.append(status);
       const reason = document.createElement('td');
       reason.textContent = item.reason ?? '';
@@ -58,7 +67,7 @@
     return [...body.querySelectorAll('tr')].map((row) => ({
       address: row.dataset.address ? Number(row.dataset.address) : null,
       text: row.querySelector('.review-description').value,
-      accepted: row.querySelector('.review-status').value === 'accept',
+      accepted: row.querySelector('.review-status').dataset.accepted === 'true',
       reason: row.dataset.reason || 'technician review',
     }));
   }
@@ -125,7 +134,20 @@
     event.preventDefault();
     event.stopImmediatePropagation();
     for (const row of [...body.querySelectorAll('tr')]) {
-      if (row.querySelector('.review-status').value === 'review') row.remove();
+      if (row.querySelector('.review-status').dataset.accepted !== 'true') row.remove();
+    }
+  }, true);
+
+  acceptButton?.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    for (const status of body.querySelectorAll('.review-status')) {
+      status.dataset.accepted = 'true';
+      status.textContent = 'Accepted';
+      status.classList.add('accepted');
+      status.classList.remove('review');
+      status.closest('tr').classList.add('accepted-row');
+      status.closest('tr').classList.remove('review-row');
     }
   }, true);
 
