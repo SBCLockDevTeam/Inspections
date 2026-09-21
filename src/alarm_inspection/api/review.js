@@ -15,6 +15,7 @@
 
   let previewLists = [];
   let selectedListIndex = 0;
+  let renderedListIndex = null;
 
   function renderRows(rows) {
     body.replaceChildren();
@@ -81,12 +82,16 @@
   }
 
   function renderList(index) {
-    persistSelectedList();
+    if (renderedListIndex !== null && previewLists[renderedListIndex]) {
+      selectedListIndex = renderedListIndex;
+      persistSelectedList();
+    }
     const selected = previewLists[index];
     if (!selected) return;
     selectedListIndex = index;
     summary.textContent = `${selected.category ? `${selected.category} · ` : ''}${selected.filename} — Accepted: ${selected.accepted} | Needs review: ${selected.rejected}`;
     renderRows(selected.rows);
+    renderedListIndex = index;
   }
 
   previewButton.addEventListener('click', async (event) => {
@@ -117,6 +122,8 @@
       rejected: result.rejected,
       rows: result.rows,
     }];
+    renderedListIndex = null;
+    selectedListIndex = 0;
     listSelector.replaceChildren();
     for (const [index, item] of previewLists.entries()) {
       const option = new Option(`${item.category ? `${item.category} · ` : ''}${item.filename}`, String(index));
