@@ -186,7 +186,7 @@
       const cell = document.createElement('td');
       cell.colSpan = 3;
       cell.textContent = showMissingOnly
-        ? 'All accepted points currently have dates.'
+        ? 'All accepted points currently have dates. Click Show All Points to view every point.'
         : 'No accepted points recorded yet.';
       row.append(cell);
       acceptedPointsBody.append(row);
@@ -246,6 +246,7 @@
       return;
     }
     pendingEventDates = new Map();
+    showMissingOnly = false;
     currentInspectionId = inspection.id;
     currentPointListId = inspection.selected_point_list_id || null;
     inspectionTitle.textContent = `Inspection ${inspection.store_number}`;
