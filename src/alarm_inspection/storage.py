@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import os
+import tempfile
 from datetime import date, datetime
+from pathlib import Path
 
 from sqlalchemy import Date, DateTime, String, create_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
@@ -71,7 +73,11 @@ class PointListEventDate(Base):
 
 
 def open_store():
-    url = os.getenv("DATABASE_URL", "sqlite:////tmp/alarm-inspection.db")
+    url = os.getenv("DATABASE_URL")
+    if not url:
+        default_db = Path(tempfile.gettempdir()) / "alarm-inspection.db"
+        default_db.parent.mkdir(parents=True, exist_ok=True)
+        url = f"sqlite:///{default_db.as_posix()}"
     engine = create_engine(url, pool_pre_ping=True)
     Base.metadata.create_all(engine)
     return sessionmaker(bind=engine, expire_on_commit=False)

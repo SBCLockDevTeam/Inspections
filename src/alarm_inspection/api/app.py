@@ -73,6 +73,13 @@ def _event_history_kind(point_list_id: str | None) -> str:
     # Keep kind within the existing varchar(40) limit in production DB.
     return f"event_history:{point_list_id[:12]}"
 
+
+def _ensure_inspection_upload_dir(inspection_id: str) -> Path:
+    upload_dir = _UPLOAD_ROOT / inspection_id
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    return upload_dir
+
+
 _HTML = """<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Alarm Inspection Processor</title>
@@ -586,11 +593,11 @@ def create_app():
         point_list_id: str = Form(...),
         event_file: UploadFile = File(...),
     ) -> dict:
-        target = _UPLOAD_ROOT / inspection_id
-        if not target.exists():
-            return {"error": "inspection not found"}
-
         with store() as session:
+            inspection = session.get(Inspection, inspection_id)
+            if inspection is None:
+                return {"error": "inspection not found"}
+
             point_list = (
                 session.query(PointList)
                 .filter(PointList.inspection_id == inspection_id, PointList.id == point_list_id)
@@ -598,6 +605,8 @@ def create_app():
             )
             if point_list is None:
                 return {"error": "Selected Points List was not found for this inspection."}
+
+        target = _ensure_inspection_upload_dir(inspection_id)
 
         filename = Path(event_file.filename or "event-history.bin").name
         if not filename.lower().endswith(".xlsx"):

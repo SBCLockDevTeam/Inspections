@@ -1,5 +1,6 @@
 from datetime import datetime
 
+from alarm_inspection.api.app import _UPLOAD_ROOT, _ensure_inspection_upload_dir
 from alarm_inspection.domain.points import decide_point, first_event_by_point, normalize_point
 from alarm_inspection.intake.event_history import normalize_rows as normalize_event_rows
 from alarm_inspection.intake.points_list import normalize_rows
@@ -95,4 +96,13 @@ def test_event_history_normalize_rows_detects_alias_columns():
     ]
     result = normalize_event_rows(rows)
     assert result[9] == datetime(2026, 1, 3, 8, 30)
+
+
+def test_ensure_inspection_upload_dir_recreates_missing_dir(tmp_path, monkeypatch):
+    monkeypatch.setattr("alarm_inspection.api.app._UPLOAD_ROOT", tmp_path)
+    inspection_id = "missing-dir"
+    target = _ensure_inspection_upload_dir(inspection_id)
+    assert target == tmp_path / inspection_id
+    assert target.exists()
+    assert target.is_dir()
 
