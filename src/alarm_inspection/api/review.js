@@ -1,7 +1,32 @@
 (() => {
+  const loginScreen = document.querySelector('#login-screen');
   const homeScreen = document.querySelector('#home-screen');
   const createScreen = document.querySelector('#create-screen');
   const inspectionScreen = document.querySelector('#inspection-screen');
+  const adminScreen = document.querySelector('#admin-screen');
+
+  const userBar = document.querySelector('#user-bar');
+  const activeUserLabel = document.querySelector('#active-user-label');
+  const avatarWrap = document.querySelector('#avatar-wrap');
+  const avatarButton = document.querySelector('#avatar-button');
+  const avatarMenu = document.querySelector('#avatar-menu');
+  const logoutMenuOption = document.querySelector('#avatar-menu-option-logout');
+  const loginForm = document.querySelector('#login-form');
+  const loginEmail = document.querySelector('#login-email');
+  const loginPassword = document.querySelector('#login-password');
+  const loginMessage = document.querySelector('#login-message');
+  const passwordResetForm = document.querySelector('#password-reset-form');
+  const resetCurrentPassword = document.querySelector('#reset-current-password');
+  const resetNewPassword = document.querySelector('#reset-new-password');
+
+  const openAdminButton = document.querySelector('#open-admin');
+  const backHomeFromAdmin = document.querySelector('#back-home-from-admin');
+  const adminCreateUserForm = document.querySelector('#admin-create-user-form');
+  const saveAdminSettingsButton = document.querySelector('#save-admin-settings');
+  const adminDefaultPassword = document.querySelector('#admin-default-password');
+  const adminNewUserEmail = document.querySelector('#admin-new-user-email');
+  const adminUsersBody = document.querySelector('#admin-users-body');
+  const adminMessage = document.querySelector('#admin-message');
 
   const startCreateButton = document.querySelector('#start-create');
   const backHomeFromCreate = document.querySelector('#back-home-from-create');
@@ -26,6 +51,8 @@
   const chooseEventFileButton = document.querySelector('#choose-event-file');
   const eventFile = document.querySelector('#event-file');
   const eventFileName = document.querySelector('#event-file-name');
+  const editTableButton = document.querySelector('#edit-table');
+  const saveTableButton = document.querySelector('#save-table');
   const saveEventDatesButton = document.querySelector('#save-event-dates');
   const clearEventDatesButton = document.querySelector('#clear-event-dates');
   const toggleMissingPointsButton = document.querySelector('#toggle-missing-points');
@@ -69,11 +96,15 @@
   let currentPointListId = null;
   let inspectionOptions = [];
   let suppressInspectionDetailsSave = false;
+  let currentUser = null;
+  let tableEditable = false;
 
   function showScreen(name) {
+    loginScreen?.classList.toggle('hidden', name !== 'login');
     homeScreen.classList.toggle('hidden', name !== 'home');
     createScreen.classList.toggle('hidden', name !== 'create');
     inspectionScreen.classList.toggle('hidden', name !== 'inspection');
+    adminScreen?.classList.toggle('hidden', name !== 'admin');
   }
 
   function clearPreviewState() {
@@ -110,6 +141,167 @@
 
   function formatInspectionLabel(inspection) {
     return `${inspection.store_number} | ${inspection.address} | ${inspection.status}`;
+  }
+
+  function updateUserChrome() {
+    if (!currentUser) {
+      userBar?.classList.add('hidden');
+      if (activeUserLabel) {
+        activeUserLabel.textContent = '';
+      }
+      openAdminButton?.classList.add('hidden');
+      return;
+    }
+    userBar?.classList.remove('hidden');
+    if (activeUserLabel) {
+      activeUserLabel.textContent = `${currentUser.email}${currentUser.is_admin ? ' (Admin)' : ''}`;
+    }
+    if (avatarButton) {
+      const id = (currentUser.email || '').slice(0, 2).replace(/[^a-zA-Z]/g, '').toUpperCase();
+      avatarButton.textContent = id || 'U';
+    }
+    openAdminButton?.classList.toggle('hidden', !currentUser.is_admin);
+  }
+
+  async function ensureSession() {
+    const response = await fetch('/api/auth/me');
+    const payload = await response.json();
+    if (!payload.authenticated) {
+      currentUser = null;
+      updateUserChrome();
+      showScreen('login');
+      return false;
+    }
+    currentUser = payload.user;
+    updateUserChrome();
+    if (currentUser.force_password_reset) {
+      loginMessage.textContent = 'Password reset is required before continuing.';
+      passwordResetForm?.classList.remove('hidden');
+      loginForm?.classList.add('hidden');
+      showScreen('login');
+      return false;
+    }
+    passwordResetForm?.classList.add('hidden');
+    loginForm?.classList.remove('hidden');
+    return true;
+  }
+
+  function renderAdminUsers(users) {
+    if (!adminUsersBody) {
+      return;
+    }
+    adminUsersBody.replaceChildren();
+    for (const user of users) {
+      const row = document.createElement('tr');
+      const email = document.createElement('td');
+      email.textContent = user.email;
+      const admin = document.createElement('td');
+      const adminCheckbox = document.createElement('input');
+      adminCheckbox.type = 'checkbox';
+      adminCheckbox.checked = Boolean(user.is_admin);
+      adminCheckbox.addEventListener('change', async () => {
+        const response = await fetch(`/api/admin/users/${user.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ is_admin: adminCheckbox.checked }),
+        });
+        const result = await response.json();
+        if (!response.ok || result.error) {
+          adminMessage.textContent = result.error || result.detail || 'Updating user failed.';
+          adminCheckbox.checked = !adminCheckbox.checked;
+          return;
+        }
+        adminMessage.textContent = `Updated ${user.email}.`;
+        await loadAdminUsers();
+      });
+      admin.append(adminCheckbox);
+      const forceReset = document.createElement('td');
+      const forceResetCheckbox = document.createElement('input');
+      forceResetCheckbox.type = 'checkbox';
+      forceResetCheckbox.checked = Boolean(user.force_password_reset);
+      forceResetCheckbox.addEventListener('change', async () => {
+        const response = await fetch(`/api/admin/users/${user.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ force_password_reset: forceResetCheckbox.checked }),
+        });
+        const result = await response.json();
+        if (!response.ok || result.error) {
+          adminMessage.textContent = result.error || result.detail || 'Updating user failed.';
+          forceResetCheckbox.checked = !forceResetCheckbox.checked;
+          return;
+        }
+        adminMessage.textContent = `Updated ${user.email}.`;
+        await loadAdminUsers();
+      });
+      forceReset.append(forceResetCheckbox);
+      const actions = document.createElement('td');
+      const wrapper = document.createElement('div');
+      wrapper.className = 'user-actions';
+
+      const removeUser = document.createElement('button');
+      removeUser.type = 'button';
+      removeUser.textContent = 'Remove User';
+      removeUser.addEventListener('click', async () => {
+        if (!window.confirm(`Remove user ${user.email}?`)) {
+          return;
+        }
+        const response = await fetch(`/api/admin/users/${user.id}`, { method: 'DELETE' });
+        const result = await response.json();
+        if (!response.ok || result.error) {
+          adminMessage.textContent = result.error || result.detail || 'Removing user failed.';
+          return;
+        }
+        adminMessage.textContent = `Removed ${user.email}.`;
+        await loadAdminUsers();
+      });
+
+      wrapper.append(removeUser);
+      actions.append(wrapper);
+      row.append(email, admin, forceReset, actions);
+      adminUsersBody.append(row);
+    }
+  }
+
+  async function loadAdminUsers() {
+    const response = await fetch('/api/admin/users');
+    const payload = await response.json();
+    if (!response.ok || payload.error) {
+      adminMessage.textContent = payload.error || payload.detail || 'Unable to load users.';
+      return;
+    }
+    renderAdminUsers(payload.users || []);
+  }
+
+  async function loadAdminSettings() {
+    const response = await fetch('/api/admin/settings');
+    const payload = await response.json();
+    if (!response.ok || payload.error) {
+      adminMessage.textContent = payload.error || payload.detail || 'Unable to load admin settings.';
+      return;
+    }
+    if (adminDefaultPassword) {
+      adminDefaultPassword.value = payload.default_password || '';
+    }
+  }
+
+  async function saveAdminSettings() {
+    if (!adminDefaultPassword) {
+      return;
+    }
+    const candidate = adminDefaultPassword.value || '';
+    const response = await fetch('/api/admin/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ default_password: candidate }),
+    });
+    const payload = await response.json();
+    if (!response.ok || payload.error) {
+      adminMessage.textContent = payload.error || payload.detail || 'Saving admin settings failed.';
+      return;
+    }
+    adminDefaultPassword.value = payload.default_password || candidate;
+    adminMessage.textContent = 'Global default password updated.';
   }
 
   async function loadInspections() {
@@ -215,28 +407,91 @@
     for (const point of pointsToRender) {
       const row = document.createElement('tr');
       const text = document.createElement('td');
-      text.textContent = point.text ?? '';
+      const textValue = point.editableText ?? point.text ?? '';
+      if (tableEditable) {
+        const textInput = document.createElement('input');
+        textInput.type = 'text';
+        textInput.className = 'location-input';
+        textInput.value = textValue;
+        textInput.addEventListener('input', () => {
+          point.editableText = textInput.value;
+        });
+        text.append(textInput);
+      } else {
+        text.textContent = textValue;
+      }
+
       const address = document.createElement('td');
-      address.textContent = point.address ?? '';
+      const addressValue = point.editableAddress ?? point.address ?? '';
+      if (tableEditable) {
+        const addressInput = document.createElement('input');
+        addressInput.type = 'text';
+        addressInput.className = 'location-input';
+        addressInput.value = addressValue;
+        addressInput.addEventListener('input', () => {
+          point.editableAddress = addressInput.value;
+        });
+        address.append(addressInput);
+      } else {
+        address.textContent = addressValue;
+      }
+
       const locationCell = document.createElement('td');
-      const locationInput = document.createElement('input');
-      locationInput.type = 'text';
-      locationInput.className = 'location-input';
-      locationInput.value = point.location ?? '';
-      locationInput.placeholder = 'Enter location';
-      locationCell.append(locationInput);
+      const locationValue = point.location ?? '';
+      if (tableEditable) {
+        const locationInput = document.createElement('input');
+        locationInput.type = 'text';
+        locationInput.className = 'location-input';
+        locationInput.value = locationValue;
+        locationInput.placeholder = 'Enter location';
+        locationInput.addEventListener('input', () => {
+          point.location = locationInput.value;
+        });
+        locationCell.append(locationInput);
+      } else {
+        locationCell.textContent = locationValue;
+      }
+
       const eventDate = document.createElement('td');
       const pointKey = Number(point.address);
       const pending = Number.isFinite(pointKey) ? pendingEventDates.get(pointKey) : undefined;
-      eventDate.textContent = point.event_date ?? (pending ? `${pending} (pending)` : '');
+      const eventValue = point.editableEventDate ?? point.event_date ?? (pending ? `${pending} (pending)` : '');
+      if (tableEditable) {
+        const eventDateInput = document.createElement('input');
+        eventDateInput.type = 'text';
+        eventDateInput.className = 'location-input';
+        eventDateInput.value = eventValue;
+        eventDateInput.addEventListener('input', () => {
+          point.editableEventDate = eventDateInput.value;
+        });
+        eventDate.append(eventDateInput);
+      } else {
+        eventDate.textContent = eventValue;
+      }
+
       row.append(text, address, locationCell, eventDate);
       acceptedPointsBody.append(row);
     }
   }
 
   function renderAcceptedPoints(points) {
-    inspectionPoints = points;
+    inspectionPoints = (points || []).map((point) => ({
+      ...point,
+      editableText: point.editableText ?? point.text ?? '',
+      editableAddress: point.editableAddress ?? (point.address ?? ''),
+      location: point.location ?? '',
+      editableEventDate: point.editableEventDate ?? point.event_date ?? '',
+    }));
     renderVisibleAcceptedPoints();
+  }
+
+  function syncTableEditButtons() {
+    if (editTableButton) {
+      editTableButton.disabled = tableEditable;
+    }
+    if (saveTableButton) {
+      saveTableButton.disabled = !tableEditable;
+    }
   }
 
   function setEventFileName() {
@@ -316,6 +571,8 @@
     }
     pendingEventDates = new Map();
     showMissingOnly = false;
+    tableEditable = false;
+    syncTableEditButtons();
     currentInspectionId = inspection.id;
     currentPointListId = inspection.selected_point_list_id || null;
     suppressInspectionDetailsSave = true;
@@ -460,6 +717,126 @@
   closePreviewButton?.addEventListener('click', () => modal.classList.remove('open'));
   closeReviewConfirmButton?.addEventListener('click', closeReviewConfirmation);
   cancelFinishReviewButton?.addEventListener('click', closeReviewConfirmation);
+
+  loginForm?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    loginMessage.textContent = 'Signing in...';
+    const response = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: loginEmail?.value || '',
+        password: loginPassword?.value || '',
+      }),
+    });
+    const result = await response.json();
+    if (!response.ok || result.error) {
+      loginMessage.textContent = result.error || result.detail || 'Login failed.';
+      return;
+    }
+    currentUser = result.user;
+    updateUserChrome();
+    if (currentUser.force_password_reset) {
+      loginMessage.textContent = 'Password reset is required before continuing.';
+      passwordResetForm?.classList.remove('hidden');
+      loginForm?.classList.add('hidden');
+      return;
+    }
+    await loadInspections();
+    showScreen('home');
+    loginMessage.textContent = '';
+    loginForm.reset();
+  });
+
+  passwordResetForm?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    loginMessage.textContent = 'Resetting password...';
+    const response = await fetch('/api/auth/reset-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        current_password: resetCurrentPassword?.value || '',
+        new_password: resetNewPassword?.value || '',
+      }),
+    });
+    const result = await response.json();
+    if (!response.ok || result.error) {
+      loginMessage.textContent = result.error || result.detail || 'Password reset failed.';
+      return;
+    }
+    currentUser = result.user;
+    updateUserChrome();
+    passwordResetForm.classList.add('hidden');
+    loginForm?.classList.remove('hidden');
+    passwordResetForm.reset();
+    loginForm.reset();
+    await loadInspections();
+    showScreen('home');
+    loginMessage.textContent = 'Password reset complete. Signed in.';
+  });
+
+  logoutMenuOption?.addEventListener('click', async () => {
+    avatarMenu?.classList.add('hidden');
+    await fetch('/api/auth/logout', { method: 'POST' });
+    currentUser = null;
+    updateUserChrome();
+    homeMessage.textContent = '';
+    inspectionMessage.textContent = '';
+    adminMessage.textContent = '';
+    passwordResetForm?.classList.add('hidden');
+    loginForm?.classList.remove('hidden');
+    showScreen('login');
+  });
+
+  openAdminButton?.addEventListener('click', async () => {
+    adminMessage.textContent = '';
+    await loadAdminSettings();
+    await loadAdminUsers();
+    showScreen('admin');
+  });
+
+  backHomeFromAdmin?.addEventListener('click', async () => {
+    await loadInspections();
+    showScreen('home');
+  });
+
+  adminCreateUserForm?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    adminMessage.textContent = 'Creating user...';
+    const response = await fetch('/api/admin/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: adminNewUserEmail?.value || '',
+      }),
+    });
+    const result = await response.json();
+    if (!response.ok || result.error) {
+      adminMessage.textContent = result.error || result.detail || 'User creation failed.';
+      return;
+    }
+    adminCreateUserForm.reset();
+    adminMessage.textContent = `Created ${result.user?.email || 'user'} with default password and forced reset.`;
+    await loadAdminUsers();
+  });
+
+  saveAdminSettingsButton?.addEventListener('click', async () => {
+    await saveAdminSettings();
+  });
+
+  avatarButton?.addEventListener('contextmenu', (event) => {
+    event.preventDefault();
+    avatarMenu?.classList.toggle('hidden');
+  });
+
+  document.addEventListener('click', (event) => {
+    if (!(event.target instanceof Node)) {
+      return;
+    }
+    if (avatarWrap && !avatarWrap.contains(event.target)) {
+      avatarMenu?.classList.add('hidden');
+    }
+  });
 
   startCreateButton?.addEventListener('click', () => {
     resetCreateForm();
@@ -765,7 +1142,7 @@
     eventHistoryForm.reset();
     setEventFileName();
     renderVisibleAcceptedPoints();
-    inspectionMessage.textContent = `Event History uploaded: ${result.filename}. Pending matches: ${pendingEventDates.size}. Click Save Matches to persist.`;
+    inspectionMessage.textContent = `Event History uploaded: ${result.filename}. Pending matches: ${pendingEventDates.size}. Click Accept Results to persist.`;
   }
 
   eventHistoryForm?.addEventListener('submit', async (event) => {
@@ -791,6 +1168,19 @@
     renderVisibleAcceptedPoints();
   });
 
+  editTableButton?.addEventListener('click', () => {
+    tableEditable = true;
+    syncTableEditButtons();
+    renderVisibleAcceptedPoints();
+  });
+
+  saveTableButton?.addEventListener('click', () => {
+    tableEditable = false;
+    syncTableEditButtons();
+    renderVisibleAcceptedPoints();
+    inspectionMessage.textContent = 'Accepted Points table changes saved.';
+  });
+
   saveEventDatesButton?.addEventListener('click', async () => {
     if (!currentInspectionId) {
       inspectionMessage.textContent = 'No inspection selected.';
@@ -805,10 +1195,10 @@
       timestamp,
     }));
     if (!matches.length) {
-      inspectionMessage.textContent = 'No pending dates to save.';
+      inspectionMessage.textContent = 'No pending dates to accept.';
       return;
     }
-    inspectionMessage.textContent = 'Saving matched dates...';
+    inspectionMessage.textContent = 'Accepting matched results...';
     const response = await fetch(`/api/inspections/${currentInspectionId}/event-dates/save`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -864,9 +1254,18 @@
     });
   });
 
-  loadInspections();
-  syncPointListRemoveButtons();
-  syncMissingToggleLabel();
-  setEventFileName();
-  showScreen('home');
+  async function bootstrap() {
+    syncPointListRemoveButtons();
+    syncMissingToggleLabel();
+    syncTableEditButtons();
+    setEventFileName();
+    const isAuthenticated = await ensureSession();
+    if (!isAuthenticated) {
+      return;
+    }
+    await loadInspections();
+    showScreen('home');
+  }
+
+  bootstrap();
 })();

@@ -3,31 +3,65 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timezone
+import hashlib
+import hmac
 import json
 from pathlib import Path
+import secrets
 import shutil
+from typing import Any
 from uuid import uuid4
 
 from alarm_inspection.domain.points import normalize_point
 from alarm_inspection.storage import (
+  AppSetting,
     Inspection,
     PointList,
     PointListDecision,
     PointListEventDate,
     SourceFile,
+    User,
+    UserSession,
     open_store,
 )
 from alarm_inspection.intake.event_history import parse_xlsx as parse_event_history_xlsx
 from alarm_inspection.intake.points_list import parse_xlsx
 
 try:
-    from fastapi import Body, FastAPI, File, Form, Query, UploadFile
-    from fastapi.responses import HTMLResponse, Response
+    from fastapi import Body, FastAPI, File, Form, Query, Request, UploadFile
+    from fastapi.responses import HTMLResponse, JSONResponse, Response
 except ImportError:  # Allows domain tests to run without web dependencies.
     FastAPI = None
 
 
 _UPLOAD_ROOT = Path("/tmp/alarm-inspection-uploads")
+_SESSION_COOKIE = "inspection_session"
+_DEFAULT_PASSWORD_FALLBACK = "password"
+_DEFAULT_PASSWORD_SETTING_KEY = "auth.default_password"
+_PASSWORD_ITERATIONS = 240_000
+
+
+def _hash_password(password: str, salt: str) -> str:
+  digest = hashlib.pbkdf2_hmac(
+    "sha256",
+    password.encode("utf-8"),
+    salt.encode("utf-8"),
+    _PASSWORD_ITERATIONS,
+  )
+  return digest.hex()
+
+
+def _password_record(password: str) -> str:
+  salt = secrets.token_hex(16)
+  return f"{salt}${_hash_password(password, salt)}"
+
+
+def _verify_password(password: str, record: str) -> bool:
+  if "$" not in record:
+    return False
+  salt, expected_hash = record.split("$", 1)
+  actual_hash = _hash_password(password, salt)
+  return hmac.compare_digest(actual_hash, expected_hash)
 
 
 def _as_bool(value: object, default: bool = False) -> bool:
@@ -135,6 +169,107 @@ body > p {
   margin: 0 0 16px;
   color: var(--muted);
   font-size: 1.02rem;
+}
+#user-bar {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+#avatar-wrap {
+  position: relative;
+}
+#avatar-button {
+  width: 42px;
+  height: 42px;
+  margin: 0;
+  padding: 0;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+#avatar-menu {
+  position: absolute;
+  right: 0;
+  top: 48px;
+  min-width: 130px;
+  padding: 6px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  z-index: 20;
+}
+#avatar-menu-option-logout {
+  width: 100%;
+  margin: 0;
+  padding: 9px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--text);
+}
+#avatar-menu-option-logout:hover {
+  background: #edf6ff;
+}
+.auth-card {
+  max-width: 520px;
+  margin: 24px auto 0;
+}
+.admin-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+.checkbox-row input[type=checkbox] {
+  width: auto;
+}
+.inline-note {
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin-top: 8px;
+}
+.admin-list-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+}
+.admin-list-header h3 {
+  margin: 0;
+}
+.add-user-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+.add-user-row button {
+  width: auto;
+  margin: 0;
+}
+.settings-row {
+  margin-top: 12px;
+}
+.settings-row button {
+  width: auto;
+}
+.user-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.user-actions button {
+  width: auto;
+  margin: 0;
 }
 h2, h3 {
   margin: 0 0 14px;
@@ -399,6 +534,11 @@ button:active {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
+  .admin-list-header,
+  .add-user-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
 }
 .compact-field label {
   margin: 0 0 4px;
@@ -581,6 +721,9 @@ button:active {
   .inspection-actions-row {
     grid-template-columns: 1fr;
   }
+  .admin-grid {
+    grid-template-columns: 1fr;
+  }
   .accepted-header-row {
     flex-direction: column;
     align-items: stretch;
@@ -607,16 +750,45 @@ button:active {
   }
 }
 </style></head>
-<body><h1>Alarm Inspection Processor</h1><p>Choose an existing inspection or create a new one.</p>
+<body><h1>Home Page</h1><p>Choose an existing inspection or create a new one.</p>
 
-<div id="home-screen" class="card">
+<div id="user-bar" class="hidden"><span id="active-user-label"></span><div id="avatar-wrap"><button type="button" id="avatar-button" class="secondary" title="Account menu">JP</button><div id="avatar-menu" class="hidden"><div id="avatar-menu-option-logout" role="menuitem" tabindex="0">Logout</div></div></div></div>
+
+<div id="login-screen" class="card auth-card">
+<h2>Login</h2>
+<form id="login-form">
+<label for="login-email">Email</label><input id="login-email" type="email" autocomplete="username" required>
+<label for="login-password">Password</label><input id="login-password" type="password" autocomplete="current-password" required>
+<button type="submit">Sign In</button>
+</form>
+<form id="password-reset-form" class="hidden">
+<label for="reset-current-password">Current password</label><input id="reset-current-password" type="password" autocomplete="current-password" required>
+<label for="reset-new-password">New password</label><input id="reset-new-password" type="password" autocomplete="new-password" required>
+<button type="submit">Reset Password</button>
+</form>
+<div id="login-message"></div>
+</div>
+
+<div id="home-screen" class="card hidden">
 <h2>Start</h2>
 <label for="inspection-picker">Existing inspections</label>
 <div class="row"><select id="inspection-picker"></select><button type="button" id="open-inspection" class="ghost">Open Inspection</button></div>
 <button type="button" id="refresh-inspections" class="secondary">Refresh List</button>
 <button type="button" id="start-create">Create New Inspection</button>
+<button type="button" id="open-admin" class="secondary hidden">Administration</button>
 <button type="button" id="delete-inspection" class="danger">Delete Inspection</button>
 <div id="home-message"></div>
+</div>
+
+<div id="admin-screen" class="card hidden">
+<div class="nav"><button type="button" id="back-home-from-admin" class="secondary">Back to Home</button></div>
+<h2>Administration</h2>
+<div class="admin-grid">
+<div class="admin-list-header"><h3>User List</h3><form id="admin-create-user-form" class="add-user-row"><label for="admin-new-user-email">Add User</label><input id="admin-new-user-email" type="email" placeholder="user@example.com" required><button type="submit">Add User</button></form></div>
+<table class="table"><thead><tr><th>Email</th><th>Admin</th><th>Force Reset</th><th>Actions</th></tr></thead><tbody id="admin-users-body"></tbody></table>
+<div class="settings-row"><label for="admin-default-password">Default Password</label><input id="admin-default-password" type="text" required><button type="button" id="save-admin-settings">Save Default Password</button><div class="inline-note">This default password is global and is used for new users and reset actions.</div></div>
+</div>
+<div id="admin-message"></div>
 </div>
 
 <div id="create-screen" class="card hidden">
@@ -695,7 +867,7 @@ button:active {
   </form>
 </div>
 
-<div class="accepted-header-row"><h3>Accepted Points</h3><button type="button" id="save-event-dates" class="ghost">Save Matches</button></div>
+<div class="accepted-header-row"><h3>Accepted Points</h3><div class="user-actions"><button type="button" id="edit-table" class="ghost">Edit</button><button type="button" id="save-table" class="ghost">Save</button><button type="button" id="save-event-dates" class="ghost">Accept Results</button></div></div>
 <table class="table"><thead><tr><th>Device Type</th><th>Address</th><th>Location</th><th>Test Result</th></tr></thead><tbody id="accepted-points-body"></tbody></table>
 <div id="inspection-message"></div>
 </div>
@@ -715,9 +887,291 @@ def create_app():
     app = FastAPI(title="Alarm Inspection Processor", version="0.1.0")
     store = open_store()
 
+    def serialize_user(user: User) -> dict[str, Any]:
+      return {
+        "id": user.id,
+        "email": user.email,
+        "is_admin": bool(user.is_admin),
+        "force_password_reset": bool(user.force_password_reset),
+      }
+
+    def get_default_password(session) -> str:
+      setting = session.get(AppSetting, _DEFAULT_PASSWORD_SETTING_KEY)
+      if setting is None or not setting.value:
+        return _DEFAULT_PASSWORD_FALLBACK
+      return setting.value
+
+    def set_default_password(session, value: str) -> str:
+      clean_value = value.strip() or _DEFAULT_PASSWORD_FALLBACK
+      setting = session.get(AppSetting, _DEFAULT_PASSWORD_SETTING_KEY)
+      now = datetime.now(timezone.utc)
+      if setting is None:
+        setting = AppSetting(
+          key=_DEFAULT_PASSWORD_SETTING_KEY,
+          value=clean_value,
+          updated_at=now,
+        )
+        session.add(setting)
+      else:
+        setting.value = clean_value
+        setting.updated_at = now
+      return clean_value
+
+    def seed_initial_admin() -> None:
+      admin_email = "john.porter@securitybuildingcontrols.com"
+      with store.begin() as session:
+        default_password = get_default_password(session)
+        set_default_password(session, default_password)
+        existing = session.query(User).filter(User.email == admin_email).first()
+        if existing is not None:
+          return
+        session.add(User(
+          id=str(uuid4()),
+          email=admin_email,
+          password_hash=_password_record(default_password),
+          is_admin=True,
+          force_password_reset=True,
+          is_active=True,
+          created_at=datetime.now(timezone.utc),
+        ))
+
+    def get_user_from_request(request: Request) -> User | None:
+      token = request.cookies.get(_SESSION_COOKIE)
+      if not token:
+        return None
+      now = datetime.now(timezone.utc)
+      with store() as session:
+        session_row = (
+          session.query(UserSession)
+          .filter(UserSession.session_token == token, UserSession.expires_at >= now)
+          .first()
+        )
+        if session_row is None:
+          return None
+        user = session.get(User, session_row.user_id)
+        if user is None or not user.is_active:
+          return None
+        return user
+
+    def require_admin(request: Request) -> User:
+      user = getattr(request.state, "current_user", None)
+      if user is None or not bool(user.is_admin):
+        raise PermissionError("Admin privileges are required.")
+      return user
+
+    seed_initial_admin()
+
+    @app.middleware("http")
+    async def auth_middleware(request: Request, call_next):
+      path = request.url.path
+      if not path.startswith("/api/"):
+        return await call_next(request)
+      if path in {
+        "/api/auth/login",
+        "/api/auth/logout",
+        "/api/auth/me",
+        "/api/auth/reset-password",
+      }:
+        return await call_next(request)
+
+      user = get_user_from_request(request)
+      if user is None:
+        return JSONResponse(status_code=401, content={"error": "Authentication required."})
+      if user.force_password_reset:
+        return JSONResponse(status_code=403, content={"error": "Password reset is required before continuing."})
+      request.state.current_user = user
+      return await call_next(request)
+
     @app.get("/health")
     def health() -> dict[str, str]:
         return {"status": "ok"}
+
+    @app.post("/api/auth/login")
+    def login(payload: dict = Body(default={})) -> Response:
+      email = str(payload.get("email") or "").strip().lower()
+      password = str(payload.get("password") or "")
+      if not email or not password:
+        return JSONResponse(status_code=400, content={"error": "Email and password are required."})
+
+      with store.begin() as session:
+        user = session.query(User).filter(User.email == email).first()
+        if user is None or not user.is_active or not _verify_password(password, user.password_hash):
+          return JSONResponse(status_code=401, content={"error": "Invalid credentials."})
+
+        token = secrets.token_urlsafe(36)
+        now = datetime.now(timezone.utc)
+        session.add(UserSession(
+          id=str(uuid4()),
+          user_id=user.id,
+          session_token=token,
+          created_at=now,
+          expires_at=now.replace(hour=23, minute=59, second=59, microsecond=0),
+        ))
+        response = JSONResponse(content={"user": serialize_user(user)})
+        response.set_cookie(
+          key=_SESSION_COOKIE,
+          value=token,
+          httponly=True,
+          samesite="lax",
+          secure=False,
+          max_age=60 * 60 * 24,
+        )
+        return response
+
+    @app.get("/api/auth/me")
+    def auth_me(request: Request) -> dict[str, Any]:
+      user = get_user_from_request(request)
+      if user is None:
+        return {"authenticated": False}
+      return {"authenticated": True, "user": serialize_user(user)}
+
+    @app.post("/api/auth/logout")
+    def logout(request: Request) -> Response:
+      token = request.cookies.get(_SESSION_COOKIE)
+      if token:
+        with store.begin() as session:
+          session.query(UserSession).filter(UserSession.session_token == token).delete(synchronize_session=False)
+      response = JSONResponse(content={"status": "logged_out"})
+      response.delete_cookie(_SESSION_COOKIE)
+      return response
+
+    @app.post("/api/auth/reset-password")
+    def reset_password(request: Request, payload: dict = Body(default={})) -> Response:
+      user = get_user_from_request(request)
+      if user is None:
+        return JSONResponse(status_code=401, content={"error": "Authentication required."})
+
+      current_password = str(payload.get("current_password") or "")
+      new_password = str(payload.get("new_password") or "")
+      if not current_password or not new_password:
+        return JSONResponse(status_code=400, content={"error": "Current and new passwords are required."})
+      if len(new_password) < 8:
+        return JSONResponse(status_code=400, content={"error": "New password must be at least 8 characters."})
+
+      with store.begin() as session:
+        db_user = session.get(User, user.id)
+        if db_user is None or not _verify_password(current_password, db_user.password_hash):
+          return JSONResponse(status_code=400, content={"error": "Current password is incorrect."})
+        db_user.password_hash = _password_record(new_password)
+        db_user.force_password_reset = False
+        return JSONResponse(content={"status": "password_reset", "user": serialize_user(db_user)})
+
+    @app.get("/api/admin/users")
+    def admin_list_users(request: Request) -> Response:
+      try:
+        require_admin(request)
+      except PermissionError as exc:
+        return JSONResponse(status_code=403, content={"error": str(exc)})
+      with store() as session:
+        users = session.query(User).order_by(User.email.asc()).all()
+        return JSONResponse(content={
+          "users": [
+            {
+              "id": user.id,
+              "email": user.email,
+              "is_admin": bool(user.is_admin),
+              "force_password_reset": bool(user.force_password_reset),
+              "is_active": bool(user.is_active),
+            }
+            for user in users
+          ]
+        })
+
+    @app.get("/api/admin/settings")
+    def admin_get_settings(request: Request) -> Response:
+      try:
+        require_admin(request)
+      except PermissionError as exc:
+        return JSONResponse(status_code=403, content={"error": str(exc)})
+      with store.begin() as session:
+        default_password = get_default_password(session)
+        set_default_password(session, default_password)
+        return JSONResponse(content={"default_password": default_password})
+
+    @app.patch("/api/admin/settings")
+    def admin_update_settings(request: Request, payload: dict = Body(default={})) -> Response:
+      try:
+        require_admin(request)
+      except PermissionError as exc:
+        return JSONResponse(status_code=403, content={"error": str(exc)})
+      candidate = str(payload.get("default_password") or "").strip()
+      if len(candidate) < 4:
+        return JSONResponse(status_code=400, content={"error": "Default password must be at least 4 characters."})
+      with store.begin() as session:
+        updated = set_default_password(session, candidate)
+        return JSONResponse(content={"status": "updated", "default_password": updated})
+
+    @app.post("/api/admin/users")
+    def admin_add_user(request: Request, payload: dict = Body(default={})) -> Response:
+      try:
+        require_admin(request)
+      except PermissionError as exc:
+        return JSONResponse(status_code=403, content={"error": str(exc)})
+
+      email = str(payload.get("email") or "").strip().lower()
+      is_admin = _as_bool(payload.get("is_admin"), default=False)
+      if not email:
+        return JSONResponse(status_code=400, content={"error": "Email is required."})
+
+      with store.begin() as session:
+        existing = session.query(User).filter(User.email == email).first()
+        if existing is not None:
+          return JSONResponse(status_code=400, content={"error": "User already exists."})
+        default_password = get_default_password(session)
+        new_user = User(
+          id=str(uuid4()),
+          email=email,
+          password_hash=_password_record(default_password),
+          is_admin=is_admin,
+          force_password_reset=True,
+          is_active=True,
+          created_at=datetime.now(timezone.utc),
+        )
+        session.add(new_user)
+        return JSONResponse(content={"status": "created", "user": serialize_user(new_user)})
+
+    @app.patch("/api/admin/users/{user_id}")
+    def admin_update_user(user_id: str, request: Request, payload: dict = Body(default={})) -> Response:
+      try:
+        admin_user = require_admin(request)
+      except PermissionError as exc:
+        return JSONResponse(status_code=403, content={"error": str(exc)})
+
+      with store.begin() as session:
+        target = session.get(User, user_id)
+        if target is None:
+          return JSONResponse(status_code=404, content={"error": "User not found."})
+        if "is_admin" in payload:
+          target.is_admin = _as_bool(payload.get("is_admin"), default=bool(target.is_admin))
+        if "force_password_reset" in payload:
+          target.force_password_reset = _as_bool(
+            payload.get("force_password_reset"),
+            default=bool(target.force_password_reset),
+          )
+        if _as_bool(payload.get("reset_password"), default=False):
+          default_password = get_default_password(session)
+          target.password_hash = _password_record(default_password)
+          target.force_password_reset = True
+        if user_id == admin_user.id and not target.is_admin:
+          return JSONResponse(status_code=400, content={"error": "You cannot remove your own admin access."})
+        return JSONResponse(content={"status": "updated", "user": serialize_user(target)})
+
+    @app.delete("/api/admin/users/{user_id}")
+    def admin_delete_user(user_id: str, request: Request) -> Response:
+      try:
+        admin_user = require_admin(request)
+      except PermissionError as exc:
+        return JSONResponse(status_code=403, content={"error": str(exc)})
+      if user_id == admin_user.id:
+        return JSONResponse(status_code=400, content={"error": "You cannot delete your own account."})
+
+      with store.begin() as session:
+        target = session.get(User, user_id)
+        if target is None:
+          return JSONResponse(status_code=404, content={"error": "User not found."})
+        session.query(UserSession).filter(UserSession.user_id == user_id).delete(synchronize_session=False)
+        session.delete(target)
+        return JSONResponse(content={"status": "deleted", "user_id": user_id})
 
     @app.get("/", response_class=HTMLResponse)
     def home() -> str:
