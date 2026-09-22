@@ -355,8 +355,7 @@ button:active {
     min-width: 440px;
   }
 }
-</style>
-hite-space:nowrap}.create-actions{display:flex;gap:8px;align-items:center;flex-wrap:nowrap;overflow-x:auto;margin-top:12px}.create-actions button{width:auto;margin-top:0;white-space:nowrap}.delete-actions{display:flex;gap:8px;margin-top:14px}.delete-actions button{width:auto;margin-top:0;white-space:nowrap}</style></head>
+</style></head>
 <body><h1>Alarm Inspection Processor</h1><p>Choose an existing inspection or create a new one.</p>
 
 <div id="home-screen" class="card">
