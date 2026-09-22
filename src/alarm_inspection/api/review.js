@@ -197,7 +197,7 @@
     if (!pointsToRender.length) {
       const row = document.createElement('tr');
       const cell = document.createElement('td');
-      cell.colSpan = 3;
+      cell.colSpan = 4;
       cell.textContent = showMissingOnly
         ? 'All accepted points currently have dates. Click Show All Points to view every point.'
         : 'No accepted points recorded yet.';
@@ -207,15 +207,22 @@
     }
     for (const point of pointsToRender) {
       const row = document.createElement('tr');
-      const address = document.createElement('td');
-      address.textContent = point.address ?? '';
       const text = document.createElement('td');
       text.textContent = point.text ?? '';
+      const address = document.createElement('td');
+      address.textContent = point.address ?? '';
+      const locationCell = document.createElement('td');
+      const locationInput = document.createElement('input');
+      locationInput.type = 'text';
+      locationInput.className = 'location-input';
+      locationInput.value = point.location ?? '';
+      locationInput.placeholder = 'Enter location';
+      locationCell.append(locationInput);
       const eventDate = document.createElement('td');
       const pointKey = Number(point.address);
       const pending = Number.isFinite(pointKey) ? pendingEventDates.get(pointKey) : undefined;
       eventDate.textContent = point.event_date ?? (pending ? `${pending} (pending)` : '');
-      row.append(address, text, eventDate);
+      row.append(text, address, locationCell, eventDate);
       acceptedPointsBody.append(row);
     }
   }

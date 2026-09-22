@@ -324,6 +324,14 @@ button:active {
   border: 1px solid currentColor;
   color: inherit;
 }
+.location-input {
+  width: 100%;
+  min-width: 120px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-sizing: border-box;
+}
 #inspection-point-list-selector {
   margin-bottom: 8px;
 }
@@ -384,7 +392,7 @@ button:active {
 <p id="inspection-meta"></p>
 <label for="inspection-point-list-selector">Points List</label><select id="inspection-point-list-selector"></select>
 <h3>Accepted Points</h3>
-<table class="table"><thead><tr><th>Point</th><th>Description</th><th>Date</th></tr></thead><tbody id="accepted-points-body"></tbody></table>
+<table class="table"><thead><tr><th>Device Type</th><th>Address</th><th>Location</th><th>Test Result</th></tr></thead><tbody id="accepted-points-body"></tbody></table>
 <div id="inspection-message"></div>
 </div>
 
