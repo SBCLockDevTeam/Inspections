@@ -67,6 +67,20 @@ def _parse_saved_timestamp(value: object) -> datetime | None:
     return None
 
 
+def _parse_date_value(value: object) -> date | None:
+    if value is None:
+        return None
+    if isinstance(value, date):
+        return value
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        return date.fromisoformat(text)
+    except ValueError:
+        return None
+
+
 def _event_history_kind(point_list_id: str | None) -> str:
     if not point_list_id:
         return "event_history"
@@ -85,7 +99,7 @@ _HTML = """<!doctype html>
 <title>Alarm Inspection Processor</title>
 <style>
 :root {
-  --bg: #f3f6fb;
+  --bg: radial-gradient(circle at top left, #f8fbff 0%, #eef4fb 45%, #e7eef8 100%);
   --panel: #ffffff;
   --panel-alt: #f8fbff;
   --border: #dfe7f1;
@@ -93,96 +107,119 @@ _HTML = """<!doctype html>
   --muted: #5b6470;
   --primary: #1769aa;
   --primary-strong: #0f4d7a;
+  --ring: rgba(23, 105, 170, 0.2);
   --secondary: #5b6470;
   --success-bg: #e8f5e9;
   --review-bg: #ffebee;
   --danger: #b3261e;
-  --shadow: 0 12px 28px rgba(23, 41, 58, 0.08);
+  --shadow: 0 18px 36px rgba(23, 41, 58, 0.1);
 }
 * { box-sizing: border-box; }
 body {
   margin: 0;
-  padding: 32px 20px 48px;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  padding: 36px 22px 54px;
+  font-family: "IBM Plex Sans", "Avenir Next", "Segoe UI", sans-serif;
   background: var(--bg);
   color: var(--text);
 }
 #app-shell {
-  max-width: 1180px;
+  max-width: 1220px;
   margin: 0 auto;
 }
-h1 { margin: 0 0 8px; font-size: clamp(2rem, 4vw, 2.5rem); }
+h1 {
+  margin: 0 0 10px;
+  font-size: clamp(2rem, 4vw, 2.65rem);
+  letter-spacing: -0.02em;
+}
 body > p {
   margin: 0 0 16px;
   color: var(--muted);
-  font-size: 1rem;
+  font-size: 1.02rem;
 }
 h2, h3 {
-  margin: 0 0 12px;
+  margin: 0 0 14px;
   color: var(--text);
+  letter-spacing: -0.01em;
 }
 label {
   display: block;
-  margin: 14px 0 6px;
+  margin: 16px 0 7px;
   font-weight: 600;
   color: var(--text);
 }
 input, button, select {
   font: inherit;
-  border-radius: 8px;
+  border-radius: 10px;
   box-sizing: border-box;
 }
 input, select {
   width: 100%;
-  padding: 10px 12px;
+  padding: 11px 13px;
   border: 1px solid var(--border);
   background: #fff;
   color: var(--text);
 }
+input:focus,
+select:focus {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+  border-color: var(--primary);
+}
 button {
   width: 100%;
-  padding: 10px 14px;
+  padding: 11px 15px;
   margin-top: 12px;
   background: var(--primary);
   color: #fff;
-  border: 1px solid transparent;
-  border-radius: 8px;
+  border: 1px solid var(--primary);
+  border-radius: 10px;
   cursor: pointer;
   font-weight: 600;
-  transition: background 120ms ease, transform 120ms ease, box-shadow 120ms ease;
+  letter-spacing: 0.01em;
+  box-shadow: 0 4px 10px rgba(23, 105, 170, 0.2);
+  transition: background 120ms ease, transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease;
 }
 button:hover {
   background: var(--primary-strong);
+  border-color: var(--primary-strong);
+  box-shadow: 0 6px 14px rgba(15, 77, 122, 0.24);
 }
 button:active {
   transform: translateY(1px);
 }
 .secondary {
-  background: var(--secondary);
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
 }
 .secondary:hover {
-  background: #434d5b;
+  background: var(--primary-strong);
+  border-color: var(--primary-strong);
 }
 .ghost {
-  background: #fff;
-  color: var(--primary);
+  background: var(--primary);
+  color: #fff;
   border-color: var(--primary);
 }
 .ghost:hover {
-  background: #edf6ff;
+  background: var(--primary-strong);
+  border-color: var(--primary-strong);
 }
 .danger {
-  background: var(--danger);
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
 }
 .danger:hover {
-  background: #8f241d;
+  background: var(--primary-strong);
+  border-color: var(--primary-strong);
 }
 .card {
   background: var(--panel);
   border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 22px 20px;
-  margin-top: 18px;
+  border-radius: 18px;
+  padding: 24px 22px;
+  margin-top: 20px;
   box-shadow: var(--shadow);
 }
 .hidden { display: none !important; }
@@ -190,9 +227,13 @@ button:active {
 .nav,
 .inline-form,
 .create-actions,
-.delete-actions {
+.delete-actions,
+.toolbar,
+.toolbar-group,
+.upload-row,
+.action-row {
   display: flex;
-  gap: 12px;
+  gap: 14px;
   align-items: center;
   flex-wrap: wrap;
 }
@@ -206,18 +247,40 @@ button:active {
 .nav button,
 .inline-form button,
 .create-actions button,
-.delete-actions button {
+.delete-actions button,
+.toolbar button,
+.toolbar-group button,
+.action-row button {
   width: auto;
   margin-top: 0;
   flex: 0 0 auto;
 }
 .nav {
   justify-content: space-between;
-  margin-bottom: 16px;
+  margin-bottom: 18px;
+}
+.toolbar {
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding: 12px 14px;
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+.toolbar-group {
+  justify-content: flex-start;
+}
+.action-row {
+  justify-content: flex-end;
 }
 .inline-form {
   width: 100%;
   flex: 1 1 auto;
+  padding: 18px;
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  border-radius: 14px;
 }
 .inline-form label {
   display: none;
@@ -225,6 +288,158 @@ button:active {
 .inline-form input[type=file] {
   min-width: 240px;
   flex: 1 1 auto;
+  border-style: dashed;
+  background: #fff;
+}
+.visually-hidden-text {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+.visually-hidden-file {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+.file-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 9px 13px;
+  margin: 0;
+  border-radius: 10px;
+  background: var(--primary);
+  border: 1px solid var(--primary);
+  color: #fff;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  box-shadow: 0 4px 10px rgba(23, 105, 170, 0.2);
+  cursor: pointer;
+  transition: background 120ms ease, box-shadow 120ms ease, border-color 120ms ease;
+}
+.file-trigger:hover {
+  background: var(--primary-strong);
+  border-color: var(--primary-strong);
+  box-shadow: 0 6px 14px rgba(15, 77, 122, 0.24);
+}
+.file-name {
+  min-width: 280px;
+  max-width: 440px;
+  padding: 8px 10px;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.upload-row {
+  width: 100%;
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  justify-content: flex-start;
+}
+.upload-row > * {
+  flex: 0 0 auto;
+}
+.upload-row .file-control {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  justify-content: space-between;
+  flex: 1 1 auto;
+  width: 100%;
+}
+.upload-row .file-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.upload-row .upload-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-left: auto;
+}
+#event-history-form {
+  width: 100%;
+}
+#event-history-form .upload-row {
+  padding: 0;
+}
+.inspection-details {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel-alt);
+}
+.details-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.compact-field label {
+  margin: 0 0 4px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+.compact-field input,
+.compact-field select {
+  margin: 0;
+  padding: 8px 10px;
+}
+#inspection-store-number {
+  background: #f2f7fd;
+}
+.inspection-actions-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  align-items: end;
+  margin-bottom: 10px;
+}
+.inspection-actions-row .inline-form {
+  padding: 10px 12px;
+}
+.points-list-picker label {
+  margin-top: 0;
+}
+.accepted-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+}
+.accepted-header-row h3 {
+  margin: 0;
+}
+.accepted-header-row button {
+  width: auto;
+  margin: 0;
 }
 .create-actions,
 .delete-actions {
@@ -234,17 +449,17 @@ button:active {
 #point-lists {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
   margin-top: 12px;
 }
 .point-list {
   display: grid;
   grid-template-columns: minmax(150px, 180px) minmax(220px, 1fr) auto;
-  gap: 12px;
+  gap: 14px;
   align-items: center;
-  padding: 12px;
+  padding: 14px;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 14px;
   background: var(--panel-alt);
 }
 .point-list select,
@@ -260,13 +475,13 @@ button:active {
 .table {
   width: 100%;
   border-collapse: collapse;
-  margin-top: 16px;
+  margin-top: 18px;
   min-width: 520px;
 }
 .table th,
 .table td {
   border: 1px solid var(--border);
-  padding: 10px 12px;
+  padding: 11px 13px;
   text-align: left;
   vertical-align: top;
 }
@@ -302,8 +517,8 @@ button:active {
   max-height: 85vh;
   overflow: auto;
   background: #fff;
-  border-radius: 16px;
-  padding: 22px 20px;
+  border-radius: 18px;
+  padding: 24px 22px;
   box-shadow: var(--shadow);
 }
 .close {
@@ -327,13 +542,13 @@ button:active {
 .location-input {
   width: 100%;
   min-width: 120px;
-  padding: 8px 10px;
+  padding: 9px 11px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 10px;
   box-sizing: border-box;
 }
 #inspection-point-list-selector {
-  margin-bottom: 8px;
+  margin-bottom: 0;
 }
 #inspection-screen .nav:first-of-type {
   justify-content: flex-start;
@@ -343,8 +558,8 @@ button:active {
   color: var(--muted);
 }
 @media (max-width: 700px) {
-  body { padding: 20px 12px 40px; }
-  .card, .modal-card { padding: 18px 14px; }
+  body { padding: 22px 12px 42px; }
+  .card, .modal-card { padding: 18px 15px; }
   .row,
   .nav,
   .inline-form,
@@ -361,6 +576,34 @@ button:active {
   }
   .table {
     min-width: 440px;
+  }
+  .details-row,
+  .inspection-actions-row {
+    grid-template-columns: 1fr;
+  }
+  .accepted-header-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .upload-row {
+    align-items: stretch;
+  }
+  .upload-row .file-control,
+  .upload-row .file-left,
+  .upload-row .upload-actions {
+    width: 100%;
+  }
+  .upload-row .file-control {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .upload-row .file-left {
+    flex-wrap: wrap;
+  }
+  .file-name {
+    min-width: 0;
+    max-width: none;
+    width: 100%;
   }
 }
 </style></head>
@@ -386,12 +629,73 @@ button:active {
 <input type="hidden" name="point_decisions" id="point-decisions" value="[]"></form><div id="message"></div></div>
 
 <div id="inspection-screen" class="card hidden">
-<div class="nav"><button type="button" id="back-home-from-inspection" class="secondary">Back to Home</button><button type="button" id="refresh-inspection" class="ghost">Refresh Inspection</button><button type="button" id="toggle-missing-points" class="ghost">Show Missing Points Only</button></div>
-<div class="nav"><form id="event-history-form" class="inline-form"><label for="event-file">Event History file</label><input id="event-file" type="file" accept=".xls,.xlsx,.pdf" required><button type="submit">Upload Event History</button></form><button type="button" id="save-event-dates" class="ghost">Save Matched Dates</button><button type="button" id="clear-event-dates" class="secondary">Clear Dates</button></div>
-<h2 id="inspection-title">Inspection</h2>
-<p id="inspection-meta"></p>
-<label for="inspection-point-list-selector">Points List</label><select id="inspection-point-list-selector"></select>
-<h3>Accepted Points</h3>
+<div class="toolbar">
+  <div class="toolbar-group">
+    <button type="button" id="back-home-from-inspection" class="secondary">Back to Home</button>
+    <button type="button" id="clear-event-dates" class="secondary">Clear Dates</button>
+  </div>
+  <div class="toolbar-group">
+    <button type="button" id="refresh-inspection" class="ghost">Refresh</button>
+    <button type="button" id="toggle-missing-points" class="ghost">Show Missing Points Only</button>
+  </div>
+</div>
+
+<div class="inspection-details">
+  <div class="details-row">
+    <div class="compact-field">
+      <label for="inspection-store-number">Store Number</label>
+      <input id="inspection-store-number" type="text" readonly>
+    </div>
+    <div class="compact-field">
+      <label for="inspection-store-type">Store Type</label>
+      <select id="inspection-store-type">
+         <option>Walmart - Supercenter</option>
+        <option>Walmart - Neighborhood Market</option>
+        <option>Sam's Club</option>
+      </select>
+    </div>
+    <div class="compact-field">
+      <label for="inspection-address">Address</label>
+      <input id="inspection-address" type="text" placeholder="Enter address">
+    </div>
+  </div>
+  <div class="details-row">
+    <div class="compact-field">
+      <label for="inspection-inspector">Inspector</label>
+      <input id="inspection-inspector" type="text" placeholder="Enter inspector name">
+    </div>
+    <div class="compact-field">
+      <label for="inspection-start-date">Start Date</label>
+      <input id="inspection-start-date" type="date">
+    </div>
+    <div class="compact-field">
+      <label for="inspection-end-date">End Date</label>
+      <input id="inspection-end-date" type="date">
+    </div>
+  </div>
+</div>
+
+<div class="inspection-actions-row">
+  <div class="compact-field points-list-picker">
+    <label for="inspection-point-list-selector">Points List</label>
+    <select id="inspection-point-list-selector"></select>
+  </div>
+
+  <form id="event-history-form" class="inline-form">
+    <div class="upload-row">
+      <label for="event-file" class="visually-hidden-text">Event History file</label>
+      <div class="file-control">
+        <div class="file-left">
+          <input id="event-file" class="visually-hidden-file" type="file" accept=".xls,.xlsx,.pdf" required>
+          <button type="button" id="choose-event-file" class="file-trigger">Upload Events</button>
+          <span id="event-file-name" class="file-name">No file selected</span>
+        </div>
+      </div>
+    </div>
+  </form>
+</div>
+
+<div class="accepted-header-row"><h3>Accepted Points</h3><button type="button" id="save-event-dates" class="ghost">Save Matches</button></div>
 <table class="table"><thead><tr><th>Device Type</th><th>Address</th><th>Location</th><th>Test Result</th></tr></thead><tbody id="accepted-points-body"></tbody></table>
 <div id="inspection-message"></div>
 </div>
@@ -454,6 +758,7 @@ def create_app():
 
         with store.begin() as session:
             session.add(Inspection(id=inspection_id, store_number=store_number, address=address,
+                                   store_type="Walmart - Supercenter", inspector_name="",
                                    start_date=inferred_date, completion_date=inferred_date,
                                    status="pending_event_history", created_at=created_at))
             for filename in files:
@@ -572,7 +877,9 @@ def create_app():
             return {
                 "id": inspection.id,
                 "store_number": inspection.store_number,
+                "store_type": inspection.store_type,
                 "address": inspection.address,
+                "inspector_name": inspection.inspector_name,
                 "start_date": inspection.start_date.isoformat(),
                 "completion_date": inspection.completion_date.isoformat(),
                 "status": inspection.status,
@@ -592,6 +899,43 @@ def create_app():
                 ],
                 "selected_point_list_id": selected_point_list_id,
                 "event_history_files": [file.filename for file in event_history_files],
+            }
+
+    @app.patch("/api/inspections/{inspection_id}")
+    def update_inspection_details(inspection_id: str, payload: dict = Body(default={})) -> dict:
+        with store.begin() as session:
+            inspection = session.get(Inspection, inspection_id)
+            if inspection is None:
+                return {"error": "inspection not found"}
+
+            store_number = str(payload.get("store_number") or "").strip()
+            store_type = str(payload.get("store_type") or "").strip()
+            address = str(payload.get("address") or "").strip()
+            inspector_name = str(payload.get("inspector_name") or "").strip()
+            start_date = _parse_date_value(payload.get("start_date"))
+            completion_date = _parse_date_value(payload.get("completion_date"))
+
+            if store_number:
+                inspection.store_number = store_number
+            if store_type:
+                inspection.store_type = store_type
+            if address:
+                inspection.address = address
+            inspection.inspector_name = inspector_name
+            if start_date is not None:
+                inspection.start_date = start_date
+            if completion_date is not None:
+                inspection.completion_date = completion_date
+
+            return {
+                "id": inspection.id,
+                "store_number": inspection.store_number,
+                "store_type": inspection.store_type,
+                "address": inspection.address,
+                "inspector_name": inspection.inspector_name,
+                "start_date": inspection.start_date.isoformat(),
+                "completion_date": inspection.completion_date.isoformat(),
+                "status": inspection.status,
             }
 
     @app.post("/api/inspections/{inspection_id}/event-history")

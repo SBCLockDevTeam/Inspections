@@ -7,7 +7,7 @@ import tempfile
 from datetime import date, datetime
 from pathlib import Path
 
-from sqlalchemy import Date, DateTime, String, create_engine
+from sqlalchemy import Date, DateTime, String, create_engine, inspect, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 
 
@@ -20,7 +20,9 @@ class Inspection(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     store_number: Mapped[str] = mapped_column(String(100))
+    store_type: Mapped[str] = mapped_column(String(80), default="Walmart - Supercenter")
     address: Mapped[str] = mapped_column(String(500))
+    inspector_name: Mapped[str] = mapped_column(String(120), default="")
     start_date: Mapped[date] = mapped_column(Date)
     completion_date: Mapped[date] = mapped_column(Date)
     status: Mapped[str] = mapped_column(String(40), default="received")
@@ -80,4 +82,26 @@ def open_store():
         url = f"sqlite:///{default_db.as_posix()}"
     engine = create_engine(url, pool_pre_ping=True)
     Base.metadata.create_all(engine)
+    _ensure_inspection_columns(engine)
     return sessionmaker(bind=engine, expire_on_commit=False)
+
+
+def _ensure_inspection_columns(engine) -> None:
+    existing_columns = {
+        column["name"]
+        for column in inspect(engine).get_columns("inspections")
+    }
+    statements: list[str] = []
+    if "store_type" not in existing_columns:
+        statements.append(
+            "ALTER TABLE inspections ADD COLUMN store_type VARCHAR(80) DEFAULT 'Walmart - Supercenter'"
+        )
+    if "inspector_name" not in existing_columns:
+        statements.append(
+            "ALTER TABLE inspections ADD COLUMN inspector_name VARCHAR(120) DEFAULT ''"
+        )
+    if not statements:
+        return
+    with engine.begin() as connection:
+        for statement in statements:
+            connection.execute(text(statement))

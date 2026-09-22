@@ -12,14 +12,20 @@
   const deleteInspectionButton = document.querySelector('#delete-inspection');
   const homeMessage = document.querySelector('#home-message');
 
-  const inspectionTitle = document.querySelector('#inspection-title');
-  const inspectionMeta = document.querySelector('#inspection-meta');
+  const inspectionStoreNumber = document.querySelector('#inspection-store-number');
+  const inspectionStoreType = document.querySelector('#inspection-store-type');
+  const inspectionAddress = document.querySelector('#inspection-address');
+  const inspectionInspector = document.querySelector('#inspection-inspector');
+  const inspectionStartDate = document.querySelector('#inspection-start-date');
+  const inspectionEndDate = document.querySelector('#inspection-end-date');
   const acceptedPointsBody = document.querySelector('#accepted-points-body');
   const inspectionPointListSelector = document.querySelector('#inspection-point-list-selector');
   const inspectionMessage = document.querySelector('#inspection-message');
   const refreshInspectionButton = document.querySelector('#refresh-inspection');
   const eventHistoryForm = document.querySelector('#event-history-form');
+  const chooseEventFileButton = document.querySelector('#choose-event-file');
   const eventFile = document.querySelector('#event-file');
+  const eventFileName = document.querySelector('#event-file-name');
   const saveEventDatesButton = document.querySelector('#save-event-dates');
   const clearEventDatesButton = document.querySelector('#clear-event-dates');
   const toggleMissingPointsButton = document.querySelector('#toggle-missing-points');
@@ -62,6 +68,7 @@
   let showMissingOnly = false;
   let currentPointListId = null;
   let inspectionOptions = [];
+  let suppressInspectionDetailsSave = false;
 
   function showScreen(name) {
     homeScreen.classList.toggle('hidden', name !== 'home');
@@ -232,6 +239,14 @@
     renderVisibleAcceptedPoints();
   }
 
+  function setEventFileName() {
+    if (!eventFileName) {
+      return;
+    }
+    const file = eventFile?.files?.[0];
+    eventFileName.textContent = file ? file.name : 'No file selected';
+  }
+
   function syncMissingToggleLabel() {
     if (!toggleMissingPointsButton) {
       return;
@@ -254,6 +269,40 @@
     inspectionPointListSelector.disabled = (pointLists || []).length < 2;
   }
 
+  function asDateInputValue(rawValue) {
+    if (!rawValue) {
+      return '';
+    }
+    const text = String(rawValue);
+    return text.includes('T') ? text.split('T')[0] : text;
+  }
+
+  async function saveInspectionDetails() {
+    if (suppressInspectionDetailsSave || !currentInspectionId) {
+      return;
+    }
+    const payload = {
+      store_number: inspectionStoreNumber?.value || '',
+      store_type: inspectionStoreType?.value || '',
+      address: inspectionAddress?.value || '',
+      inspector_name: inspectionInspector?.value || '',
+      start_date: inspectionStartDate?.value || '',
+      completion_date: inspectionEndDate?.value || '',
+    };
+    const response = await fetch(`/api/inspections/${currentInspectionId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const result = await response.json();
+    if (!response.ok || result.error) {
+      inspectionMessage.textContent = result.error || result.detail || 'Saving inspection details failed.';
+      return;
+    }
+    inspectionMessage.textContent = 'Inspection details saved.';
+    await loadInspections();
+  }
+
   async function openInspection(inspectionId, pointListId = null) {
     if (!inspectionId) {
       return;
@@ -269,8 +318,26 @@
     showMissingOnly = false;
     currentInspectionId = inspection.id;
     currentPointListId = inspection.selected_point_list_id || null;
-    inspectionTitle.textContent = `Inspection ${inspection.store_number}`;
-    inspectionMeta.textContent = `${inspection.address} | ${inspection.status}`;
+    suppressInspectionDetailsSave = true;
+    if (inspectionStoreNumber) {
+      inspectionStoreNumber.value = inspection.store_number || '';
+    }
+    if (inspectionStoreType) {
+      inspectionStoreType.value = inspection.store_type || 'Walmart - Supercenter';
+    }
+    if (inspectionAddress) {
+      inspectionAddress.value = inspection.address || '';
+    }
+    if (inspectionInspector) {
+      inspectionInspector.value = inspection.inspector_name || '';
+    }
+    if (inspectionStartDate) {
+      inspectionStartDate.value = asDateInputValue(inspection.start_date);
+    }
+    if (inspectionEndDate) {
+      inspectionEndDate.value = asDateInputValue(inspection.completion_date);
+    }
+    suppressInspectionDetailsSave = false;
     renderInspectionPointListSelector(inspection.point_lists || [], inspection.selected_point_list_id || null);
     renderAcceptedPoints(inspection.accepted_points || []);
     syncMissingToggleLabel();
@@ -649,8 +716,7 @@
     message.textContent = 'Use Preview Points Lists, then click Finish Review to create the inspection.';
   });
 
-  eventHistoryForm?.addEventListener('submit', async (event) => {
-    event.preventDefault();
+  async function uploadSelectedEventHistory() {
     if (!currentInspectionId) {
       inspectionMessage.textContent = 'No inspection selected.';
       return;
@@ -697,8 +763,26 @@
     }
 
     eventHistoryForm.reset();
+    setEventFileName();
     renderVisibleAcceptedPoints();
-    inspectionMessage.textContent = `Event History uploaded: ${result.filename}. Pending matches: ${pendingEventDates.size}. Click Save Matched Dates to persist.`;
+    inspectionMessage.textContent = `Event History uploaded: ${result.filename}. Pending matches: ${pendingEventDates.size}. Click Save Matches to persist.`;
+  }
+
+  eventHistoryForm?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    await uploadSelectedEventHistory();
+  });
+
+  chooseEventFileButton?.addEventListener('click', () => {
+    eventFile?.click();
+  });
+
+  eventFile?.addEventListener('change', async () => {
+    setEventFileName();
+    if (!eventFile?.files?.length) {
+      return;
+    }
+    await uploadSelectedEventHistory();
   });
 
   toggleMissingPointsButton?.addEventListener('click', () => {
@@ -765,8 +849,24 @@
     inspectionMessage.textContent = `Cleared ${result.cleared} saved dates.`;
   });
 
+  [inspectionStoreNumber, inspectionStoreType, inspectionAddress, inspectionInspector].forEach((element) => {
+    element?.addEventListener('change', async () => {
+      await saveInspectionDetails();
+    });
+    element?.addEventListener('blur', async () => {
+      await saveInspectionDetails();
+    });
+  });
+
+  [inspectionStartDate, inspectionEndDate].forEach((element) => {
+    element?.addEventListener('change', async () => {
+      await saveInspectionDetails();
+    });
+  });
+
   loadInspections();
   syncPointListRemoveButtons();
   syncMissingToggleLabel();
+  setEventFileName();
   showScreen('home');
 })();

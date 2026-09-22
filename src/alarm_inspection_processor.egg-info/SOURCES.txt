@@ -8,6 +8,7 @@ src/alarm_inspection/api/review.js
 src/alarm_inspection/domain/__init__.py
 src/alarm_inspection/domain/points.py
 src/alarm_inspection/intake/__init__.py
+src/alarm_inspection/intake/event_history.py
 src/alarm_inspection/intake/points_list.py
 src/alarm_inspection_processor.egg-info/PKG-INFO
 src/alarm_inspection_processor.egg-info/SOURCES.txt
