@@ -15,4 +15,4 @@ pythonpath = ["src"]
 testpaths = ["tests"]
 
 [tool.setuptools.package-data]
-alarm_inspection = ["api/review.js"]
+alarm_inspection = ["api/review.js", "api/index.html"]
