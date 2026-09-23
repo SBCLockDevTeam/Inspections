@@ -10,6 +10,7 @@
   const avatarWrap = document.querySelector('#avatar-wrap');
   const avatarButton = document.querySelector('#avatar-button');
   const avatarMenu = document.querySelector('#avatar-menu');
+  const adminMenuOption = document.querySelector('#avatar-menu-option-admin');
   const logoutMenuOption = document.querySelector('#avatar-menu-option-logout');
   const loginForm = document.querySelector('#login-form');
   const loginEmail = document.querySelector('#login-email');
@@ -19,14 +20,18 @@
   const resetCurrentPassword = document.querySelector('#reset-current-password');
   const resetNewPassword = document.querySelector('#reset-new-password');
 
-  const openAdminButton = document.querySelector('#open-admin');
   const backHomeFromAdmin = document.querySelector('#back-home-from-admin');
-  const adminCreateUserForm = document.querySelector('#admin-create-user-form');
+  const openAdminAddUserButton = document.querySelector('#open-admin-add-user');
   const saveAdminSettingsButton = document.querySelector('#save-admin-settings');
   const adminDefaultPassword = document.querySelector('#admin-default-password');
-  const adminNewUserEmail = document.querySelector('#admin-new-user-email');
+  const adminForceResetDefault = document.querySelector('#admin-force-reset-default');
   const adminUsersBody = document.querySelector('#admin-users-body');
   const adminMessage = document.querySelector('#admin-message');
+  const adminAddUserModal = document.querySelector('#admin-add-user-modal');
+  const adminAddUserForm = document.querySelector('#admin-add-user-form');
+  const adminAddUserEmail = document.querySelector('#admin-add-user-email');
+  const closeAdminAddUserButton = document.querySelector('#close-admin-add-user');
+  const cancelAdminAddUserButton = document.querySelector('#cancel-admin-add-user');
 
   const startCreateButton = document.querySelector('#start-create');
   const backHomeFromCreate = document.querySelector('#back-home-from-create');
@@ -54,6 +59,7 @@
   const editTableButton = document.querySelector('#edit-table');
   const saveTableButton = document.querySelector('#save-table');
   const saveEventDatesButton = document.querySelector('#save-event-dates');
+  const exportPdfButton = document.querySelector('#export-pdf');
   const clearEventDatesButton = document.querySelector('#clear-event-dates');
   const toggleMissingPointsButton = document.querySelector('#toggle-missing-points');
 
@@ -149,7 +155,7 @@
       if (activeUserLabel) {
         activeUserLabel.textContent = '';
       }
-      openAdminButton?.classList.add('hidden');
+      adminMenuOption?.classList.add('hidden');
       return;
     }
     userBar?.classList.remove('hidden');
@@ -160,7 +166,15 @@
       const id = (currentUser.email || '').slice(0, 2).replace(/[^a-zA-Z]/g, '').toUpperCase();
       avatarButton.textContent = id || 'U';
     }
-    openAdminButton?.classList.toggle('hidden', !currentUser.is_admin);
+    adminMenuOption?.classList.toggle('hidden', !currentUser.is_admin);
+  }
+
+  async function openAdminScreen() {
+    adminMessage.textContent = '';
+    closeAdminAddUserModal();
+    await loadAdminSettings();
+    await loadAdminUsers();
+    showScreen('admin');
   }
 
   async function ensureSession() {
@@ -215,26 +229,6 @@
         await loadAdminUsers();
       });
       admin.append(adminCheckbox);
-      const forceReset = document.createElement('td');
-      const forceResetCheckbox = document.createElement('input');
-      forceResetCheckbox.type = 'checkbox';
-      forceResetCheckbox.checked = Boolean(user.force_password_reset);
-      forceResetCheckbox.addEventListener('change', async () => {
-        const response = await fetch(`/api/admin/users/${user.id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ force_password_reset: forceResetCheckbox.checked }),
-        });
-        const result = await response.json();
-        if (!response.ok || result.error) {
-          adminMessage.textContent = result.error || result.detail || 'Updating user failed.';
-          forceResetCheckbox.checked = !forceResetCheckbox.checked;
-          return;
-        }
-        adminMessage.textContent = `Updated ${user.email}.`;
-        await loadAdminUsers();
-      });
-      forceReset.append(forceResetCheckbox);
       const actions = document.createElement('td');
       const wrapper = document.createElement('div');
       wrapper.className = 'user-actions';
@@ -258,7 +252,7 @@
 
       wrapper.append(removeUser);
       actions.append(wrapper);
-      row.append(email, admin, forceReset, actions);
+      row.append(email, admin, actions);
       adminUsersBody.append(row);
     }
   }
@@ -283,17 +277,23 @@
     if (adminDefaultPassword) {
       adminDefaultPassword.value = payload.default_password || '';
     }
+    if (adminForceResetDefault) {
+      adminForceResetDefault.checked = Boolean(payload.force_password_reset_default);
+    }
   }
 
   async function saveAdminSettings() {
-    if (!adminDefaultPassword) {
+    if (!adminDefaultPassword || !adminForceResetDefault) {
       return;
     }
     const candidate = adminDefaultPassword.value || '';
     const response = await fetch('/api/admin/settings', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ default_password: candidate }),
+      body: JSON.stringify({
+        default_password: candidate,
+        force_password_reset_default: adminForceResetDefault.checked,
+      }),
     });
     const payload = await response.json();
     if (!response.ok || payload.error) {
@@ -301,7 +301,21 @@
       return;
     }
     adminDefaultPassword.value = payload.default_password || candidate;
-    adminMessage.textContent = 'Global default password updated.';
+    adminForceResetDefault.checked = Boolean(payload.force_password_reset_default);
+    adminMessage.textContent = 'Global admin settings updated.';
+  }
+
+  function openAdminAddUserModal() {
+    if (!adminAddUserModal || !adminAddUserEmail) {
+      return;
+    }
+    adminAddUserEmail.value = '';
+    adminAddUserModal.classList.add('open');
+    adminAddUserEmail.focus();
+  }
+
+  function closeAdminAddUserModal() {
+    adminAddUserModal?.classList.remove('open');
   }
 
   async function loadInspections() {
@@ -455,7 +469,8 @@
       const eventDate = document.createElement('td');
       const pointKey = Number(point.address);
       const pending = Number.isFinite(pointKey) ? pendingEventDates.get(pointKey) : undefined;
-      const eventValue = point.editableEventDate ?? point.event_date ?? (pending ? `${pending} (pending)` : '');
+      const savedEventValue = String(point.editableEventDate ?? point.event_date ?? '').trim();
+      const eventValue = savedEventValue || (pending ? `${pending} (pending)` : '');
       if (tableEditable) {
         const eventDateInput = document.createElement('input');
         eventDateInput.type = 'text';
@@ -477,6 +492,7 @@
   function renderAcceptedPoints(points) {
     inspectionPoints = (points || []).map((point) => ({
       ...point,
+      id: point.id ?? '',
       editableText: point.editableText ?? point.text ?? '',
       editableAddress: point.editableAddress ?? (point.address ?? ''),
       location: point.location ?? '',
@@ -507,6 +523,85 @@
       return;
     }
     toggleMissingPointsButton.textContent = showMissingOnly ? 'Show All Points' : 'Show Missing Points Only';
+  }
+
+  function validateRowsForExport(rows) {
+    if (!rows.length) {
+      return 'No accepted points available for export.';
+    }
+    for (let index = 0; index < rows.length; index += 1) {
+      const row = rows[index];
+      const line = index + 1;
+      if (!row.text) {
+        return `Row ${line} is missing Device Type.`;
+      }
+      if (!row.address) {
+        return `Row ${line} is missing Address.`;
+      }
+      if (!row.location) {
+        return `Row ${line} is missing Location.`;
+      }
+      if (!row.event_date) {
+        return `Row ${line} is missing Test Result.`;
+      }
+      if (row.event_date.toLowerCase().includes('(pending)')) {
+        return `Row ${line} still has a pending Test Result. Accept results before exporting.`;
+      }
+    }
+    return '';
+  }
+
+  async function blobLooksLikePdf(blob) {
+    const headerBytes = new Uint8Array(await blob.slice(0, 5).arrayBuffer());
+    const header = String.fromCharCode(...headerBytes);
+    return header === '%PDF-';
+  }
+
+  async function savePdfWithDialog(blob, filename, pickedHandle = null) {
+    if (!blob || blob.size <= 0) {
+      throw new Error('PDF payload was empty.');
+    }
+
+    if (pickedHandle) {
+      const writable = await pickedHandle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+      const savedFile = await pickedHandle.getFile();
+      if (!savedFile || savedFile.size <= 0) {
+        throw new Error('Save As created an empty file.');
+      }
+      return 'saved';
+    }
+
+    if (typeof window.showSaveFilePicker === 'function') {
+      const lateHandle = await window.showSaveFilePicker({
+        suggestedName: filename,
+        types: [
+          {
+            description: 'PDF Document',
+            accept: { 'application/pdf': ['.pdf'] },
+          },
+        ],
+      });
+      const writable = await lateHandle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+      const savedFile = await lateHandle.getFile();
+      if (!savedFile || savedFile.size <= 0) {
+        throw new Error('Save As created an empty file.');
+      }
+      return 'saved';
+    }
+
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = filename;
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+    return 'downloaded';
   }
 
   function renderInspectionPointListSelector(pointLists, selectedPointListId) {
@@ -556,6 +651,25 @@
     }
     inspectionMessage.textContent = 'Inspection details saved.';
     await loadInspections();
+  }
+
+  async function persistAcceptedPoints(rows) {
+    if (!currentInspectionId || !currentPointListId) {
+      return { error: 'No inspection or Points List selected.' };
+    }
+    const response = await fetch(`/api/inspections/${currentInspectionId}/accepted-points/save`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        point_list_id: currentPointListId,
+        rows,
+      }),
+    });
+    const result = await response.json();
+    if (!response.ok || result.error) {
+      return { error: result.error || result.detail || 'Saving accepted points failed.' };
+    }
+    return { result };
   }
 
   async function openInspection(inspectionId, pointListId = null) {
@@ -788,11 +902,12 @@
     showScreen('login');
   });
 
-  openAdminButton?.addEventListener('click', async () => {
-    adminMessage.textContent = '';
-    await loadAdminSettings();
-    await loadAdminUsers();
-    showScreen('admin');
+  adminMenuOption?.addEventListener('click', async () => {
+    if (!currentUser?.is_admin) {
+      return;
+    }
+    avatarMenu?.classList.add('hidden');
+    await openAdminScreen();
   });
 
   backHomeFromAdmin?.addEventListener('click', async () => {
@@ -800,14 +915,26 @@
     showScreen('home');
   });
 
-  adminCreateUserForm?.addEventListener('submit', async (event) => {
+  openAdminAddUserButton?.addEventListener('click', () => {
+    openAdminAddUserModal();
+  });
+
+  closeAdminAddUserButton?.addEventListener('click', () => {
+    closeAdminAddUserModal();
+  });
+
+  cancelAdminAddUserButton?.addEventListener('click', () => {
+    closeAdminAddUserModal();
+  });
+
+  adminAddUserForm?.addEventListener('submit', async (event) => {
     event.preventDefault();
     adminMessage.textContent = 'Creating user...';
     const response = await fetch('/api/admin/users', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        email: adminNewUserEmail?.value || '',
+        email: adminAddUserEmail?.value || '',
       }),
     });
     const result = await response.json();
@@ -815,9 +942,16 @@
       adminMessage.textContent = result.error || result.detail || 'User creation failed.';
       return;
     }
-    adminCreateUserForm.reset();
-    adminMessage.textContent = `Created ${result.user?.email || 'user'} with default password and forced reset.`;
+    adminAddUserForm.reset();
+    closeAdminAddUserModal();
+    adminMessage.textContent = `Created ${result.user?.email || 'user'} using current global admin settings.`;
     await loadAdminUsers();
+  });
+
+  adminAddUserModal?.addEventListener('click', (event) => {
+    if (event.target === adminAddUserModal) {
+      closeAdminAddUserModal();
+    }
   });
 
   saveAdminSettingsButton?.addEventListener('click', async () => {
@@ -1174,11 +1308,35 @@
     renderVisibleAcceptedPoints();
   });
 
-  saveTableButton?.addEventListener('click', () => {
+  saveTableButton?.addEventListener('click', async () => {
+    if (!currentInspectionId) {
+      inspectionMessage.textContent = 'No inspection selected.';
+      return;
+    }
+    if (!currentPointListId) {
+      inspectionMessage.textContent = 'Select a Points List first.';
+      return;
+    }
+
+    const rows = (inspectionPoints || []).map((point) => ({
+      id: String(point.id ?? ''),
+      text: String(point.editableText ?? point.text ?? '').trim(),
+      address: String(point.editableAddress ?? point.address ?? '').trim(),
+      location: String(point.location ?? '').trim(),
+      event_date: String(point.editableEventDate ?? point.event_date ?? '').trim(),
+    }));
+
+    inspectionMessage.textContent = 'Saving accepted points...';
+    const persisted = await persistAcceptedPoints(rows);
+    if (persisted.error) {
+      inspectionMessage.textContent = persisted.error;
+      return;
+    }
+
     tableEditable = false;
     syncTableEditButtons();
-    renderVisibleAcceptedPoints();
-    inspectionMessage.textContent = 'Accepted Points table changes saved.';
+    await openInspection(currentInspectionId, currentPointListId);
+    inspectionMessage.textContent = `Accepted Points saved (${persisted.result.updated_rows} rows).`;
   });
 
   saveEventDatesButton?.addEventListener('click', async () => {
@@ -1237,6 +1395,102 @@
     pendingEventDates = new Map();
     await openInspection(currentInspectionId, currentPointListId);
     inspectionMessage.textContent = `Cleared ${result.cleared} saved dates.`;
+  });
+
+  exportPdfButton?.addEventListener('click', async () => {
+    if (!currentInspectionId) {
+      inspectionMessage.textContent = 'No inspection selected.';
+      return;
+    }
+    if (!currentPointListId) {
+      inspectionMessage.textContent = 'Select a Points List first.';
+      return;
+    }
+    const rows = (inspectionPoints || []).map((point) => ({
+      id: String(point.id ?? ''),
+      text: String(point.editableText ?? point.text ?? '').trim(),
+      address: String(point.editableAddress ?? point.address ?? '').trim(),
+      location: String(point.location ?? '').trim(),
+      event_date: String(point.editableEventDate ?? point.event_date ?? '').trim(),
+    }));
+
+    const rowValidationError = validateRowsForExport(rows);
+    if (rowValidationError) {
+      inspectionMessage.textContent = rowValidationError;
+      return;
+    }
+
+    const persisted = await persistAcceptedPoints(rows);
+    if (persisted.error) {
+      inspectionMessage.textContent = persisted.error;
+      return;
+    }
+
+    inspectionMessage.textContent = 'Generating PDF...';
+
+    const response = await fetch(`/api/inspections/${currentInspectionId}/export-pdf`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        point_list_id: currentPointListId,
+        rows,
+      }),
+    });
+
+    const contentType = (response.headers.get('Content-Type') || '').toLowerCase();
+
+    if (!response.ok || !contentType.includes('application/pdf')) {
+      let details = 'PDF export failed.';
+      try {
+        const errorResult = await response.json();
+        details = errorResult.error || errorResult.detail || details;
+      } catch {
+        if (!response.ok) {
+          details = `PDF export failed (${response.status}).`;
+        } else {
+          details = 'Export did not return a valid PDF file.';
+        }
+      }
+      inspectionMessage.textContent = details;
+      return;
+    }
+
+    const blob = await response.blob();
+    if (!blob || blob.size <= 0) {
+      inspectionMessage.textContent = 'Export returned an empty PDF payload.';
+      return;
+    }
+    const isPdf = await blobLooksLikePdf(blob);
+    if (!isPdf) {
+      inspectionMessage.textContent = 'Export returned an invalid PDF payload.';
+      return;
+    }
+    const disposition = response.headers.get('Content-Disposition') || '';
+    const match = disposition.match(/filename="?([^\"]+)"?/i);
+    const filename = match ? match[1] : 'initiating-devices.pdf';
+
+    try {
+      const outcome = await savePdfWithDialog(blob, filename);
+      if (outcome === 'saved') {
+        inspectionMessage.textContent = `PDF saved: ${filename} (${blob.size} bytes)`;
+      } else {
+        inspectionMessage.textContent = `PDF downloaded: ${filename} (${blob.size} bytes). Enable browser "Ask where to save" to always show Save As.`;
+      }
+    } catch (error) {
+      if (error && error.name === 'AbortError') {
+        inspectionMessage.textContent = 'Export canceled.';
+        return;
+      }
+      const fallbackUrl = URL.createObjectURL(blob);
+      const fallbackAnchor = document.createElement('a');
+      fallbackAnchor.href = fallbackUrl;
+      fallbackAnchor.download = filename;
+      document.body.append(fallbackAnchor);
+      fallbackAnchor.click();
+      fallbackAnchor.remove();
+      URL.revokeObjectURL(fallbackUrl);
+      inspectionMessage.textContent = `Save As failed (${error?.message || 'unknown error'}). Downloaded ${filename} instead (${blob.size} bytes).`;
+    }
   });
 
   [inspectionStoreNumber, inspectionStoreType, inspectionAddress, inspectionInspector].forEach((element) => {

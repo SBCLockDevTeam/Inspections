@@ -7,6 +7,8 @@ import secrets
 SESSION_COOKIE = "inspection_session"
 DEFAULT_PASSWORD_FALLBACK = "password"
 DEFAULT_PASSWORD_SETTING_KEY = "auth.default_password"
+FORCE_PASSWORD_RESET_DEFAULT_FALLBACK = True
+FORCE_PASSWORD_RESET_DEFAULT_SETTING_KEY = "auth.force_password_reset_default"
 PASSWORD_ITERATIONS = 240_000
 
 

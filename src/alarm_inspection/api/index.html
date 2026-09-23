@@ -30,8 +30,16 @@ body {
   max-width: 1220px;
   margin: 0 auto;
 }
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
 h1 {
-  margin: 0 0 10px;
+  margin: 0;
   font-size: clamp(2rem, 4vw, 2.65rem);
   letter-spacing: -0.02em;
 }
@@ -45,7 +53,7 @@ body > p {
   justify-content: flex-end;
   align-items: center;
   gap: 10px;
-  margin-bottom: 8px;
+  margin: 0;
 }
 #avatar-wrap {
   position: relative;
@@ -74,7 +82,7 @@ body > p {
   box-shadow: var(--shadow);
   z-index: 20;
 }
-#avatar-menu-option-logout {
+.avatar-menu-option {
   width: 100%;
   margin: 0;
   padding: 9px 10px;
@@ -82,7 +90,7 @@ body > p {
   cursor: pointer;
   color: var(--text);
 }
-#avatar-menu-option-logout:hover {
+.avatar-menu-option:hover {
   background: #edf6ff;
 }
 .auth-card {
@@ -107,30 +115,53 @@ body > p {
   color: var(--muted);
   font-size: 0.9rem;
   margin-top: 8px;
+  width: 100%;
 }
 .admin-list-header {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
 }
 .admin-list-header h3 {
   margin: 0;
 }
-.add-user-row {
-  display: flex;
-  align-items: flex-end;
-  gap: 8px;
-}
-.add-user-row button {
+.add-user-button {
   width: auto;
   margin: 0;
+  white-space: nowrap;
 }
 .settings-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
   margin-top: 12px;
 }
 .settings-row button {
   width: auto;
+  margin: 0;
+}
+.settings-field {
+  flex: 0 0 auto;
+  min-width: 280px;
+}
+.settings-field label {
+  margin-top: 0;
+}
+.settings-field input {
+  width: min(360px, 100%);
+}
+.checkbox-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  white-space: nowrap;
+}
+.checkbox-inline input[type=checkbox] {
+  width: auto;
+  margin: 0;
 }
 .user-actions {
   display: flex;
@@ -404,11 +435,6 @@ button:active {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
-  .admin-list-header,
-  .add-user-row {
-    align-items: stretch;
-    flex-direction: column;
-  }
 }
 .compact-field label {
   margin: 0 0 4px;
@@ -570,6 +596,13 @@ button:active {
 @media (max-width: 700px) {
   body { padding: 22px 12px 42px; }
   .card, .modal-card { padding: 18px 15px; }
+  .page-header {
+    align-items: flex-start;
+  }
+  #user-bar {
+    width: 100%;
+    justify-content: flex-start;
+  }
   .row,
   .nav,
   .inline-form,
@@ -593,6 +626,16 @@ button:active {
   }
   .admin-grid {
     grid-template-columns: 1fr;
+  }
+  .settings-row {
+    align-items: stretch;
+  }
+  .settings-field {
+    min-width: 0;
+    width: 100%;
+  }
+  .checkbox-inline {
+    width: 100%;
   }
   .accepted-header-row {
     flex-direction: column;
@@ -620,9 +663,7 @@ button:active {
   }
 }
 </style></head>
-<body><h1>Home Page</h1><p>Choose an existing inspection or create a new one.</p>
-
-<div id="user-bar" class="hidden"><span id="active-user-label"></span><div id="avatar-wrap"><button type="button" id="avatar-button" class="secondary" title="Account menu">JP</button><div id="avatar-menu" class="hidden"><div id="avatar-menu-option-logout" role="menuitem" tabindex="0">Logout</div></div></div></div>
+<body><div class="page-header"><h1>Home Page</h1><div id="user-bar" class="hidden"><span id="active-user-label"></span><div id="avatar-wrap"><button type="button" id="avatar-button" class="secondary" title="Account menu">JP</button><div id="avatar-menu" class="hidden"><div id="avatar-menu-option-admin" class="avatar-menu-option hidden" role="menuitem" tabindex="0">Administration</div><div id="avatar-menu-option-logout" class="avatar-menu-option" role="menuitem" tabindex="0">Logout</div></div></div></div></div><p>Choose an existing inspection or create a new one.</p>
 
 <div id="login-screen" class="card auth-card">
 <h2>Login</h2>
@@ -645,7 +686,6 @@ button:active {
 <div class="row"><select id="inspection-picker"></select><button type="button" id="open-inspection" class="ghost">Open Inspection</button></div>
 <button type="button" id="refresh-inspections" class="secondary">Refresh List</button>
 <button type="button" id="start-create">Create New Inspection</button>
-<button type="button" id="open-admin" class="secondary hidden">Administration</button>
 <button type="button" id="delete-inspection" class="danger">Delete Inspection</button>
 <div id="home-message"></div>
 </div>
@@ -654,12 +694,14 @@ button:active {
 <div class="nav"><button type="button" id="back-home-from-admin" class="secondary">Back to Home</button></div>
 <h2>Administration</h2>
 <div class="admin-grid">
-<div class="admin-list-header"><h3>User List</h3><form id="admin-create-user-form" class="add-user-row"><label for="admin-new-user-email">Add User</label><input id="admin-new-user-email" type="email" placeholder="user@example.com" required><button type="submit">Add User</button></form></div>
-<table class="table"><thead><tr><th>Email</th><th>Admin</th><th>Force Reset</th><th>Actions</th></tr></thead><tbody id="admin-users-body"></tbody></table>
-<div class="settings-row"><label for="admin-default-password">Default Password</label><input id="admin-default-password" type="text" required><button type="button" id="save-admin-settings">Save Default Password</button><div class="inline-note">This default password is global and is used for new users and reset actions.</div></div>
+<div class="admin-list-header"><h3>User List</h3><button type="button" id="open-admin-add-user" class="secondary add-user-button">Add User</button></div>
+<table class="table"><thead><tr><th>Email</th><th>Admin</th><th>Actions</th></tr></thead><tbody id="admin-users-body"></tbody></table>
+<div class="settings-row"><div class="settings-field"><label for="admin-default-password">Default Password</label><input id="admin-default-password" type="text" required></div><label for="admin-force-reset-default" class="checkbox-inline"><input id="admin-force-reset-default" type="checkbox">Force Reset</label><button type="button" id="save-admin-settings">Save Settings</button><div class="inline-note">Default Password and Force Reset are global and apply to newly created users and reset actions.</div></div>
 </div>
 <div id="admin-message"></div>
 </div>
+
+<div id="admin-add-user-modal" class="modal"><div class="modal-card"><button class="close" id="close-admin-add-user">Close</button><h2>Add User</h2><form id="admin-add-user-form"><label for="admin-add-user-email">Email</label><input id="admin-add-user-email" type="email" placeholder="user@example.com" required><div class="delete-actions"><button type="submit" id="confirm-admin-add-user" class="primary">OK</button><button type="button" id="cancel-admin-add-user" class="secondary">Cancel</button></div></form></div></div>
 
 <div id="create-screen" class="card hidden">
 <div class="nav"><button type="button" id="back-home-from-create" class="secondary">Back to Home</button></div>
@@ -737,7 +779,7 @@ button:active {
   </form>
 </div>
 
-<div class="accepted-header-row"><h3>Accepted Points</h3><div class="user-actions"><button type="button" id="edit-table" class="ghost">Edit</button><button type="button" id="save-table" class="ghost">Save</button><button type="button" id="save-event-dates" class="ghost">Accept Results</button></div></div>
+<div class="accepted-header-row"><h3>Accepted Points</h3><div class="user-actions"><button type="button" id="edit-table" class="ghost">Edit</button><button type="button" id="save-table" class="ghost">Save</button><button type="button" id="save-event-dates" class="ghost">Accept Results</button><button type="button" id="export-pdf" class="ghost">Export PDF</button></div></div>
 <table class="table"><thead><tr><th>Device Type</th><th>Address</th><th>Location</th><th>Test Result</th></tr></thead><tbody id="accepted-points-body"></tbody></table>
 <div id="inspection-message"></div>
 </div>

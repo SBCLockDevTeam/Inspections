@@ -88,6 +88,7 @@ class PointListDecision(Base):
     point_list_id: Mapped[str] = mapped_column(String(36), index=True)
     address: Mapped[int | None] = mapped_column(nullable=True)
     text: Mapped[str] = mapped_column(String(500))
+    location: Mapped[str] = mapped_column(String(500), default="")
     accepted: Mapped[bool] = mapped_column(default=True)
     deleted: Mapped[bool] = mapped_column(default=False)
     reason: Mapped[str] = mapped_column(String(200), default="technician review")
@@ -113,6 +114,7 @@ def open_store():
     engine = create_engine(url, pool_pre_ping=True)
     Base.metadata.create_all(engine)
     _ensure_inspection_columns(engine)
+    _ensure_point_list_decision_columns(engine)
     return sessionmaker(bind=engine, expire_on_commit=False)
 
 
@@ -129,6 +131,23 @@ def _ensure_inspection_columns(engine) -> None:
     if "inspector_name" not in existing_columns:
         statements.append(
             "ALTER TABLE inspections ADD COLUMN inspector_name VARCHAR(120) DEFAULT ''"
+        )
+    if not statements:
+        return
+    with engine.begin() as connection:
+        for statement in statements:
+            connection.execute(text(statement))
+
+
+def _ensure_point_list_decision_columns(engine) -> None:
+    existing_columns = {
+        column["name"]
+        for column in inspect(engine).get_columns("point_list_decisions")
+    }
+    statements: list[str] = []
+    if "location" not in existing_columns:
+        statements.append(
+            "ALTER TABLE point_list_decisions ADD COLUMN location VARCHAR(500) DEFAULT ''"
         )
     if not statements:
         return

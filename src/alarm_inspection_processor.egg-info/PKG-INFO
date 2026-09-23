@@ -10,6 +10,7 @@ Requires-Dist: python-multipart>=0.0.9; extra == "web"
 Requires-Dist: sqlalchemy>=2.0; extra == "web"
 Requires-Dist: psycopg[binary]>=3.2; extra == "web"
 Requires-Dist: openpyxl>=3.1; extra == "web"
+Requires-Dist: reportlab>=4.2; extra == "web"
 Provides-Extra: files
 Requires-Dist: openpyxl>=3.1; extra == "files"
 Requires-Dist: pandas>=2.2; extra == "files"

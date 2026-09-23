@@ -4,7 +4,18 @@ src/alarm_inspection/__init__.py
 src/alarm_inspection/storage.py
 src/alarm_inspection/api/__init__.py
 src/alarm_inspection/api/app.py
+src/alarm_inspection/api/auth_support.py
+src/alarm_inspection/api/common.py
+src/alarm_inspection/api/index.html
+src/alarm_inspection/api/pdf_export.py
 src/alarm_inspection/api/review.js
+src/alarm_inspection/api/security.py
+src/alarm_inspection/api/routers/__init__.py
+src/alarm_inspection/api/routers/admin.py
+src/alarm_inspection/api/routers/auth.py
+src/alarm_inspection/api/routers/inspections.py
+src/alarm_inspection/api/routers/point_lists.py
+src/alarm_inspection/api/routers/ui.py
 src/alarm_inspection/domain/__init__.py
 src/alarm_inspection/domain/points.py
 src/alarm_inspection/intake/__init__.py
@@ -15,4 +26,5 @@ src/alarm_inspection_processor.egg-info/SOURCES.txt
 src/alarm_inspection_processor.egg-info/dependency_links.txt
 src/alarm_inspection_processor.egg-info/requires.txt
 src/alarm_inspection_processor.egg-info/top_level.txt
+tests/test_pdf_export.py
 tests/test_points.py

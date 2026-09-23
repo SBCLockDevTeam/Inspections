@@ -6,7 +6,14 @@ from uuid import uuid4
 from fastapi import APIRouter, Body, Request
 from fastapi.responses import JSONResponse, Response
 
-from alarm_inspection.api.auth_support import get_default_password, require_admin, serialize_user, set_default_password
+from alarm_inspection.api.auth_support import (
+    get_default_password,
+    get_force_password_reset_default,
+    require_admin,
+    serialize_user,
+    set_default_password,
+    set_force_password_reset_default,
+)
 from alarm_inspection.api.common import as_bool
 from alarm_inspection.api.security import password_record
 from alarm_inspection.storage import User, UserSession
@@ -47,7 +54,14 @@ def create_router(store) -> APIRouter:
         with store.begin() as session:
             default_password = get_default_password(session)
             set_default_password(session, default_password)
-            return JSONResponse(content={"default_password": default_password})
+            force_password_reset_default = get_force_password_reset_default(session)
+            set_force_password_reset_default(session, force_password_reset_default)
+            return JSONResponse(
+                content={
+                    "default_password": default_password,
+                    "force_password_reset_default": force_password_reset_default,
+                }
+            )
 
     @router.patch("/settings")
     def admin_update_settings(request: Request, payload: dict = Body(default={})) -> Response:
@@ -56,11 +70,19 @@ def create_router(store) -> APIRouter:
         except PermissionError as exc:
             return JSONResponse(status_code=403, content={"error": str(exc)})
         candidate = str(payload.get("default_password") or "").strip()
+        force_password_reset_default = as_bool(payload.get("force_password_reset_default"), default=True)
         if len(candidate) < 4:
             return JSONResponse(status_code=400, content={"error": "Default password must be at least 4 characters."})
         with store.begin() as session:
             updated = set_default_password(session, candidate)
-            return JSONResponse(content={"status": "updated", "default_password": updated})
+            updated_force_reset = set_force_password_reset_default(session, force_password_reset_default)
+            return JSONResponse(
+                content={
+                    "status": "updated",
+                    "default_password": updated,
+                    "force_password_reset_default": updated_force_reset,
+                }
+            )
 
     @router.post("/users")
     def admin_add_user(request: Request, payload: dict = Body(default={})) -> Response:
@@ -79,12 +101,13 @@ def create_router(store) -> APIRouter:
             if existing is not None:
                 return JSONResponse(status_code=400, content={"error": "User already exists."})
             default_password = get_default_password(session)
+            force_password_reset_default = get_force_password_reset_default(session)
             new_user = User(
                 id=str(uuid4()),
                 email=email,
                 password_hash=password_record(default_password),
                 is_admin=is_admin,
-                force_password_reset=True,
+                force_password_reset=force_password_reset_default,
                 is_active=True,
                 created_at=datetime.now(timezone.utc),
             )
