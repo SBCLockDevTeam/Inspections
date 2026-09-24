@@ -6,7 +6,7 @@ requires-python = ">=3.12"
 dependencies = []
 
 [project.optional-dependencies]
-web = ["fastapi>=0.115", "uvicorn[standard]>=0.30", "python-multipart>=0.0.9", "sqlalchemy>=2.0", "psycopg[binary]>=3.2", "openpyxl>=3.1", "reportlab>=4.2"]
+web = ["fastapi>=0.115", "uvicorn[standard]>=0.30", "python-multipart>=0.0.9", "sqlalchemy>=2.0", "psycopg[binary]>=3.2", "openpyxl>=3.1", "reportlab>=4.2", "pypdf>=4.2"]
 files = ["openpyxl>=3.1", "pandas>=2.2", "pdfplumber>=0.11"]
 test = ["pytest>=8.0"]
 

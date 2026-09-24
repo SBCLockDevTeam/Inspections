@@ -8,6 +8,7 @@ src/alarm_inspection/api/auth_support.py
 src/alarm_inspection/api/common.py
 src/alarm_inspection/api/index.html
 src/alarm_inspection/api/pdf_export.py
+src/alarm_inspection/api/pdf_templates.py
 src/alarm_inspection/api/review.js
 src/alarm_inspection/api/security.py
 src/alarm_inspection/api/routers/__init__.py
@@ -27,4 +28,5 @@ src/alarm_inspection_processor.egg-info/dependency_links.txt
 src/alarm_inspection_processor.egg-info/requires.txt
 src/alarm_inspection_processor.egg-info/top_level.txt
 tests/test_pdf_export.py
+tests/test_pdf_templates.py
 tests/test_points.py

@@ -35,7 +35,7 @@
 
   const startCreateButton = document.querySelector('#start-create');
   const backHomeFromCreate = document.querySelector('#back-home-from-create');
-  const backHomeFromInspection = document.querySelector('#back-home-from-inspection');
+  const homeLinkFromInspection = document.querySelector('#home-link-from-inspection');
   const refreshInspectionsButton = document.querySelector('#refresh-inspections');
   const inspectionPicker = document.querySelector('#inspection-picker');
   const openInspectionButton = document.querySelector('#open-inspection');
@@ -51,7 +51,18 @@
   const acceptedPointsBody = document.querySelector('#accepted-points-body');
   const inspectionPointListSelector = document.querySelector('#inspection-point-list-selector');
   const inspectionMessage = document.querySelector('#inspection-message');
-  const refreshInspectionButton = document.querySelector('#refresh-inspection');
+  const saveAllInspectionButton = document.querySelector('#save-all-inspection');
+  const inspectionBusyOverlay = document.querySelector('#inspection-busy-overlay');
+  const inspectionBusyText = document.querySelector('#inspection-busy-text');
+  const inspectionMenuWrap = document.querySelector('#inspection-menu-wrap');
+  const inspectionMenuButton = document.querySelector('#inspection-menu-button');
+  const inspectionMenu = document.querySelector('#inspection-menu');
+  const inspectionMenuAddPointListOption = document.querySelector('#inspection-menu-option-add-point-list');
+  const inspectionMenuDeletePointListOption = document.querySelector('#inspection-menu-option-delete-point-list');
+  const inspectionMenuEditNfpaOption = document.querySelector('#inspection-menu-option-edit-nfpa');
+  const inspectionMenuToggleMissingOption = document.querySelector('#inspection-menu-option-toggle-missing');
+  const inspectionMenuExportPdfOption = document.querySelector('#inspection-menu-option-export-pdf');
+  const inspectionMenuClearDatesOption = document.querySelector('#inspection-menu-option-clear-dates');
   const eventHistoryForm = document.querySelector('#event-history-form');
   const chooseEventFileButton = document.querySelector('#choose-event-file');
   const eventFile = document.querySelector('#event-file');
@@ -59,9 +70,16 @@
   const editTableButton = document.querySelector('#edit-table');
   const saveTableButton = document.querySelector('#save-table');
   const saveEventDatesButton = document.querySelector('#save-event-dates');
-  const exportPdfButton = document.querySelector('#export-pdf');
-  const clearEventDatesButton = document.querySelector('#clear-event-dates');
-  const toggleMissingPointsButton = document.querySelector('#toggle-missing-points');
+  const nfpaDraftModal = document.querySelector('#nfpa-draft-modal');
+  const closeNfpaDraftButton = document.querySelector('#close-nfpa-draft');
+  const cancelNfpaDraftButton = document.querySelector('#cancel-nfpa-draft');
+  const pdfTemplateKeySelect = document.querySelector('#pdf-template-key');
+  const refreshPdfTemplateButton = document.querySelector('#refresh-pdf-template');
+  const pdfTemplatePreviewFrame = document.querySelector('#pdf-template-preview');
+  const pdfTemplateFieldsContainer = document.querySelector('#pdf-template-fields');
+  const saveNfpaDraftButton = document.querySelector('#save-nfpa-draft');
+  const downloadNfpaDraftButton = document.querySelector('#download-nfpa-draft');
+  const nfpaDraftMessage = document.querySelector('#nfpa-draft-message');
 
   const form = document.querySelector('#inspection-form');
   const previewButton = document.querySelector('#preview-list');
@@ -72,7 +90,6 @@
   const decisionField = document.querySelector('#point-decisions');
   const saveButtons = [...document.querySelectorAll('.save-review-action')];
   const deleteButtons = [...document.querySelectorAll('.delete-review-action')];
-  const finishReviewButtons = [...document.querySelectorAll('.finish-review-action')];
   const lists = document.querySelector('#point-lists');
   const listSelector = document.querySelector('#preview-list-selector');
   const closePreviewButton = document.querySelector('#close-preview');
@@ -81,11 +98,6 @@
   const closeDeleteInspectionButton = document.querySelector('#close-delete-inspection');
   const cancelDeleteInspectionButton = document.querySelector('#cancel-delete-inspection');
   const confirmDeleteInspectionButton = document.querySelector('#confirm-delete-inspection');
-  const reviewConfirmModal = document.querySelector('#review-confirm-modal');
-  const reviewConfirmSummary = document.querySelector('#review-confirm-summary');
-  const closeReviewConfirmButton = document.querySelector('#close-review-confirm');
-  const cancelFinishReviewButton = document.querySelector('#cancel-finish-review');
-  const confirmFinishReviewButton = document.querySelector('#confirm-finish-review');
 
   if (!form || !previewButton || !modal || !body || !homeScreen || !createScreen || !inspectionScreen) {
     return;
@@ -104,6 +116,9 @@
   let suppressInspectionDetailsSave = false;
   let currentUser = null;
   let tableEditable = false;
+  let activePdfTemplateKey = 'nfpa72';
+  let activePdfTemplateFields = {};
+  let activePdfTemplateFieldNames = [];
 
   function showScreen(name) {
     loginScreen?.classList.toggle('hidden', name !== 'login');
@@ -123,26 +138,8 @@
 
   function resetCreateForm() {
     form.reset();
-    const rows = [...lists.querySelectorAll('.point-list')];
-    for (const row of rows.slice(1)) {
-      row.remove();
-    }
-    syncPointListRemoveButtons();
     clearPreviewState();
     message.textContent = '';
-  }
-
-  function syncPointListRemoveButtons() {
-    const rows = [...lists.querySelectorAll('.point-list')];
-    const disableRemove = rows.length <= 1;
-    for (const row of rows) {
-      const removeButton = row.querySelector('.remove-point-list');
-      if (!removeButton) {
-        continue;
-      }
-      removeButton.disabled = disableRemove;
-      removeButton.title = disableRemove ? 'At least one Points List is required.' : '';
-    }
   }
 
   function formatInspectionLabel(inspection) {
@@ -356,44 +353,55 @@
     deleteInspectionModal?.classList.remove('open');
   }
 
-  async function createInspection(openAfterCreate = false) {
-    message.textContent = 'Creating inspection...';
-    const data = new FormData();
-    for (const id of ['store_number', 'address']) {
-      data.append(id, document.querySelector(`#${id}`).value);
-    }
-    for (const row of document.querySelectorAll('.point-list')) {
-      const category = row.querySelector('select')?.value || '';
-      const file = row.querySelector('input[type=file]')?.files?.[0];
-      if (!file) {
-        message.textContent = 'Choose an XLSX file for each Points List first.';
-        return false;
-      }
-      data.append('point_list_categories', category);
-      data.append('points_files', file);
-    }
-    data.append('point_decisions', decisionField.value || '[]');
-    const response = await fetch('/api/inspections', { method: 'POST', body: data });
+  async function createBlankInspection() {
+    homeMessage.textContent = 'Creating blank inspection...';
+    const response = await fetch('/api/inspections/blank', { method: 'POST' });
     const result = await response.json();
     if (!response.ok || result.error) {
-      message.textContent = result.error || result.detail || 'Inspection creation failed.';
+      homeMessage.textContent = result.error || result.detail || 'Creating blank inspection failed.';
+      return false;
+    }
+    await loadInspections();
+    await openInspection(result.id);
+    homeMessage.textContent = '';
+    return true;
+  }
+
+  async function addPointsListToInspection() {
+    if (!currentInspectionId) {
+      message.textContent = 'Open an inspection before adding a Points List.';
       return false;
     }
 
-    if (openAfterCreate) {
-      modal.classList.remove('open');
-      await loadInspections();
-      await openInspection(result.id);
-      message.textContent = '';
-      resetCreateForm();
-      return true;
+    const firstRow = lists?.querySelector('.point-list');
+    const category = firstRow?.querySelector('select')?.value || '';
+    const file = firstRow?.querySelector('input[type=file]')?.files?.[0];
+    if (!category || !file) {
+      message.textContent = 'Choose Security Panel Type and file before finishing review.';
+      return false;
     }
 
-    await loadInspections();
-    showScreen('home');
-    inspectionPicker.value = result.id;
-    homeMessage.textContent = `Inspection created and saved. Select it and click Open Inspection.`;
+    message.textContent = 'Adding Points List...';
+    const data = new FormData();
+    data.append('point_list_category', category);
+    data.append('points_file', file);
+    data.append('point_decisions', decisionField.value || '[]');
+
+    const response = await fetch(`/api/inspections/${currentInspectionId}/point-lists`, {
+      method: 'POST',
+      body: data,
+    });
+    const result = await response.json();
+    if (!response.ok || result.error) {
+      message.textContent = result.error || result.detail || 'Adding Points List failed.';
+      return false;
+    }
+
+    modal.classList.remove('open');
+    await openInspection(currentInspectionId, result.point_list_id || null);
     resetCreateForm();
+    showScreen('inspection');
+    inspectionMessage.textContent = `Points List added: ${result.filename || 'uploaded file'}.`;
     return true;
   }
 
@@ -518,37 +526,207 @@
     eventFileName.textContent = file ? file.name : 'No file selected';
   }
 
-  function syncMissingToggleLabel() {
-    if (!toggleMissingPointsButton) {
+  function renderPdfTemplateFields() {
+    if (!pdfTemplateFieldsContainer) {
       return;
     }
-    toggleMissingPointsButton.textContent = showMissingOnly ? 'Show All Points' : 'Show Missing Points Only';
+    pdfTemplateFieldsContainer.replaceChildren();
+    if (!activePdfTemplateFieldNames.length) {
+      const empty = document.createElement('div');
+      empty.className = 'nfpa-fields-empty';
+      empty.textContent = 'No editable PDF fields were found for this template.';
+      pdfTemplateFieldsContainer.append(empty);
+      return;
+    }
+
+    for (const fieldName of activePdfTemplateFieldNames) {
+      const row = document.createElement('div');
+      row.className = 'nfpa-field-row';
+      const label = document.createElement('label');
+      label.textContent = fieldName;
+      label.setAttribute('for', `pdf-field-${fieldName}`);
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.id = `pdf-field-${fieldName}`;
+      input.value = String(activePdfTemplateFields[fieldName] || '');
+      input.addEventListener('input', () => {
+        activePdfTemplateFields[fieldName] = input.value;
+      });
+      row.append(label, input);
+      pdfTemplateFieldsContainer.append(row);
+    }
   }
 
-  function validateRowsForExport(rows) {
-    if (!rows.length) {
-      return 'No accepted points available for export.';
+  function refreshPdfTemplatePreviewFrame() {
+    if (!pdfTemplatePreviewFrame || !currentInspectionId || !activePdfTemplateKey) {
+      return;
     }
-    for (let index = 0; index < rows.length; index += 1) {
-      const row = rows[index];
-      const line = index + 1;
-      if (!row.text) {
-        return `Row ${line} is missing Device Type.`;
-      }
-      if (!row.address) {
-        return `Row ${line} is missing Address.`;
-      }
-      if (!row.location) {
-        return `Row ${line} is missing Location.`;
-      }
-      if (!row.event_date) {
-        return `Row ${line} is missing Test Result.`;
-      }
-      if (row.event_date.toLowerCase().includes('(pending)')) {
-        return `Row ${line} still has a pending Test Result. Accept results before exporting.`;
-      }
+    const stamp = Date.now();
+    pdfTemplatePreviewFrame.src = `/api/inspections/${currentInspectionId}/pdf-templates/${encodeURIComponent(activePdfTemplateKey)}/preview?ts=${stamp}`;
+  }
+
+  async function loadPdfTemplateDraft() {
+    if (!currentInspectionId) {
+      return { error: 'No inspection selected.' };
     }
-    return '';
+    let response;
+    try {
+      response = await fetch(`/api/inspections/${currentInspectionId}/pdf-templates/${encodeURIComponent(activePdfTemplateKey)}`);
+    } catch {
+      return { error: 'Unable to reach server while loading PDF template.' };
+    }
+
+    let payload;
+    try {
+      payload = await response.json();
+    } catch {
+      return { error: `PDF template endpoint returned an invalid response (${response.status}).` };
+    }
+
+    if (!response.ok || payload.error) {
+      const detail = payload.error || payload.detail || '';
+      if (response.status === 404 || String(detail).toLowerCase() === 'not found') {
+        return { error: detail || 'PDF template API is not available on this server yet. Restart local API or deploy latest updates.' };
+      }
+      return { error: detail || 'Unable to load PDF template.' };
+    }
+
+    activePdfTemplateFieldNames = Array.isArray(payload.field_names) ? payload.field_names : [];
+    activePdfTemplateFields = payload.fields || {};
+    renderPdfTemplateFields();
+    refreshPdfTemplatePreviewFrame();
+    return { payload };
+  }
+
+  async function savePdfTemplateDraft() {
+    if (!currentInspectionId) {
+      nfpaDraftMessage.textContent = 'No inspection selected.';
+      return false;
+    }
+    nfpaDraftMessage.textContent = 'Saving PDF fields...';
+    const response = await fetch(`/api/inspections/${currentInspectionId}/pdf-templates/${encodeURIComponent(activePdfTemplateKey)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fields: activePdfTemplateFields }),
+    });
+    const payload = await response.json();
+    if (!response.ok || payload.error) {
+      nfpaDraftMessage.textContent = payload.error || payload.detail || 'Saving PDF fields failed.';
+      return false;
+    }
+    activePdfTemplateFields = payload.fields || activePdfTemplateFields;
+    nfpaDraftMessage.textContent = `Saved. ${payload.updated_at ? `Updated ${payload.updated_at}` : ''}`.trim();
+    refreshPdfTemplatePreviewFrame();
+    return true;
+  }
+
+  async function openNfpaDraftModal() {
+    if (!currentInspectionId) {
+      inspectionMessage.textContent = 'Open an inspection before editing NFPA PDF fields.';
+      return;
+    }
+    nfpaDraftModal?.classList.add('open');
+    activePdfTemplateKey = (pdfTemplateKeySelect?.value || 'nfpa72').trim() || 'nfpa72';
+    nfpaDraftMessage.textContent = 'Loading embedded editor...';
+    const loaded = await loadPdfTemplateDraft();
+    if (loaded.error) {
+      nfpaDraftMessage.textContent = loaded.error;
+      inspectionMessage.textContent = loaded.error;
+      return;
+    }
+    nfpaDraftMessage.textContent = loaded.payload?.updated_at
+      ? `Loaded saved draft. Last update: ${loaded.payload.updated_at}`
+      : 'Template loaded. Edit fields and click Save.';
+    inspectionMessage.textContent = '';
+  }
+
+  function closeNfpaDraftModal() {
+    nfpaDraftModal?.classList.remove('open');
+  }
+
+  function syncMissingToggleLabel() {
+    if (!inspectionMenuToggleMissingOption) {
+      return;
+    }
+    inspectionMenuToggleMissingOption.textContent = showMissingOnly ? 'Show All Points' : 'Show Missing Points Only';
+  }
+
+  function closeInspectionMenu() {
+    inspectionMenu?.classList.add('hidden');
+  }
+
+  function setInspectionBusy(isBusy, text = 'Working...') {
+    if (inspectionBusyText) {
+      inspectionBusyText.textContent = text;
+    }
+    inspectionBusyOverlay?.classList.toggle('hidden', !isBusy);
+  }
+
+  function buildEditableRowsSnapshot() {
+    return (inspectionPoints || []).map((point) => ({
+      id: String(point.id ?? ''),
+      text: String(point.editableText ?? point.text ?? '').trim(),
+      address: String(point.editableAddress ?? point.address ?? '').trim(),
+      location: String(point.location ?? '').trim(),
+      event_date: String(point.editableEventDate ?? point.event_date ?? '').trim(),
+    }));
+  }
+
+  async function savePendingEventMatches() {
+    if (!currentInspectionId || !currentPointListId) {
+      return { skipped: true };
+    }
+    const matches = [...pendingEventDates.entries()].map(([point, timestamp]) => ({
+      point,
+      timestamp,
+    }));
+    if (!matches.length) {
+      return { skipped: true, saved: 0 };
+    }
+
+    const response = await fetch(`/api/inspections/${currentInspectionId}/event-dates/save`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ point_list_id: currentPointListId, matches }),
+    });
+    const result = await response.json();
+    if (!response.ok || result.error) {
+      return { error: result.error || result.detail || 'Saving pending event matches failed.' };
+    }
+    pendingEventDates = new Map();
+    return { saved: Number(result.saved || 0), ignoredExisting: Number(result.ignored_existing || 0) };
+  }
+
+  async function saveAllInspectionChanges() {
+    if (!currentInspectionId) {
+      inspectionMessage.textContent = 'No inspection selected.';
+      return;
+    }
+    inspectionMessage.textContent = 'Saving all changes...';
+
+    await saveInspectionDetails();
+
+    if (currentPointListId) {
+      const rows = buildEditableRowsSnapshot();
+      const persisted = await persistAcceptedPoints(rows);
+      if (persisted.error) {
+        inspectionMessage.textContent = persisted.error;
+        return;
+      }
+      tableEditable = false;
+      syncTableEditButtons();
+    }
+
+    const pendingResult = await savePendingEventMatches();
+    if (pendingResult.error) {
+      inspectionMessage.textContent = pendingResult.error;
+      return;
+    }
+
+    await openInspection(currentInspectionId, currentPointListId);
+    inspectionMessage.textContent = pendingResult.saved
+      ? `All changes saved. Accepted ${pendingResult.saved} pending event matches.`
+      : 'All changes saved.';
   }
 
   async function blobLooksLikePdf(blob) {
@@ -805,32 +983,7 @@
     renderedListIndex = index;
   }
 
-  function hasUnresolvedReviewRows() {
-    return previewLists.some((list) => (list.rows || []).some((row) => row.accepted === false));
-  }
-
-  function openReviewConfirmation() {
-    if (!previewLists.length) {
-      message.textContent = 'Preview at least one Points List before finishing review.';
-      return;
-    }
-    if (hasUnresolvedReviewRows()) {
-      message.textContent = 'Delete all Review rows or mark them Accepted before finishing the inspection review.';
-      return;
-    }
-    const totalRows = previewLists.reduce((count, list) => count + (list.rows || []).length, 0);
-    const acceptedRows = previewLists.reduce((count, list) => count + (list.rows || []).filter((row) => row.accepted).length, 0);
-    reviewConfirmSummary.textContent = `You are about to commit ${acceptedRows} accepted points across ${totalRows} rows from ${previewLists.length} Points List(s). This is the final review approval step.`;
-    reviewConfirmModal?.classList.add('open');
-  }
-
-  function closeReviewConfirmation() {
-    reviewConfirmModal?.classList.remove('open');
-  }
-
   closePreviewButton?.addEventListener('click', () => modal.classList.remove('open'));
-  closeReviewConfirmButton?.addEventListener('click', closeReviewConfirmation);
-  cancelFinishReviewButton?.addEventListener('click', closeReviewConfirmation);
 
   loginForm?.addEventListener('submit', async (event) => {
     event.preventDefault();
@@ -963,6 +1116,11 @@
     avatarMenu?.classList.toggle('hidden');
   });
 
+  inspectionMenuButton?.addEventListener('click', (event) => {
+    event.preventDefault();
+    inspectionMenu?.classList.toggle('hidden');
+  });
+
   document.addEventListener('click', (event) => {
     if (!(event.target instanceof Node)) {
       return;
@@ -970,12 +1128,13 @@
     if (avatarWrap && !avatarWrap.contains(event.target)) {
       avatarMenu?.classList.add('hidden');
     }
+    if (inspectionMenuWrap && !inspectionMenuWrap.contains(event.target)) {
+      closeInspectionMenu();
+    }
   });
 
-  startCreateButton?.addEventListener('click', () => {
-    resetCreateForm();
-    homeMessage.textContent = '';
-    showScreen('create');
+  startCreateButton?.addEventListener('click', async () => {
+    await createBlankInspection();
   });
 
   deleteInspectionButton?.addEventListener('click', () => {
@@ -1018,11 +1177,17 @@
   });
 
   backHomeFromCreate?.addEventListener('click', async () => {
+    if (currentInspectionId) {
+      await openInspection(currentInspectionId, currentPointListId);
+      showScreen('inspection');
+      return;
+    }
     await loadInspections();
     showScreen('home');
   });
 
-  backHomeFromInspection?.addEventListener('click', async () => {
+  homeLinkFromInspection?.addEventListener('click', async (event) => {
+    event.preventDefault();
     await loadInspections();
     showScreen('home');
   });
@@ -1036,11 +1201,45 @@
     await openInspection(inspectionPicker.value);
   });
 
-  refreshInspectionButton?.addEventListener('click', async () => {
+  inspectionMenuAddPointListOption?.addEventListener('click', () => {
+    closeInspectionMenu();
     if (!currentInspectionId) {
+      inspectionMessage.textContent = 'Open an inspection before adding a Points List.';
       return;
     }
-    await openInspection(currentInspectionId, currentPointListId);
+    resetCreateForm();
+    message.textContent = '';
+    showScreen('create');
+  });
+
+  inspectionMenuDeletePointListOption?.addEventListener('click', async () => {
+    closeInspectionMenu();
+    if (!currentInspectionId) {
+      inspectionMessage.textContent = 'No inspection selected.';
+      return;
+    }
+    if (!currentPointListId) {
+      inspectionMessage.textContent = 'No Points List selected to delete.';
+      return;
+    }
+
+    const selectedLabel = inspectionPointListSelector?.selectedOptions?.[0]?.textContent || 'selected list';
+    const confirmed = window.confirm(`Delete this Points List?\n\n${selectedLabel}\n\nClick OK to confirm.`);
+    if (!confirmed) {
+      return;
+    }
+
+    const response = await fetch(`/api/inspections/${currentInspectionId}/point-lists/${currentPointListId}`, {
+      method: 'DELETE',
+    });
+    const result = await response.json();
+    if (!response.ok || result.error) {
+      inspectionMessage.textContent = result.error || result.detail || 'Deleting Points List failed.';
+      return;
+    }
+
+    await openInspection(currentInspectionId);
+    inspectionMessage.textContent = 'Points List deleted.';
   });
 
   inspectionPointListSelector?.addEventListener('change', async () => {
@@ -1056,7 +1255,7 @@
     event.preventDefault();
     event.stopImmediatePropagation();
     if (!form.reportValidity()) {
-      message.textContent = 'Enter store number, address, and panel details before previewing.';
+      message.textContent = 'Select Security Panel Type and upload a file before previewing.';
       return;
     }
     const pointListRows = [...(lists?.querySelectorAll('.point-list') || [])];
@@ -1129,43 +1328,28 @@
   async function saveReviewDecisions(event) {
     event.preventDefault();
     event.stopImmediatePropagation();
+    if (!previewLists.length) {
+      message.textContent = 'Preview at least one Points List before saving decisions.';
+      return;
+    }
     persistSelectedList();
     const selected = previewLists[selectedListIndex];
     if (!selected) {
       message.textContent = 'No Points List is selected to save.';
       return;
     }
+    if ((selected.rows || []).some((row) => row.accepted === false)) {
+      message.textContent = 'Delete all Review rows or mark them Accepted before saving decisions.';
+      return;
+    }
     const selectedDecisions = rowDecisions(selected.rows, selected.filename);
     decisionField.value = JSON.stringify(selectedDecisions);
+    const added = await addPointsListToInspection();
+    if (!added) {
+      return;
+    }
     message.textContent = `Saved review decisions for ${selected.filename}.`;
   }
-
-  async function finishReview(event) {
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    if (!previewLists.length) {
-      message.textContent = 'Preview at least one Points List before finishing review.';
-      return;
-    }
-    persistSelectedList();
-    if (hasUnresolvedReviewRows()) {
-      message.textContent = 'Delete all Review rows or mark them Accepted before finishing the inspection review.';
-      return;
-    }
-    decisionField.value = JSON.stringify(
-      previewLists.flatMap((item) => rowDecisions(item.rows, item.filename))
-    );
-    if (!form.reportValidity()) {
-      message.textContent = 'Complete required inspection fields before finishing review.';
-      return;
-    }
-    openReviewConfirmation();
-  }
-
-  confirmFinishReviewButton?.addEventListener('click', async () => {
-    closeReviewConfirmation();
-    await createInspection(true);
-  });
 
   for (const button of deleteButtons) {
     button.addEventListener('click', deleteReviewRows, true);
@@ -1173,58 +1357,10 @@
   for (const button of saveButtons) {
     button.addEventListener('click', saveReviewDecisions, true);
   }
-  for (const button of finishReviewButtons) {
-    button.addEventListener('click', finishReview, true);
-  }
-
-  document.querySelector('#add-list')?.addEventListener('click', () => {
-    const row = lists.firstElementChild?.cloneNode(true);
-    if (!row) {
-      return;
-    }
-    const panelSelect = row.querySelector('select');
-    const fileInput = row.querySelector('input[type=file]');
-    if (panelSelect) {
-      panelSelect.value = 'Combo';
-      panelSelect.required = true;
-    }
-    if (fileInput) {
-      fileInput.value = '';
-      fileInput.required = true;
-    }
-    const removeButton = row.querySelector('.remove-point-list');
-    if (removeButton) {
-      removeButton.disabled = false;
-      removeButton.title = '';
-    }
-    lists.append(row);
-    syncPointListRemoveButtons();
-  });
-
-  lists?.addEventListener('click', (event) => {
-    const target = event.target;
-    if (!(target instanceof HTMLElement) || !target.classList.contains('remove-point-list')) {
-      return;
-    }
-    event.preventDefault();
-    const rows = [...lists.querySelectorAll('.point-list')];
-    if (rows.length <= 1) {
-      message.textContent = 'At least one Points List is required.';
-      syncPointListRemoveButtons();
-      return;
-    }
-    const row = target.closest('.point-list');
-    if (row) {
-      row.remove();
-      clearPreviewState();
-      message.textContent = 'Points List removed. Preview decisions were reset.';
-    }
-    syncPointListRemoveButtons();
-  });
 
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
-    message.textContent = 'Use Preview Points Lists, then click Finish Review to create the inspection.';
+    message.textContent = 'Use Preview Points List and Save Decisions to add the Points List to this inspection.';
   });
 
   async function uploadSelectedEventHistory() {
@@ -1242,41 +1378,46 @@
       return;
     }
     inspectionMessage.textContent = 'Uploading Event History...';
+    setInspectionBusy(true, 'Uploading and matching event history...');
     const data = new FormData();
     data.append('point_list_id', currentPointListId);
     data.append('event_file', file);
-    const response = await fetch(`/api/inspections/${currentInspectionId}/event-history`, {
-      method: 'POST',
-      body: data,
-    });
-    const result = await response.json();
-    if (!response.ok || result.error) {
-      inspectionMessage.textContent = result.error || result.detail || 'Event History upload failed.';
-      return;
-    }
-
-    const persistedPoints = new Set(
-      (inspectionPoints || [])
-        .filter((point) => point.event_date && point.address !== null && point.address !== undefined)
-        .map((point) => Number(point.address))
-        .filter((value) => Number.isFinite(value))
-    );
-    for (const match of result.pending_matches || []) {
-      const point = Number(match.point);
-      const timestamp = match.timestamp;
-      if (!Number.isFinite(point) || !timestamp || persistedPoints.has(point)) {
-        continue;
+    try {
+      const response = await fetch(`/api/inspections/${currentInspectionId}/event-history`, {
+        method: 'POST',
+        body: data,
+      });
+      const result = await response.json();
+      if (!response.ok || result.error) {
+        inspectionMessage.textContent = result.error || result.detail || 'Event History upload failed.';
+        return;
       }
-      const existingPending = pendingEventDates.get(point);
-      if (!existingPending || timestamp < existingPending) {
-        pendingEventDates.set(point, timestamp);
-      }
-    }
 
-    eventHistoryForm.reset();
-    setEventFileName();
-    renderVisibleAcceptedPoints();
-    inspectionMessage.textContent = `Event History uploaded: ${result.filename}. Pending matches: ${pendingEventDates.size}. Click Accept Results to persist.`;
+      const persistedPoints = new Set(
+        (inspectionPoints || [])
+          .filter((point) => point.event_date && point.address !== null && point.address !== undefined)
+          .map((point) => Number(point.address))
+          .filter((value) => Number.isFinite(value))
+      );
+      for (const match of result.pending_matches || []) {
+        const point = Number(match.point);
+        const timestamp = match.timestamp;
+        if (!Number.isFinite(point) || !timestamp || persistedPoints.has(point)) {
+          continue;
+        }
+        const existingPending = pendingEventDates.get(point);
+        if (!existingPending || timestamp < existingPending) {
+          pendingEventDates.set(point, timestamp);
+        }
+      }
+
+      eventHistoryForm.reset();
+      setEventFileName();
+      renderVisibleAcceptedPoints();
+      inspectionMessage.textContent = `Event History uploaded: ${result.filename}. Pending matches: ${pendingEventDates.size}. Click Accept Results to persist.`;
+    } finally {
+      setInspectionBusy(false);
+    }
   }
 
   eventHistoryForm?.addEventListener('submit', async (event) => {
@@ -1296,7 +1437,8 @@
     await uploadSelectedEventHistory();
   });
 
-  toggleMissingPointsButton?.addEventListener('click', () => {
+  inspectionMenuToggleMissingOption?.addEventListener('click', () => {
+    closeInspectionMenu();
     showMissingOnly = !showMissingOnly;
     syncMissingToggleLabel();
     renderVisibleAcceptedPoints();
@@ -1348,31 +1490,26 @@
       inspectionMessage.textContent = 'Select a Points List first.';
       return;
     }
-    const matches = [...pendingEventDates.entries()].map(([point, timestamp]) => ({
-      point,
-      timestamp,
-    }));
-    if (!matches.length) {
+    if (!pendingEventDates.size) {
       inspectionMessage.textContent = 'No pending dates to accept.';
       return;
     }
     inspectionMessage.textContent = 'Accepting matched results...';
-    const response = await fetch(`/api/inspections/${currentInspectionId}/event-dates/save`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ point_list_id: currentPointListId, matches }),
-    });
-    const result = await response.json();
-    if (!response.ok || result.error) {
-      inspectionMessage.textContent = result.error || result.detail || 'Saving dates failed.';
+    const result = await savePendingEventMatches();
+    if (result.error) {
+      inspectionMessage.textContent = result.error;
       return;
     }
-    pendingEventDates = new Map();
     await openInspection(currentInspectionId, currentPointListId);
-    inspectionMessage.textContent = `Saved ${result.saved} new dates. Ignored existing: ${result.ignored_existing}.`;
+    inspectionMessage.textContent = `Saved ${result.saved} new dates. Ignored existing: ${result.ignoredExisting}.`;
   });
 
-  clearEventDatesButton?.addEventListener('click', async () => {
+  saveAllInspectionButton?.addEventListener('click', async () => {
+    await saveAllInspectionChanges();
+  });
+
+  inspectionMenuClearDatesOption?.addEventListener('click', async () => {
+    closeInspectionMenu();
     if (!currentInspectionId) {
       inspectionMessage.textContent = 'No inspection selected.';
       return;
@@ -1397,7 +1534,98 @@
     inspectionMessage.textContent = `Cleared ${result.cleared} saved dates.`;
   });
 
-  exportPdfButton?.addEventListener('click', async () => {
+  inspectionMenuEditNfpaOption?.addEventListener('click', async () => {
+    closeInspectionMenu();
+    await openNfpaDraftModal();
+  });
+
+  closeNfpaDraftButton?.addEventListener('click', () => {
+    closeNfpaDraftModal();
+  });
+
+  cancelNfpaDraftButton?.addEventListener('click', () => {
+    closeNfpaDraftModal();
+  });
+
+  nfpaDraftModal?.addEventListener('click', (event) => {
+    if (event.target === nfpaDraftModal) {
+      closeNfpaDraftModal();
+    }
+  });
+
+  saveNfpaDraftButton?.addEventListener('click', async () => {
+    await savePdfTemplateDraft();
+  });
+
+  pdfTemplateKeySelect?.addEventListener('change', async () => {
+    activePdfTemplateKey = (pdfTemplateKeySelect.value || 'nfpa72').trim() || 'nfpa72';
+    if (!nfpaDraftModal?.classList.contains('open')) {
+      return;
+    }
+    nfpaDraftMessage.textContent = 'Loading selected template...';
+    const loaded = await loadPdfTemplateDraft();
+    if (loaded.error) {
+      nfpaDraftMessage.textContent = loaded.error;
+      return;
+    }
+    nfpaDraftMessage.textContent = loaded.payload?.updated_at
+      ? `Loaded saved draft. Last update: ${loaded.payload.updated_at}`
+      : 'Template loaded. Edit fields and click Save.';
+  });
+
+  refreshPdfTemplateButton?.addEventListener('click', async () => {
+    if (!nfpaDraftModal?.classList.contains('open')) {
+      return;
+    }
+    nfpaDraftMessage.textContent = 'Reloading template...';
+    const loaded = await loadPdfTemplateDraft();
+    if (loaded.error) {
+      nfpaDraftMessage.textContent = loaded.error;
+      return;
+    }
+    nfpaDraftMessage.textContent = 'Template reloaded.';
+  });
+
+  downloadNfpaDraftButton?.addEventListener('click', async () => {
+    if (!currentInspectionId) {
+      nfpaDraftMessage.textContent = 'No inspection selected.';
+      return;
+    }
+    const didSave = await savePdfTemplateDraft();
+    if (!didSave) {
+      return;
+    }
+    nfpaDraftMessage.textContent = 'Downloading updated template...';
+    const response = await fetch(`/api/inspections/${currentInspectionId}/pdf-templates/${encodeURIComponent(activePdfTemplateKey)}/download`);
+    const contentType = (response.headers.get('Content-Type') || '').toLowerCase();
+    if (!response.ok || !contentType.includes('application/pdf')) {
+      let details = 'NFPA template download failed.';
+      try {
+        const errorResult = await response.json();
+        details = errorResult.error || errorResult.detail || details;
+      } catch {
+        details = `NFPA template download failed (${response.status}).`;
+      }
+      nfpaDraftMessage.textContent = details;
+      return;
+    }
+
+    const blob = await response.blob();
+    const disposition = response.headers.get('Content-Disposition') || '';
+    const match = disposition.match(/filename="?([^\"]+)"?/i);
+    const filename = match ? match[1] : 'NFPA72_template.pdf';
+    try {
+      const outcome = await savePdfWithDialog(blob, filename);
+      nfpaDraftMessage.textContent = outcome === 'saved'
+        ? `Template PDF saved: ${filename}`
+        : `Template PDF downloaded: ${filename}`;
+    } catch (error) {
+      nfpaDraftMessage.textContent = `Template PDF save failed: ${error?.message || 'unknown error'}`;
+    }
+  });
+
+  inspectionMenuExportPdfOption?.addEventListener('click', async () => {
+    closeInspectionMenu();
     if (!currentInspectionId) {
       inspectionMessage.textContent = 'No inspection selected.';
       return;
@@ -1413,12 +1641,6 @@
       location: String(point.location ?? '').trim(),
       event_date: String(point.editableEventDate ?? point.event_date ?? '').trim(),
     }));
-
-    const rowValidationError = validateRowsForExport(rows);
-    if (rowValidationError) {
-      inspectionMessage.textContent = rowValidationError;
-      return;
-    }
 
     const persisted = await persistAcceptedPoints(rows);
     if (persisted.error) {
@@ -1509,7 +1731,6 @@
   });
 
   async function bootstrap() {
-    syncPointListRemoveButtons();
     syncMissingToggleLabel();
     syncTableEditButtons();
     setEventFileName();

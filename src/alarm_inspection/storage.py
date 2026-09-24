@@ -105,6 +105,23 @@ class PointListEventDate(Base):
     source_filename: Mapped[str] = mapped_column(String(255), default="")
 
 
+class InspectionPdfDraft(Base):
+    __tablename__ = "inspection_pdf_drafts"
+
+    inspection_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    fields_json: Mapped[str] = mapped_column(String(20000), default="{}")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class InspectionPdfTemplateDraft(Base):
+    __tablename__ = "inspection_pdf_template_drafts"
+
+    inspection_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    template_key: Mapped[str] = mapped_column(String(80), primary_key=True)
+    fields_json: Mapped[str] = mapped_column(String(50000), default="{}")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
 def open_store():
     url = os.getenv("DATABASE_URL")
     if not url:

@@ -183,12 +183,12 @@ label {
   font-weight: 600;
   color: var(--text);
 }
-input, button, select {
+input, button, select, textarea {
   font: inherit;
   border-radius: 10px;
   box-sizing: border-box;
 }
-input, select {
+input, select, textarea {
   width: 100%;
   padding: 11px 13px;
   border: 1px solid var(--border);
@@ -196,14 +196,15 @@ input, select {
   color: var(--text);
 }
 input:focus,
-select:focus {
+select:focus,
+textarea:focus {
   outline: 2px solid var(--ring);
   outline-offset: 1px;
   border-color: var(--primary);
 }
 button {
   width: 100%;
-  padding: 11px 15px;
+  padding: 7px 15px;
   margin-top: 12px;
   background: var(--primary);
   color: #fff;
@@ -258,6 +259,9 @@ button:active {
   margin-top: 20px;
   box-shadow: var(--shadow);
 }
+#inspection-screen {
+  position: relative;
+}
 .hidden { display: none !important; }
 .row,
 .nav,
@@ -303,6 +307,108 @@ button:active {
   background: var(--panel-alt);
   border: 1px solid var(--border);
   border-radius: 14px;
+}
+.inspection-breadcrumb-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.inspection-breadcrumb {
+  margin-bottom: 8px;
+}
+.inspection-breadcrumb-link {
+  color: var(--primary-strong);
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.inspection-menu-wrap {
+  position: relative;
+}
+.inspection-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+#save-all-inspection {
+  width: auto;
+  margin: 0;
+  padding: 6px 12px;
+}
+#inspection-menu-button {
+  width: auto;
+  margin: 0;
+  padding: 6px 12px;
+  min-width: 44px;
+}
+#inspection-menu {
+  position: absolute;
+  right: 0;
+  top: 38px;
+  min-width: 220px;
+  padding: 6px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  z-index: 20;
+}
+.inspection-menu-option {
+  width: 100%;
+  margin: 0;
+  padding: 9px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--text);
+}
+.inspection-menu-option:hover {
+  background: #edf6ff;
+}
+.inspection-menu-option.disabled {
+  color: var(--muted);
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+.inspection-menu-option.disabled:hover {
+  background: transparent;
+}
+.inspection-busy-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(18, 30, 45, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 25;
+}
+.inspection-busy-card {
+  min-width: 280px;
+  max-width: 520px;
+  padding: 16px 18px;
+  border-radius: 12px;
+  background: #fff;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.inspection-busy-spinner {
+  width: 20px;
+  height: 20px;
+  border: 3px solid #d8e6f6;
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: inspection-spin 0.9s linear infinite;
+}
+.inspection-busy-text {
+  color: var(--text);
+  font-weight: 600;
+}
+@keyframes inspection-spin {
+  to { transform: rotate(360deg); }
 }
 .toolbar-group {
   justify-content: flex-start;
@@ -353,8 +459,8 @@ button:active {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 40px;
-  padding: 9px 13px;
+  min-height: 27px;
+  padding: 5px 13px;
   margin: 0;
   border-radius: 10px;
   background: var(--primary);
@@ -447,9 +553,6 @@ button:active {
   margin: 0;
   padding: 8px 10px;
 }
-#inspection-store-number {
-  background: #f2f7fd;
-}
 .inspection-actions-row {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -490,7 +593,7 @@ button:active {
 }
 .point-list {
   display: grid;
-  grid-template-columns: minmax(150px, 180px) minmax(220px, 1fr) auto;
+  grid-template-columns: minmax(150px, 220px) minmax(220px, 1fr);
   gap: 14px;
   align-items: center;
   padding: 14px;
@@ -502,11 +605,6 @@ button:active {
 .point-list input {
   margin: 0;
   min-width: 0;
-}
-.point-list .remove-point-list {
-  width: auto;
-  margin: 0;
-  justify-self: end;
 }
 .table {
   width: 100%;
@@ -583,6 +681,63 @@ button:active {
   border-radius: 10px;
   box-sizing: border-box;
 }
+.nfpa-template-controls {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin: 12px 0;
+}
+.nfpa-template-controls select {
+  max-width: 260px;
+}
+.nfpa-editor-grid {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  gap: 12px;
+  align-items: start;
+}
+.nfpa-preview-frame {
+  width: 100%;
+  min-height: 520px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+}
+.nfpa-fields-wrap {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+  padding: 10px;
+  max-height: 520px;
+  overflow: auto;
+}
+.nfpa-fields-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+.nfpa-field-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.nfpa-field-row label {
+  margin: 0;
+  font-size: 0.82rem;
+}
+.nfpa-fields-empty {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+.nfpa-draft-actions {
+  margin-top: 14px;
+}
+#nfpa-draft-message {
+  margin-top: 10px;
+  color: var(--muted);
+  white-space: pre-wrap;
+}
 #inspection-point-list-selector {
   margin-bottom: 0;
 }
@@ -614,15 +769,23 @@ button:active {
   .point-list {
     grid-template-columns: 1fr;
   }
-  .point-list .remove-point-list {
-    justify-self: stretch;
-  }
   .table {
     min-width: 440px;
   }
   .details-row,
   .inspection-actions-row {
     grid-template-columns: 1fr;
+  }
+  .nfpa-template-controls {
+    align-items: stretch;
+  }
+  .nfpa-editor-grid {
+    grid-template-columns: 1fr;
+  }
+  .nfpa-preview-frame,
+  .nfpa-fields-wrap {
+    min-height: 380px;
+    max-height: none;
   }
   .admin-grid {
     grid-template-columns: 1fr;
@@ -663,7 +826,7 @@ button:active {
   }
 }
 </style></head>
-<body><div class="page-header"><h1>Home Page</h1><div id="user-bar" class="hidden"><span id="active-user-label"></span><div id="avatar-wrap"><button type="button" id="avatar-button" class="secondary" title="Account menu">JP</button><div id="avatar-menu" class="hidden"><div id="avatar-menu-option-admin" class="avatar-menu-option hidden" role="menuitem" tabindex="0">Administration</div><div id="avatar-menu-option-logout" class="avatar-menu-option" role="menuitem" tabindex="0">Logout</div></div></div></div></div><p>Choose an existing inspection or create a new one.</p>
+<body><div class="page-header"><h1>Inspections</h1><div id="user-bar" class="hidden"><span id="active-user-label"></span><div id="avatar-wrap"><button type="button" id="avatar-button" class="secondary" title="Account menu">JP</button><div id="avatar-menu" class="hidden"><div id="avatar-menu-option-admin" class="avatar-menu-option hidden" role="menuitem" tabindex="0">Administration</div><div id="avatar-menu-option-logout" class="avatar-menu-option" role="menuitem" tabindex="0">Logout</div></div></div></div></div>
 
 <div id="login-screen" class="card auth-card">
 <h2>Login</h2>
@@ -704,31 +867,20 @@ button:active {
 <div id="admin-add-user-modal" class="modal"><div class="modal-card"><button class="close" id="close-admin-add-user">Close</button><h2>Add User</h2><form id="admin-add-user-form"><label for="admin-add-user-email">Email</label><input id="admin-add-user-email" type="email" placeholder="user@example.com" required><div class="delete-actions"><button type="submit" id="confirm-admin-add-user" class="primary">OK</button><button type="button" id="cancel-admin-add-user" class="secondary">Cancel</button></div></form></div></div>
 
 <div id="create-screen" class="card hidden">
-<div class="nav"><button type="button" id="back-home-from-create" class="secondary">Back to Home</button></div>
-<h2>Create New Inspection</h2>
+<div class="nav"><button type="button" id="back-home-from-create" class="secondary">Back to Inspection</button></div>
+<h2>Add Points List</h2>
 <form id="inspection-form">
-<label for="store_number">Store number</label><input id="store_number" required>
-<label for="address">Address</label><input id="address" required>
-<label>Points Lists by security panel</label><div id="point-lists"><div class="point-list"><select name="point_list_category" required><option>Combo</option><option>Fire</option><option>Burglar</option><option>Gas Station</option></select><input name="points_files" type="file" accept=".xls,.xlsx,.pdf" required><button type="button" class="remove-point-list danger">Delete List</button></div></div><div class="create-actions"><button type="button" id="add-list">Add another Points List</button><button type="button" id="preview-list">Preview Points Lists</button></div><div id="preview"></div>
+<label>Security Panel Type</label><div id="point-lists"><div class="point-list"><select name="point_list_category" required><option>Combo</option><option>Fire</option><option>Burglar</option><option>Gas Station</option></select><input name="points_files" type="file" accept=".xls,.xlsx,.pdf" required></div></div><div class="create-actions"><button type="button" id="preview-list">Preview Points List</button></div><div id="preview"></div>
 <input type="hidden" name="point_decisions" id="point-decisions" value="[]"></form><div id="message"></div></div>
 
 <div id="inspection-screen" class="card hidden">
-<div class="toolbar">
-  <div class="toolbar-group">
-    <button type="button" id="back-home-from-inspection" class="secondary">Back to Home</button>
-    <button type="button" id="clear-event-dates" class="secondary">Clear Dates</button>
-  </div>
-  <div class="toolbar-group">
-    <button type="button" id="refresh-inspection" class="ghost">Refresh</button>
-    <button type="button" id="toggle-missing-points" class="ghost">Show Missing Points Only</button>
-  </div>
-</div>
+<div class="inspection-breadcrumb-row"><div class="inspection-breadcrumb"><a href="#" id="home-link-from-inspection" class="inspection-breadcrumb-link">Home</a></div><div class="inspection-header-actions"><button type="button" id="save-all-inspection" class="secondary">Save</button><div id="inspection-menu-wrap" class="inspection-menu-wrap"><button type="button" id="inspection-menu-button" class="secondary" title="Inspection menu">☰</button><div id="inspection-menu" class="hidden"><div id="inspection-menu-option-open-another" class="inspection-menu-option disabled" role="menuitem" aria-disabled="true" tabindex="-1" title="Not ready yet">Open Another Inspection (coming soon)</div><div id="inspection-menu-option-add-point-list" class="inspection-menu-option" role="menuitem" tabindex="0">Add New Points List</div><div id="inspection-menu-option-delete-point-list" class="inspection-menu-option" role="menuitem" tabindex="0">Delete Points List</div><div id="inspection-menu-option-edit-nfpa" class="inspection-menu-option" role="menuitem" tabindex="0">Edit NFPA PDF</div><div id="inspection-menu-option-toggle-missing" class="inspection-menu-option" role="menuitem" tabindex="0">Show Missing Points Only</div><div id="inspection-menu-option-export-pdf" class="inspection-menu-option" role="menuitem" tabindex="0">Export PDF</div><div id="inspection-menu-option-clear-dates" class="inspection-menu-option" role="menuitem" tabindex="0">Clear Dates</div></div></div></div></div>
 
 <div class="inspection-details">
   <div class="details-row">
     <div class="compact-field">
       <label for="inspection-store-number">Store Number</label>
-      <input id="inspection-store-number" type="text" readonly>
+      <input id="inspection-store-number" type="text">
     </div>
     <div class="compact-field">
       <label for="inspection-store-type">Store Type</label>
@@ -779,15 +931,16 @@ button:active {
   </form>
 </div>
 
-<div class="accepted-header-row"><h3>Accepted Points</h3><div class="user-actions"><button type="button" id="edit-table" class="ghost">Edit</button><button type="button" id="save-table" class="ghost">Save</button><button type="button" id="save-event-dates" class="ghost">Accept Results</button><button type="button" id="export-pdf" class="ghost">Export PDF</button></div></div>
+<div class="accepted-header-row"><h3>Accepted Points</h3><div class="user-actions"><button type="button" id="edit-table" class="ghost">Edit</button><button type="button" id="save-table" class="ghost">Save</button><button type="button" id="save-event-dates" class="ghost">Accept Results</button></div></div>
 <table class="table"><thead><tr><th>Device Type</th><th>Address</th><th>Location</th><th>Test Result</th></tr></thead><tbody id="accepted-points-body"></tbody></table>
 <div id="inspection-message"></div>
+<div id="inspection-busy-overlay" class="inspection-busy-overlay hidden"><div class="inspection-busy-card"><div class="inspection-busy-spinner" aria-hidden="true"></div><div id="inspection-busy-text" class="inspection-busy-text">Working...</div></div></div>
 </div>
+
+<div id="nfpa-draft-modal" class="modal"><div class="modal-card"><button class="close" id="close-nfpa-draft">Close</button><h2>Embedded PDF Editor</h2><p>Edit the PDF fields directly in this screen. Save, come back later, and download when finished.</p><div class="nfpa-template-controls"><label for="pdf-template-key">Template</label><select id="pdf-template-key"><option value="nfpa72">NFPA 72 System Record</option></select><button type="button" id="refresh-pdf-template" class="ghost">Reload Template</button></div><div class="nfpa-editor-grid"><iframe id="pdf-template-preview" class="nfpa-preview-frame" title="PDF template preview"></iframe><div class="nfpa-fields-wrap"><div id="pdf-template-fields" class="nfpa-fields-grid"></div></div></div><div class="delete-actions nfpa-draft-actions"><button type="button" id="save-nfpa-draft" class="primary">Save</button><button type="button" id="download-nfpa-draft" class="ghost">Download Updated Version</button><button type="button" id="cancel-nfpa-draft" class="secondary">Close</button></div><div id="nfpa-draft-message"></div></div></div>
 
 <div id="delete-inspection-modal" class="modal"><div class="modal-card"><button class="close" id="close-delete-inspection">Close</button><h2>Delete Inspection</h2><label for="delete-inspection-selector">Select inspection</label><select id="delete-inspection-selector"></select><div class="delete-actions"><button type="button" id="confirm-delete-inspection" class="danger">Delete</button><button type="button" id="cancel-delete-inspection" class="secondary">Cancel</button></div></div></div>
 
-<div id="review-confirm-modal" class="modal"><div class="modal-card"><button class="close" id="close-review-confirm">Close</button><h2>Confirm Review</h2><p id="review-confirm-summary">This will commit all reviewed decisions and create the inspection.</p><div class="delete-actions"><button type="button" id="confirm-finish-review" class="primary">Confirm and Create Inspection</button><button type="button" id="cancel-finish-review" class="secondary">Cancel</button></div></div></div>
-
-<div id="preview-modal" class="modal"><div class="modal-card"><button class="close" id="close-preview">Close</button><h2>Points List Review</h2><label for="preview-list-selector">Points List</label><select id="preview-list-selector"></select><p id="preview-summary"></p><p>Edit descriptions and use each row's status button to toggle Accept or Review. Rows remain visible until you delete them.</p><div class="nav"><button type="button" class="delete-review-action">Delete all Review rows</button><button type="button" class="save-review-action">Save review decisions</button><button type="button" class="finish-review-action">Finish Review</button></div><table class="table"><thead><tr><th>Point</th><th>Description</th><th>Status</th></tr></thead><tbody id="preview-body"></tbody></table><div class="nav"><button type="button" class="delete-review-action">Delete all Review rows</button><button type="button" class="save-review-action">Save review decisions</button><button type="button" class="finish-review-action">Finish Review</button></div></div></div>
+<div id="preview-modal" class="modal"><div class="modal-card"><button class="close" id="close-preview">Close</button><h2>Points List Review</h2><label for="preview-list-selector">Points List</label><select id="preview-list-selector"></select><p id="preview-summary"></p><p>Edit descriptions and use each row's status button to toggle Accept or Review. Rows remain visible until you delete them.</p><div class="nav"><button type="button" class="delete-review-action">Delete all Review rows</button><button type="button" class="save-review-action">Save Decisions</button></div><table class="table"><thead><tr><th>Point</th><th>Description</th><th>Status</th></tr></thead><tbody id="preview-body"></tbody></table></div></div>
 <script src="/review.js"></script>
 </body></html>
