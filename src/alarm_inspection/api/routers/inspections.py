@@ -3,10 +3,10 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 import json
 from pathlib import Path
-import shutil
 from uuid import uuid4
 
 from fastapi import APIRouter, Body, File, Form, Query, UploadFile
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from alarm_inspection.api.common import (
     UPLOAD_ROOT,
     as_bool,
@@ -31,24 +31,39 @@ from alarm_inspection.storage import (
 )
 
 
+class NewInspection(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    store_number: str = Field(min_length=1, max_length=100)
+    address: str = Field(min_length=1, max_length=500)
+    store_type: str = Field(default="Walmart - Supercenter", min_length=1, max_length=80)
+    inspector_name: str = Field(default="", max_length=120)
+    start_date: date
+    completion_date: date
+
+    @model_validator(mode="after")
+    def check_dates(self):
+        if self.completion_date < self.start_date:
+            raise ValueError("End Date must be on or after Start Date.")
+        return self
+
+
 def create_router(store) -> APIRouter:
     router = APIRouter(prefix="/api/inspections", tags=["inspections"])
 
     @router.post("/blank")
-    def create_blank_inspection() -> dict:
+    def create_blank_inspection(payload: NewInspection) -> dict:
         inspection_id = str(uuid4())
         created_at = datetime.now(timezone.utc)
-        inferred_date = date.today()
         with store.begin() as session:
+            if find_inspection_identity_conflict(
+                session, payload.store_type, payload.store_number, payload.start_date
+            ):
+                return {"error": "An inspection already exists for this store and start date."}
             session.add(
                 Inspection(
                     id=inspection_id,
-                    store_number="",
-                    address="",
-                    store_type="Walmart - Supercenter",
-                    inspector_name="",
-                    start_date=inferred_date,
-                    completion_date=inferred_date,
+                    **payload.model_dump(),
                     status="pending_event_history",
                     created_at=created_at,
                 )
@@ -166,7 +181,12 @@ def create_router(store) -> APIRouter:
     @router.get("")
     def list_inspections() -> list[dict]:
         with store() as session:
-            rows = session.query(Inspection).order_by(Inspection.created_at.desc()).all()
+            rows = (
+                session.query(Inspection)
+                .filter(Inspection.status != "deleted")
+                .order_by(Inspection.created_at.desc())
+                .all()
+            )
             return [
                 {
                     "id": row.id,
@@ -182,30 +202,20 @@ def create_router(store) -> APIRouter:
 
     @router.delete("/{inspection_id}")
     def delete_inspection(inspection_id: str) -> dict:
-        upload_path = UPLOAD_ROOT / inspection_id
         with store.begin() as session:
             inspection = session.get(Inspection, inspection_id)
-            if inspection is None:
+            if inspection is None or inspection.status == "deleted":
                 return {"error": "inspection not found"}
+            # Retain original uploads, accepted mappings, and decisions for audit.
+            inspection.status = "deleted"
 
-            session.query(PointListEventDate).filter(PointListEventDate.inspection_id == inspection_id).delete(
-                synchronize_session=False
-            )
-            session.query(PointListDecision).filter(PointListDecision.inspection_id == inspection_id).delete(
-                synchronize_session=False
-            )
-            session.query(PointList).filter(PointList.inspection_id == inspection_id).delete(synchronize_session=False)
-            session.query(SourceFile).filter(SourceFile.inspection_id == inspection_id).delete(synchronize_session=False)
-            session.delete(inspection)
-
-        shutil.rmtree(upload_path, ignore_errors=True)
         return {"id": inspection_id, "status": "deleted"}
 
     @router.get("/{inspection_id}")
     def get_inspection(inspection_id: str, point_list_id: str | None = Query(default=None)) -> dict:
         with store() as session:
             inspection = session.get(Inspection, inspection_id)
-            if inspection is None:
+            if inspection is None or inspection.status == "deleted":
                 return {"error": "inspection not found"}
 
             point_lists = (
@@ -277,7 +287,7 @@ def create_router(store) -> APIRouter:
     def update_inspection_details(inspection_id: str, payload: dict = Body(default={})) -> dict:
         with store.begin() as session:
             inspection = session.get(Inspection, inspection_id)
-            if inspection is None:
+            if inspection is None or inspection.status == "deleted":
                 return {"error": "inspection not found"}
 
             store_number = str(payload.get("store_number") or "").strip()

@@ -6,7 +6,7 @@ This online application turns alarm Points Lists and Event History files into re
 
 ## Workflow
 
-1. Create an inspection with store number, address, city, state, and inspection dates.
+1. Enter the new inspection details and choose Save or Cancel. Save creates the inspection; Cancel discards the form without adding a record.
 2. Upload one or more Points Lists, one per security panel.
 3. Assign each Points List a category: Fire, Burglar, Combo, or Gas Station.
 4. Parse the files and show a review modal before committing the inspection.
@@ -16,6 +16,8 @@ This online application turns alarm Points Lists and Event History files into re
 8. Retain successful point-to-time mappings across uploads until every required point is mapped.
 9. Resolve missing, duplicate, conflicting, or malformed mappings.
 10. Generate the final PDF only after all required results and mappings are complete.
+
+Inspections can be deleted from Home or from an open inspection after explicit confirmation. Deleted inspections disappear from the active list and cannot be opened or edited. Original uploads, review decisions, and successful mappings remain stored for audit.
 
 ## Points List rules
 

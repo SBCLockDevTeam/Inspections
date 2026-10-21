@@ -33,6 +33,12 @@
   const closeAdminAddUserButton = document.querySelector('#close-admin-add-user');
   const cancelAdminAddUserButton = document.querySelector('#cancel-admin-add-user');
 
+  const newInspectionModal = document.querySelector('#new-inspection-modal');
+  const newInspectionForm = document.querySelector('#new-inspection-form');
+  const newInspectionMessage = document.querySelector('#new-inspection-message');
+  const saveNewInspectionButton = document.querySelector('#save-new-inspection');
+  const cancelNewInspectionButton = document.querySelector('#cancel-new-inspection');
+  let savingNewInspection = false;
   const startCreateButton = document.querySelector('#start-create');
   const backHomeFromCreate = document.querySelector('#back-home-from-create');
   const homeLinkFromInspection = document.querySelector('#home-link-from-inspection');
@@ -329,7 +335,7 @@
     }
   }
 
-  function openDeleteInspectionModal() {
+  function openDeleteInspectionModal(selectedId = null) {
     if (!deleteInspectionModal || !deleteInspectionSelector) {
       return;
     }
@@ -344,7 +350,7 @@
       }
       deleteInspectionSelector.disabled = false;
       confirmDeleteInspectionButton.disabled = false;
-      deleteInspectionSelector.value = inspectionPicker.value || inspectionOptions[0].id;
+      deleteInspectionSelector.value = selectedId || inspectionPicker.value || inspectionOptions[0].id;
     }
     deleteInspectionModal.classList.add('open');
   }
@@ -353,19 +359,57 @@
     deleteInspectionModal?.classList.remove('open');
   }
 
-  async function createBlankInspection() {
-    homeMessage.textContent = 'Creating blank inspection...';
-    const response = await fetch('/api/inspections/blank', { method: 'POST' });
-    const result = await response.json();
-    if (!response.ok || result.error) {
-      homeMessage.textContent = result.error || result.detail || 'Creating blank inspection failed.';
-      return false;
-    }
-    await loadInspections();
-    await openInspection(result.id);
-    homeMessage.textContent = '';
-    return true;
+  function closeNewInspection() {
+    if (savingNewInspection) return;
+    newInspectionModal.classList.remove('open');
+    newInspectionForm.reset();
+    newInspectionMessage.textContent = '';
   }
+
+  newInspectionForm?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (savingNewInspection) return;
+    savingNewInspection = true;
+    saveNewInspectionButton.disabled = true;
+    cancelNewInspectionButton.disabled = true;
+    newInspectionMessage.textContent = 'Saving inspection...';
+    let savedId = null;
+    try {
+      const response = await fetch('/api/inspections/blank', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(Object.fromEntries(new FormData(newInspectionForm))),
+      });
+      const result = await response.json();
+      if (!response.ok || result.error) {
+        throw new Error(result.error || (Array.isArray(result.detail)
+          ? result.detail.map((item) => item.msg).join(' ')
+          : result.detail) || 'Saving inspection failed.');
+      }
+      savedId = result.id;
+    } catch (error) {
+      newInspectionMessage.textContent = error.message || 'Saving inspection failed.';
+    } finally {
+      savingNewInspection = false;
+      saveNewInspectionButton.disabled = false;
+      cancelNewInspectionButton.disabled = false;
+    }
+    if (savedId) {
+      closeNewInspection();
+      await loadInspections();
+      await openInspection(savedId);
+    }
+  });
+
+  cancelNewInspectionButton?.addEventListener('click', closeNewInspection);
+  newInspectionModal?.addEventListener('click', (event) => {
+    if (event.target === newInspectionModal) closeNewInspection();
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && newInspectionModal?.classList.contains('open')) {
+      closeNewInspection();
+    }
+  });
 
   async function addPointsListToInspection() {
     if (!currentInspectionId) {
@@ -1133,8 +1177,20 @@
     }
   });
 
-  startCreateButton?.addEventListener('click', async () => {
-    await createBlankInspection();
+  startCreateButton?.addEventListener('click', () => {
+    newInspectionForm.reset();
+    const today = new Date();
+    const localDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    newInspectionForm.elements.start_date.value = localDate;
+    newInspectionForm.elements.completion_date.value = localDate;
+    newInspectionMessage.textContent = '';
+    newInspectionModal.classList.add('open');
+    newInspectionForm.elements.store_number.focus();
+  });
+
+  document.querySelector('#delete-open-inspection')?.addEventListener('click', async () => {
+    await loadInspections();
+    openDeleteInspectionModal(currentInspectionId);
   });
 
   deleteInspectionButton?.addEventListener('click', () => {
@@ -1152,7 +1208,7 @@
     }
     const selected = inspectionOptions.find((item) => item.id === selectedId);
     const label = selected ? formatInspectionLabel(selected) : selectedId;
-    const confirmed = window.confirm(`Delete this inspection?\n\n${label}\n\nClick OK to confirm or Cancel to keep it.`);
+    const confirmed = window.confirm(`Delete this inspection?\n\n${label}\n\nIt will be removed from the inspection list. Source files and review decisions are retained for audit.\n\nClick OK to confirm or Cancel to keep it.`);
     if (!confirmed) {
       return;
     }
@@ -1173,6 +1229,7 @@
 
     closeDeleteInspectionModal();
     await loadInspections();
+    showScreen('home');
     homeMessage.textContent = 'Inspection deleted.';
   });
 

@@ -866,6 +866,19 @@ button:active {
 
 <div id="admin-add-user-modal" class="modal"><div class="modal-card"><button class="close" id="close-admin-add-user">Close</button><h2>Add User</h2><form id="admin-add-user-form"><label for="admin-add-user-email">Email</label><input id="admin-add-user-email" type="email" placeholder="user@example.com" required><div class="delete-actions"><button type="submit" id="confirm-admin-add-user" class="primary">OK</button><button type="button" id="cancel-admin-add-user" class="secondary">Cancel</button></div></form></div></div>
 
+<div id="new-inspection-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="new-inspection-title"><div class="modal-card">
+<h2 id="new-inspection-title">Create New Inspection</h2>
+<form id="new-inspection-form">
+<label for="new-store-number">Store Number</label><input id="new-store-number" name="store_number" type="text" required>
+<label for="new-store-type">Store Type</label><select id="new-store-type" name="store_type"><option>Walmart - Supercenter</option><option>Walmart - Neighborhood Market</option><option>Sam's Club</option></select>
+<label for="new-address">Address</label><input id="new-address" name="address" type="text" required>
+<label for="new-inspector">Inspector</label><input id="new-inspector" name="inspector_name" type="text">
+<label for="new-start-date">Start Date</label><input id="new-start-date" name="start_date" type="date" required>
+<label for="new-end-date">End Date</label><input id="new-end-date" name="completion_date" type="date" required>
+<div class="create-actions"><button type="submit" id="save-new-inspection">Save</button><button type="button" id="cancel-new-inspection" class="secondary">Cancel</button></div>
+<div id="new-inspection-message" role="status"></div>
+</form></div></div>
+
 <div id="create-screen" class="card hidden">
 <div class="nav"><button type="button" id="back-home-from-create" class="secondary">Back to Inspection</button></div>
 <h2>Add Points List</h2>
@@ -874,7 +887,7 @@ button:active {
 <input type="hidden" name="point_decisions" id="point-decisions" value="[]"></form><div id="message"></div></div>
 
 <div id="inspection-screen" class="card hidden">
-<div class="inspection-breadcrumb-row"><div class="inspection-breadcrumb"><a href="#" id="home-link-from-inspection" class="inspection-breadcrumb-link">Home</a></div><div class="inspection-header-actions"><button type="button" id="save-all-inspection" class="secondary">Save</button><div id="inspection-menu-wrap" class="inspection-menu-wrap"><button type="button" id="inspection-menu-button" class="secondary" title="Inspection menu">☰</button><div id="inspection-menu" class="hidden"><div id="inspection-menu-option-open-another" class="inspection-menu-option disabled" role="menuitem" aria-disabled="true" tabindex="-1" title="Not ready yet">Open Another Inspection (coming soon)</div><div id="inspection-menu-option-add-point-list" class="inspection-menu-option" role="menuitem" tabindex="0">Add New Points List</div><div id="inspection-menu-option-delete-point-list" class="inspection-menu-option" role="menuitem" tabindex="0">Delete Points List</div><div id="inspection-menu-option-edit-nfpa" class="inspection-menu-option" role="menuitem" tabindex="0">Edit NFPA PDF</div><div id="inspection-menu-option-toggle-missing" class="inspection-menu-option" role="menuitem" tabindex="0">Show Missing Points Only</div><div id="inspection-menu-option-export-pdf" class="inspection-menu-option" role="menuitem" tabindex="0">Export PDF</div><div id="inspection-menu-option-clear-dates" class="inspection-menu-option" role="menuitem" tabindex="0">Clear Dates</div></div></div></div></div>
+<div class="inspection-breadcrumb-row"><div class="inspection-breadcrumb"><a href="#" id="home-link-from-inspection" class="inspection-breadcrumb-link">Home</a></div><div class="inspection-header-actions"><button type="button" id="delete-open-inspection" class="danger">Delete Inspection</button><button type="button" id="save-all-inspection" class="secondary">Save</button><div id="inspection-menu-wrap" class="inspection-menu-wrap"><button type="button" id="inspection-menu-button" class="secondary" title="Inspection menu">☰</button><div id="inspection-menu" class="hidden"><div id="inspection-menu-option-open-another" class="inspection-menu-option disabled" role="menuitem" aria-disabled="true" tabindex="-1" title="Not ready yet">Open Another Inspection (coming soon)</div><div id="inspection-menu-option-add-point-list" class="inspection-menu-option" role="menuitem" tabindex="0">Add New Points List</div><div id="inspection-menu-option-delete-point-list" class="inspection-menu-option" role="menuitem" tabindex="0">Delete Points List</div><div id="inspection-menu-option-edit-nfpa" class="inspection-menu-option" role="menuitem" tabindex="0">Edit NFPA PDF</div><div id="inspection-menu-option-toggle-missing" class="inspection-menu-option" role="menuitem" tabindex="0">Show Missing Points Only</div><div id="inspection-menu-option-export-pdf" class="inspection-menu-option" role="menuitem" tabindex="0">Export PDF</div><div id="inspection-menu-option-clear-dates" class="inspection-menu-option" role="menuitem" tabindex="0">Clear Dates</div></div></div></div></div>
 
 <div class="inspection-details">
   <div class="details-row">

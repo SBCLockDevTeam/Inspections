@@ -31,7 +31,7 @@ def create_app():
     from alarm_inspection.api.routers.point_lists import create_router as create_point_lists_router
     from alarm_inspection.api.routers.ui import create_router as create_ui_router
     from alarm_inspection.api.security import SESSION_COOKIE
-    from alarm_inspection.storage import open_store
+    from alarm_inspection.storage import Inspection, open_store
 
     app = FastAPI(title="Alarm Inspection Processor", version="0.1.0")
     store = open_store()
@@ -59,6 +59,12 @@ def create_app():
                 status_code=403,
                 content={"error": "Password reset is required before continuing."},
             )
+        if path.startswith("/api/inspections/"):
+            inspection_id = path.split("/")[3]
+            with store() as session:
+                inspection = session.get(Inspection, inspection_id)
+                if inspection is not None and inspection.status == "deleted":
+                    return JSONResponse(status_code=404, content={"error": "inspection not found"})
         request.state.current_user = user
         return await call_next(request)
 

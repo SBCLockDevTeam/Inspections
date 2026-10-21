@@ -79,7 +79,7 @@ def find_inspection_identity_conflict(
 
     candidates = (
         session.query(Inspection)
-        .filter(Inspection.start_date == inspection_date_value)
+        .filter(Inspection.start_date == inspection_date_value, Inspection.status != "deleted")
         .all()
     )
     for candidate in candidates:
