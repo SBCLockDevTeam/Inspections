@@ -87,6 +87,29 @@ class PanelType(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
+class InspectionTask(Base):
+    __tablename__ = "inspection_tasks"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    text: Mapped[str] = mapped_column(String(200))
+    text_key: Mapped[str] = mapped_column(String(600), unique=True)
+    position: Mapped[int] = mapped_column(default=1)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class InspectionChecklistDecision(Base):
+    __tablename__ = "inspection_checklist_decisions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    inspection_id: Mapped[str] = mapped_column(String(36), index=True)
+    task_id: Mapped[str] = mapped_column(String(36), index=True)
+    task_text: Mapped[str] = mapped_column(String(200))
+    completed: Mapped[bool] = mapped_column(Boolean)
+    decided_by: Mapped[str] = mapped_column(String(36))
+    decided_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
 class SourceFile(Base):
     __tablename__ = "source_files"
 

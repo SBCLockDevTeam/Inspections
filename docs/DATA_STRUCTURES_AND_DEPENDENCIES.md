@@ -7,6 +7,9 @@ Defined in `src/alarm_inspection/storage.py`.
 - `User`
 - `UserSession`
 - `AppSetting`
+- `PanelType`
+- `InspectionTask`
+- `InspectionChecklistDecision`
 - `PointList`
 - `SourceFile`
 - `PointListDecision`
@@ -47,6 +50,7 @@ flowchart TD
 - `routers/auth.py`: login/session/profile/reset-password endpoints.
 - `routers/admin.py`: user and default-password admin operations.
 - `routers/inspections.py`: inspection CRUD, event-history upload, event-date save/clear.
+- `routers/inspection_tasks.py`: administrator task definitions and auditable per-inspection checklist decisions.
 - `routers/point_lists.py`: points-list preview parser endpoint.
 - `routers/ui.py`: homepage and review script delivery.
 

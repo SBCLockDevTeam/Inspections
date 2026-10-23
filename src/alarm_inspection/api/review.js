@@ -20,6 +20,13 @@
   const resetCurrentPassword = document.querySelector('#reset-current-password');
   const resetNewPassword = document.querySelector('#reset-new-password');
 
+  const inspectionTasksBody = document.querySelector('#inspection-tasks-body');
+  const inspectionTasksMessage = document.querySelector('#inspection-tasks-message');
+  const addInspectionTaskForm = document.querySelector('#add-inspection-task-form');
+  const checklistContainer = document.querySelector('#inspection-checklist');
+  const checklistMessage = document.querySelector('#checklist-message');
+  const checklistProgress = document.querySelector('#checklist-progress');
+  const checklistSaves = new Set();
   const adminTabs = [...document.querySelectorAll('#admin-screen [role=tab]')];
   const panelTypesBody = document.querySelector('#panel-types-body');
   const addPanelTypeForm = document.querySelector('#add-panel-type-form');
@@ -182,6 +189,145 @@
     adminMenuOption?.classList.toggle('hidden', !currentUser.is_admin);
   }
 
+  function taskError(result, fallback) {
+    if (Array.isArray(result.detail)) return result.detail.map((item) => item.msg).join(' ');
+    return result.error || result.detail || fallback;
+  }
+
+  async function loadAdminInspectionTasks() {
+    const response = await fetch('/api/admin/inspection-tasks');
+    const result = await response.json();
+    if (!response.ok) throw new Error(taskError(result, 'Unable to load inspection tasks.'));
+    inspectionTasksBody.replaceChildren();
+    for (const task of result.tasks) {
+      const row = document.createElement('tr');
+      row.dataset.taskId = task.id;
+      const textCell = document.createElement('td');
+      const text = document.createElement('input');
+      text.type = 'text'; text.value = task.text; text.maxLength = 200; text.required = true;
+      text.autocomplete = 'off'; text.name = `inspection_task_${task.id}`;
+      text.className = 'admin-task-text'; text.setAttribute('aria-label', 'Task description');
+      textCell.append(text);
+      const orderCell = document.createElement('td');
+      const position = document.createElement('input');
+      position.type = 'number'; position.required = true; position.min = '1'; position.max = '10000'; position.step = '1';
+      position.value = task.position; position.className = 'admin-task-order'; position.setAttribute('aria-label', 'Task order');
+      orderCell.append(position);
+      const activeCell = document.createElement('td');
+      const active = document.createElement('input');
+      active.type = 'checkbox'; active.checked = task.active; active.className = 'admin-task-active'; active.setAttribute('aria-label', 'Task active');
+      activeCell.append(active);
+      const actions = document.createElement('td');
+      const save = document.createElement('button');
+      save.type = 'button'; save.textContent = 'Save';
+      save.addEventListener('click', async () => {
+        if (!text.reportValidity() || !position.reportValidity()) return;
+        save.disabled = true;
+        inspectionTasksMessage.textContent = 'Saving task...';
+        try {
+          const response = await fetch(`/api/admin/inspection-tasks/${task.id}`, {
+            method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: text.value, position: Number(position.value), active: active.checked }),
+          });
+          const result = await response.json();
+          if (!response.ok) throw new Error(taskError(result, 'Saving task failed.'));
+          await loadAdminInspectionTasks();
+          inspectionTasksMessage.textContent = 'Task updated.';
+        } catch (error) { inspectionTasksMessage.textContent = error.message; }
+        finally { save.disabled = false; }
+      });
+      actions.append(save);
+      row.append(textCell, orderCell, activeCell, actions);
+      inspectionTasksBody.append(row);
+    }
+  }
+
+  addInspectionTaskForm?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const button = document.querySelector('#add-inspection-task');
+    if (button.disabled) return;
+    button.disabled = true;
+    inspectionTasksMessage.textContent = 'Adding task...';
+    const position = document.querySelector('#inspection-task-position').value;
+    const payload = { text: document.querySelector('#inspection-task-text').value };
+    if (position) payload.position = Number(position);
+    try {
+      const response = await fetch('/api/admin/inspection-tasks', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(taskError(result, 'Adding task failed.'));
+      addInspectionTaskForm.reset();
+      await loadAdminInspectionTasks();
+      inspectionTasksMessage.textContent = 'Task added.';
+    } catch (error) { inspectionTasksMessage.textContent = error.message; }
+    finally { button.disabled = false; }
+  });
+
+  function updateChecklistProgress() {
+    const boxes = [...checklistContainer.querySelectorAll('input[type=checkbox]')];
+    checklistProgress.textContent = boxes.length ? `${boxes.filter((box) => box.checked).length} of ${boxes.length} complete` : '';
+  }
+
+  async function loadInspectionChecklist(inspectionId) {
+    checklistContainer.textContent = 'Loading inspection tasks...';
+    checklistMessage.textContent = '';
+    checklistProgress.textContent = '';
+    await Promise.all([...checklistSaves]);
+    if (currentInspectionId !== inspectionId) return;
+    try {
+      const response = await fetch(`/api/inspections/${inspectionId}/checklist`);
+      const result = await response.json();
+      if (currentInspectionId !== inspectionId) return;
+      if (!response.ok) throw new Error(taskError(result, 'Unable to load the Check List.'));
+      checklistContainer.replaceChildren();
+      if (!result.tasks.length) checklistContainer.textContent = 'No inspection tasks have been added. An administrator can add them under Administration → Inspection Tasks.';
+      for (const task of result.tasks) {
+        const row = document.createElement('label');
+        row.className = 'inspection-task-row';
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox'; checkbox.checked = task.completed; checkbox.dataset.taskId = task.id;
+        const text = document.createElement('span'); text.textContent = task.text;
+        row.append(checkbox, text); checklistContainer.append(row);
+        checkbox.addEventListener('change', () => {
+          const completed = checkbox.checked;
+          checkbox.disabled = true;
+          const save = (async () => {
+            try {
+              const response = await fetch(`/api/inspections/${inspectionId}/checklist/${task.id}`, {
+                method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ completed }),
+              });
+              const result = await response.json();
+              if (!response.ok) throw new Error(taskError(result, 'Saving checklist item failed.'));
+              if (currentInspectionId === inspectionId) checklistMessage.textContent = 'Check List saved.';
+              return true;
+            } catch (error) {
+              checkbox.checked = !completed;
+              if (currentInspectionId === inspectionId) checklistMessage.textContent = error.message;
+              return false;
+            } finally {
+              checkbox.disabled = false;
+              if (currentInspectionId === inspectionId) updateChecklistProgress();
+            }
+          })();
+          checklistSaves.add(save);
+          save.finally(() => checklistSaves.delete(save));
+        });
+      }
+      updateChecklistProgress();
+    } catch (error) {
+      if (currentInspectionId !== inspectionId) return;
+      checklistContainer.textContent = '';
+      checklistMessage.textContent = error.message;
+    }
+  }
+
+  document.querySelector('#refresh-checklist')?.addEventListener('click', async () => {
+    if (!currentInspectionId) return;
+    await Promise.all([...checklistSaves]);
+    await loadInspectionChecklist(currentInspectionId);
+  });
+
   function showAdminTab(name) {
     for (const tab of adminTabs) {
       const active = tab.id === `admin-tab-${name}`;
@@ -219,6 +365,11 @@
   for (const [index, tab] of adminTabs.entries()) {
     tab.addEventListener('click', async () => {
       showAdminTab(tab.id.replace('admin-tab-', ''));
+      if (tab.id === 'admin-tab-inspection-tasks') {
+        inspectionTasksMessage.textContent = '';
+        try { await loadAdminInspectionTasks(); }
+        catch (error) { inspectionTasksMessage.textContent = error.message; }
+      }
       if (tab.id === 'admin-tab-panel-types') {
         panelTypeMessage.textContent = '';
         try { await loadPanelTypes(); }
@@ -836,6 +987,10 @@
       return;
     }
     inspectionMessage.textContent = 'Saving all changes...';
+    if ((await Promise.all([...checklistSaves])).includes(false)) {
+      inspectionMessage.textContent = 'A checklist item could not be saved. Please try again.';
+      return;
+    }
 
     await saveInspectionDetails();
 
@@ -1050,6 +1205,7 @@
     syncMissingToggleLabel();
     const uploaded = (inspection.event_history_files || []).join(', ');
     inspectionMessage.textContent = uploaded ? `Event History uploads: ${uploaded}` : '';
+    await loadInspectionChecklist(inspection.id);
     showScreen('inspection');
   }
 

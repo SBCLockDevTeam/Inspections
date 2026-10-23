@@ -23,6 +23,8 @@ Inspection names use `{store number}-{City}-{ST}-{MM-YYYY}`, based on the inspec
 
 Administration groups user accounts and password settings under Users and provides a separate Panel Types tab. Panel types are shared, persisted choices; only administrators can add them. Names are limited to 40 characters and duplicates are rejected regardless of capitalization or extra spaces. Existing Points List categories remain intact.
 
+The inspection form contains independently collapsible Store Data, Check List, and Points Lists & Events sections. Administrators manage shared checklist tasks under Administration → Inspection Tasks, including descriptions, order, and active status. Each inspection keeps its own checklist completion decisions with user, timestamp, and task text for audit. New tasks appear on existing and new inspections; deactivating a task retains earlier decisions. No checklist tasks are prefilled.
+
 ## Points List rules
 
 The original specification requires support for XLS, XLSX, and PDF source files with layout variation. The parser must identify point and description columns by headers/content rather than fixed letters, handle blank columns, combine descriptions rendered across multiple rows, reject unassigned and placeholder rows, and reject point addresses outside 1 through 255.

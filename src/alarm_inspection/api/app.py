@@ -30,6 +30,7 @@ def create_app():
     from alarm_inspection.api.routers.inspections import create_router as create_inspections_router
     from alarm_inspection.api.routers.point_lists import create_router as create_point_lists_router
     from alarm_inspection.api.routers.ui import create_router as create_ui_router
+    from alarm_inspection.api.routers.inspection_tasks import create_admin_router as create_tasks_admin_router, create_checklist_router
     from alarm_inspection.api.panel_types import seed_panel_types
     from alarm_inspection.api.security import SESSION_COOKIE
     from alarm_inspection.storage import Inspection, open_store
@@ -77,6 +78,8 @@ def create_app():
     app.include_router(create_ui_router())
     app.include_router(create_auth_router(store))
     app.include_router(create_admin_router(store))
+    app.include_router(create_tasks_admin_router(store))
+    app.include_router(create_checklist_router(store))
     app.include_router(create_inspections_router(store))
     app.include_router(create_point_lists_router(store))
     return app
