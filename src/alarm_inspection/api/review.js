@@ -123,6 +123,7 @@
   let currentPointListId = null;
   let inspectionOptions = [];
   let suppressInspectionDetailsSave = false;
+  let inspectionDetailsSaveQueue = Promise.resolve();
   let currentUser = null;
   let tableEditable = false;
   let activePdfTemplateKey = 'nfpa72';
@@ -852,10 +853,21 @@
     return text.includes('T') ? text.split('T')[0] : text;
   }
 
-  async function saveInspectionDetails() {
+  function saveInspectionDetails() {
+    const inspectionId = currentInspectionId;
+    if (suppressInspectionDetailsSave || !inspectionId) return Promise.resolve();
+    inspectionDetailsSaveQueue = inspectionDetailsSaveQueue.catch(() => {}).then(() => {
+      if (currentInspectionId !== inspectionId) return;
+      return persistInspectionDetails();
+    });
+    return inspectionDetailsSaveQueue;
+  }
+
+  async function persistInspectionDetails() {
     if (suppressInspectionDetailsSave || !currentInspectionId) {
       return;
     }
+    const inspectionId = currentInspectionId;
     const payload = {
       store_number: inspectionStoreNumber?.value || '',
       store_type: inspectionStoreType?.value || '',
@@ -866,7 +878,7 @@
       start_date: inspectionStartDate?.value || '',
       completion_date: inspectionEndDate?.value || '',
     };
-    const response = await fetch(`/api/inspections/${currentInspectionId}`, {
+    const response = await fetch(`/api/inspections/${inspectionId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -876,9 +888,10 @@
       inspectionMessage.textContent = result.error || result.detail || 'Saving inspection details failed.';
       return;
     }
+    if (currentInspectionId !== inspectionId) return;
     inspectionName.textContent = result.name;
-    inspectionCity.value = result.city || '';
-    inspectionState.value = result.state || '';
+    if (inspectionCity.value === payload.city) inspectionCity.value = result.city || '';
+    if (inspectionState.value === payload.state) inspectionState.value = result.state || '';
     inspectionMessage.textContent = 'Inspection details saved.';
     await loadInspections();
   }
