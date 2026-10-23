@@ -367,6 +367,14 @@ button:active {
   cursor: pointer;
   color: var(--text);
 }
+button.inspection-menu-option {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  text-align: left;
+  font-weight: inherit;
+  letter-spacing: normal;
+}
 .inspection-menu-option:hover {
   background: #edf6ff;
 }
@@ -906,7 +914,7 @@ button:active {
 <input type="hidden" name="point_decisions" id="point-decisions" value="[]"></form><div id="message"></div></div>
 
 <div id="inspection-screen" class="card hidden">
-<div class="inspection-breadcrumb-row"><div class="inspection-breadcrumb"><a href="#" id="home-link-from-inspection" class="inspection-breadcrumb-link">Home</a></div><div class="inspection-header-actions"><button type="button" id="delete-open-inspection" class="danger">Delete Inspection</button><button type="button" id="save-all-inspection" class="secondary">Save</button><div id="inspection-menu-wrap" class="inspection-menu-wrap"><button type="button" id="inspection-menu-button" class="secondary" title="Inspection menu">☰</button><div id="inspection-menu" class="hidden"><div id="inspection-menu-option-open-another" class="inspection-menu-option disabled" role="menuitem" aria-disabled="true" tabindex="-1" title="Not ready yet">Open Another Inspection (coming soon)</div><div id="inspection-menu-option-add-point-list" class="inspection-menu-option" role="menuitem" tabindex="0">Add New Points List</div><div id="inspection-menu-option-delete-point-list" class="inspection-menu-option" role="menuitem" tabindex="0">Delete Points List</div><div id="inspection-menu-option-edit-nfpa" class="inspection-menu-option" role="menuitem" tabindex="0">Edit NFPA PDF</div><div id="inspection-menu-option-toggle-missing" class="inspection-menu-option" role="menuitem" tabindex="0">Show Missing Points Only</div><div id="inspection-menu-option-export-pdf" class="inspection-menu-option" role="menuitem" tabindex="0">Export PDF</div><div id="inspection-menu-option-clear-dates" class="inspection-menu-option" role="menuitem" tabindex="0">Clear Dates</div></div></div></div></div>
+<div class="inspection-breadcrumb-row"><div class="inspection-breadcrumb"><a href="#" id="home-link-from-inspection" class="inspection-breadcrumb-link">Home</a></div><div class="inspection-header-actions"><button type="button" id="save-all-inspection" class="secondary">Save</button><div id="inspection-menu-wrap" class="inspection-menu-wrap"><button type="button" id="inspection-menu-button" class="secondary" title="Inspection menu">☰</button><div id="inspection-menu" class="hidden"><div id="inspection-menu-option-open-another" class="inspection-menu-option disabled" role="menuitem" aria-disabled="true" tabindex="-1" title="Not ready yet">Open Another Inspection (coming soon)</div><div id="inspection-menu-option-add-point-list" class="inspection-menu-option" role="menuitem" tabindex="0">Add New Points List</div><div id="inspection-menu-option-delete-point-list" class="inspection-menu-option" role="menuitem" tabindex="0">Delete Points List</div><div id="inspection-menu-option-edit-nfpa" class="inspection-menu-option" role="menuitem" tabindex="0">Edit NFPA PDF</div><div id="inspection-menu-option-toggle-missing" class="inspection-menu-option" role="menuitem" tabindex="0">Show Missing Points Only</div><div id="inspection-menu-option-export-pdf" class="inspection-menu-option" role="menuitem" tabindex="0">Export PDF</div><div id="inspection-menu-option-clear-dates" class="inspection-menu-option" role="menuitem" tabindex="0">Clear Dates</div><button type="button" id="delete-open-inspection" class="inspection-menu-option" role="menuitem">Delete Inspection</button></div></div></div></div>
 
 <h2 id="inspection-name"></h2>
 <div class="inspection-details">

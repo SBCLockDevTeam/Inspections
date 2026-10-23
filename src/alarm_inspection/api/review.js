@@ -1303,6 +1303,7 @@
   });
 
   document.querySelector('#delete-open-inspection')?.addEventListener('click', async () => {
+    closeInspectionMenu();
     await loadInspections();
     openDeleteInspectionModal(currentInspectionId);
   });
