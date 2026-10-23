@@ -22,6 +22,7 @@ from alarm_inspection.api.routers.inspections_export import register_export_rout
 from alarm_inspection.api.routers.inspections_nfpa_draft import register_nfpa_draft_routes
 from alarm_inspection.api.routers.inspections_points_workflow import register_point_workflow_routes
 from alarm_inspection.api.routers.inspections_templates import register_template_routes
+from alarm_inspection.api.panel_types import resolve_panel_type
 from alarm_inspection.domain.inspection_names import normalize_city, normalize_state, build_inspection_name
 from alarm_inspection.storage import (
     Inspection,
@@ -103,6 +104,13 @@ def create_router(store) -> APIRouter:
         state = normalize_state(state)
         if not city or not state:
             return {"error": "City and a valid two-letter state abbreviation are required."}
+        if len(point_list_categories) != len(points_files):
+            return {"error": "Each Points List must have a matching panel type."}
+        try:
+            with store() as session:
+                point_list_categories = [resolve_panel_type(session, name) for name in point_list_categories]
+        except ValueError as exc:
+            return {"error": str(exc)}
         inspection_id = str(uuid4())
         target = UPLOAD_ROOT / inspection_id
         target.mkdir(parents=True, exist_ok=True)

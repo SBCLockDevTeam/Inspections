@@ -117,6 +117,10 @@ body > p {
   margin-top: 8px;
   width: 100%;
 }
+.admin-tabs { display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 1px solid var(--border); padding-bottom: 12px; }
+.admin-tabs button { width: auto; margin: 0; }
+.admin-tabs button[aria-selected="false"] { background: var(--panel-alt); color: var(--primary-strong); box-shadow: none; }
+#add-panel-type-form { max-width: 560px; margin-bottom: 20px; }
 .admin-list-header {
   display: flex;
   align-items: center;
@@ -856,12 +860,25 @@ button:active {
 <div id="admin-screen" class="card hidden">
 <div class="nav"><button type="button" id="back-home-from-admin" class="secondary">Back to Home</button></div>
 <h2>Administration</h2>
+<div class="admin-tabs" role="tablist" aria-label="Administrative tasks">
+<button type="button" id="admin-tab-users" role="tab" aria-controls="admin-panel-users" aria-selected="true">Users</button>
+<button type="button" id="admin-tab-panel-types" role="tab" aria-controls="admin-panel-panel-types" aria-selected="false" tabindex="-1">Panel Types</button>
+</div>
+<div id="admin-panel-users" role="tabpanel" aria-labelledby="admin-tab-users">
 <div class="admin-grid">
 <div class="admin-list-header"><h3>User List</h3><button type="button" id="open-admin-add-user" class="secondary add-user-button">Add User</button></div>
 <table class="table"><thead><tr><th>Email</th><th>Admin</th><th>Actions</th></tr></thead><tbody id="admin-users-body"></tbody></table>
 <div class="settings-row"><div class="settings-field"><label for="admin-default-password">Default Password</label><input id="admin-default-password" type="text" required></div><label for="admin-force-reset-default" class="checkbox-inline"><input id="admin-force-reset-default" type="checkbox">Force Reset</label><button type="button" id="save-admin-settings">Save Settings</button><div class="inline-note">Default Password and Force Reset are global and apply to newly created users and reset actions.</div></div>
 </div>
-<div id="admin-message"></div>
+<div id="admin-message" role="status"></div>
+</div>
+<div id="admin-panel-panel-types" role="tabpanel" aria-labelledby="admin-tab-panel-types" class="hidden">
+<h3>Panel Types</h3>
+<p>Add the panel types technicians can select when uploading a Points List.</p>
+<form id="add-panel-type-form"><label for="panel-type-name">Panel Type Name</label><input id="panel-type-name" name="name" type="text" maxlength="40" required><button type="submit" id="add-panel-type">Add Panel Type</button></form>
+<div id="panel-type-message" role="status"></div>
+<table class="table"><thead><tr><th>Panel Type</th></tr></thead><tbody id="panel-types-body"></tbody></table>
+</div>
 </div>
 
 <div id="admin-add-user-modal" class="modal"><div class="modal-card"><button class="close" id="close-admin-add-user">Close</button><h2>Add User</h2><form id="admin-add-user-form"><label for="admin-add-user-email">Email</label><input id="admin-add-user-email" type="email" placeholder="user@example.com" required><div class="delete-actions"><button type="submit" id="confirm-admin-add-user" class="primary">OK</button><button type="button" id="cancel-admin-add-user" class="secondary">Cancel</button></div></form></div></div>
@@ -885,7 +902,7 @@ button:active {
 <div class="nav"><button type="button" id="back-home-from-create" class="secondary">Back to Inspection</button></div>
 <h2>Add Points List</h2>
 <form id="inspection-form">
-<label>Security Panel Type</label><div id="point-lists"><div class="point-list"><select name="point_list_category" required><option>Combo</option><option>Fire</option><option>Burglar</option><option>Gas Station</option></select><input name="points_files" type="file" accept=".xls,.xlsx,.pdf" required></div></div><div class="create-actions"><button type="button" id="preview-list">Preview Points List</button></div><div id="preview"></div>
+<label>Security Panel Type</label><div id="point-lists"><div class="point-list"><select name="point_list_category" required disabled><option value="">Loading panel types...</option></select><input name="points_files" type="file" accept=".xls,.xlsx,.pdf" required></div></div><div class="create-actions"><button type="button" id="preview-list">Preview Points List</button></div><div id="preview"></div>
 <input type="hidden" name="point_decisions" id="point-decisions" value="[]"></form><div id="message"></div></div>
 
 <div id="inspection-screen" class="card hidden">

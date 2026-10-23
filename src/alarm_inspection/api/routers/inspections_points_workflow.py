@@ -9,6 +9,7 @@ from fastapi import Body, File, Form, UploadFile
 
 from alarm_inspection.api.common import as_bool, ensure_inspection_upload_dir, parse_saved_timestamp
 from alarm_inspection.domain.points import normalize_point
+from alarm_inspection.api.panel_types import resolve_panel_type
 from alarm_inspection.storage import (
     Inspection,
     PointList,
@@ -52,6 +53,10 @@ def register_point_workflow_routes(router, store) -> None:
             if inspection is None:
                 return {"error": "inspection not found"}
 
+            try:
+                point_list_category = resolve_panel_type(session, point_list_category)
+            except ValueError as exc:
+                return {"error": str(exc)}
             target_dir = ensure_inspection_upload_dir(inspection_id)
             stamped = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
             stored_name = f"{stamped}-{filename}"

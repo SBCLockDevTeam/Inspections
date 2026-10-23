@@ -8,7 +8,7 @@ This online application turns alarm Points Lists and Event History files into re
 
 1. Enter the new inspection details and choose Save or Cancel. Save creates the inspection; Cancel discards the form without adding a record.
 2. Upload one or more Points Lists, one per security panel.
-3. Assign each Points List a category: Fire, Burglar, Combo, or Gas Station.
+3. Assign each Points List a configured panel type. The defaults are Fire, Burglar, Combo, and Gas Station; administrators can add more under Administration → Panel Types.
 4. Parse the files and show a review modal before committing the inspection.
 5. Edit descriptions, change each record between Accept and Review, and delete all remaining Review rows.
 6. Explicitly approve the reviewed Points Lists. Loading a file is not approval.
@@ -20,6 +20,8 @@ This online application turns alarm Points Lists and Event History files into re
 Inspections can be deleted from Home or from an open inspection after explicit confirmation. Deleted inspections disappear from the active list and cannot be opened or edited. Original uploads, review decisions, and successful mappings remain stored for audit.
 
 Inspection names use `{store number}-{City}-{ST}-{MM-YYYY}`, based on the inspection Start Date. The application generates the name for new and existing inspections and updates it when store number, city, state, or Start Date changes. New inspections require City and a two-letter State. Existing locations are extracted conservatively from their saved addresses; missing or ambiguous locations require correction. This naming convention does not change the final PDF filename format below.
+
+Administration groups user accounts and password settings under Users and provides a separate Panel Types tab. Panel types are shared, persisted choices; only administrators can add them. Names are limited to 40 characters and duplicates are rejected regardless of capitalization or extra spaces. Existing Points List categories remain intact.
 
 ## Points List rules
 

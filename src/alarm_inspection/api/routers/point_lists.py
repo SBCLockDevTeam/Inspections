@@ -7,10 +7,18 @@ from fastapi import APIRouter, File, Form, UploadFile
 
 from alarm_inspection.api.common import UPLOAD_ROOT
 from alarm_inspection.intake.points_list import parse_xlsx
+from alarm_inspection.api.panel_types import resolve_panel_type
+from alarm_inspection.storage import PanelType
 
 
-def create_router() -> APIRouter:
+def create_router(store) -> APIRouter:
     router = APIRouter(prefix="/api/point-lists", tags=["point-lists"])
+
+    @router.get("/types", tags=["panel-types"])
+    def list_panel_types() -> dict:
+        with store() as session:
+            rows = session.query(PanelType).order_by(PanelType.name.asc()).all()
+            return {"panel_types": [{"id": row.id, "name": row.name} for row in rows]}
 
     @router.post("/preview")
     async def preview_points_list(
@@ -20,6 +28,12 @@ def create_router() -> APIRouter:
         if point_list_categories and len(point_list_categories) != len(points_files):
             return {"error": "Each Points List must have a matching security-panel category."}
 
+        if point_list_categories:
+            try:
+                with store() as session:
+                    point_list_categories = [resolve_panel_type(session, name) for name in point_list_categories]
+            except ValueError as exc:
+                return {"error": str(exc)}
         previews = []
         for index, points_file in enumerate(points_files):
             filename = Path(points_file.filename or f"points-{index + 1}.xlsx").name

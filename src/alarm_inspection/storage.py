@@ -78,6 +78,15 @@ class PointList(Base):
     accepted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
+class PanelType(Base):
+    __tablename__ = "panel_types"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    name: Mapped[str] = mapped_column(String(40))
+    name_key: Mapped[str] = mapped_column(String(120), unique=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
 class SourceFile(Base):
     __tablename__ = "source_files"
 

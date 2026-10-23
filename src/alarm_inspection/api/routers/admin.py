@@ -16,11 +16,37 @@ from alarm_inspection.api.auth_support import (
 )
 from alarm_inspection.api.common import as_bool
 from alarm_inspection.api.security import password_record
-from alarm_inspection.storage import User, UserSession
+from alarm_inspection.storage import User, UserSession, PanelType
+from alarm_inspection.api.panel_types import clean_panel_type_name
+from sqlalchemy.exc import IntegrityError
 
 
 def create_router(store) -> APIRouter:
     router = APIRouter(prefix="/api/admin", tags=["admin"])
+
+    @router.post("/panel-types")
+    def admin_add_panel_type(request: Request, payload: dict = Body(default={})) -> Response:
+        try:
+            require_admin(request)
+        except PermissionError as exc:
+            return JSONResponse(status_code=403, content={"error": str(exc)})
+        try:
+            value = payload.get("name")
+            if not isinstance(value, str):
+                raise ValueError("Panel type name is required.")
+            name = clean_panel_type_name(value)
+        except ValueError as exc:
+            return JSONResponse(status_code=400, content={"error": str(exc)})
+        panel_type_id = str(uuid4())
+        try:
+            with store.begin() as session:
+                session.add(PanelType(id=panel_type_id, name=name, name_key=name.casefold(),
+                                      created_at=datetime.now(timezone.utc)))
+        except IntegrityError:
+            return JSONResponse(status_code=409, content={"error": "Panel type already exists."})
+        return JSONResponse(status_code=201, content={
+            "status": "created", "panel_type": {"id": panel_type_id, "name": name},
+        })
 
     @router.get("/users")
     def admin_list_users(request: Request) -> Response:

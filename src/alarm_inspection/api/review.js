@@ -20,6 +20,12 @@
   const resetCurrentPassword = document.querySelector('#reset-current-password');
   const resetNewPassword = document.querySelector('#reset-new-password');
 
+  const adminTabs = [...document.querySelectorAll('#admin-screen [role=tab]')];
+  const panelTypesBody = document.querySelector('#panel-types-body');
+  const addPanelTypeForm = document.querySelector('#add-panel-type-form');
+  const panelTypeName = document.querySelector('#panel-type-name');
+  const addPanelTypeButton = document.querySelector('#add-panel-type');
+  const panelTypeMessage = document.querySelector('#panel-type-message');
   const backHomeFromAdmin = document.querySelector('#back-home-from-admin');
   const openAdminAddUserButton = document.querySelector('#open-admin-add-user');
   const saveAdminSettingsButton = document.querySelector('#save-admin-settings');
@@ -176,8 +182,87 @@
     adminMenuOption?.classList.toggle('hidden', !currentUser.is_admin);
   }
 
+  function showAdminTab(name) {
+    for (const tab of adminTabs) {
+      const active = tab.id === `admin-tab-${name}`;
+      tab.setAttribute('aria-selected', String(active));
+      tab.tabIndex = active ? 0 : -1;
+      document.getElementById(tab.getAttribute('aria-controls')).classList.toggle('hidden', !active);
+    }
+  }
+
+  async function loadPanelTypes() {
+    const response = await fetch('/api/point-lists/types');
+    const result = await response.json();
+    if (!response.ok || result.error) throw new Error(result.error || 'Unable to load panel types.');
+    const types = result.panel_types || [];
+    for (const select of document.querySelectorAll('select[name=point_list_category]')) {
+      const selected = select.value || 'Combo';
+      select.replaceChildren();
+      for (const item of types) {
+        select.add(new Option(item.name, item.name, item.name === 'Combo', item.name === selected));
+      }
+      if (!select.value && types.length) select.value = types[0].name;
+      select.disabled = !types.length;
+    }
+    panelTypesBody?.replaceChildren();
+    for (const item of types) {
+      const row = document.createElement('tr');
+      const name = document.createElement('td');
+      name.textContent = item.name;
+      row.append(name);
+      panelTypesBody?.append(row);
+    }
+    return types;
+  }
+
+  for (const [index, tab] of adminTabs.entries()) {
+    tab.addEventListener('click', async () => {
+      showAdminTab(tab.id.replace('admin-tab-', ''));
+      if (tab.id === 'admin-tab-panel-types') {
+        panelTypeMessage.textContent = '';
+        try { await loadPanelTypes(); }
+        catch (error) { panelTypeMessage.textContent = error.message; }
+      }
+    });
+    tab.addEventListener('keydown', (event) => {
+      let next;
+      if (event.key === 'ArrowRight') next = (index + 1) % adminTabs.length;
+      if (event.key === 'ArrowLeft') next = (index + adminTabs.length - 1) % adminTabs.length;
+      if (event.key === 'Home') next = 0;
+      if (event.key === 'End') next = adminTabs.length - 1;
+      if (next === undefined) return;
+      event.preventDefault();
+      adminTabs[next].focus();
+      adminTabs[next].click();
+    });
+  }
+
+  addPanelTypeForm?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (addPanelTypeButton.disabled) return;
+    addPanelTypeButton.disabled = true;
+    panelTypeMessage.textContent = 'Adding panel type...';
+    try {
+      const response = await fetch('/api/admin/panel-types', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: panelTypeName.value }),
+      });
+      const result = await response.json();
+      if (!response.ok || result.error) throw new Error(result.error || 'Unable to add panel type.');
+      addPanelTypeForm.reset();
+      await loadPanelTypes();
+      panelTypeMessage.textContent = `Added ${result.panel_type.name}.`;
+    } catch (error) {
+      panelTypeMessage.textContent = error.message;
+    } finally {
+      addPanelTypeButton.disabled = false;
+    }
+  });
+
   async function openAdminScreen() {
     adminMessage.textContent = '';
+    showAdminTab('users');
     closeAdminAddUserModal();
     await loadAdminSettings();
     await loadAdminUsers();
@@ -1287,13 +1372,15 @@
     await openInspection(inspectionPicker.value);
   });
 
-  inspectionMenuAddPointListOption?.addEventListener('click', () => {
+  inspectionMenuAddPointListOption?.addEventListener('click', async () => {
     closeInspectionMenu();
     if (!currentInspectionId) {
       inspectionMessage.textContent = 'Open an inspection before adding a Points List.';
       return;
     }
     resetCreateForm();
+    try { await loadPanelTypes(); }
+    catch (error) { inspectionMessage.textContent = error.message; return; }
     message.textContent = '';
     showScreen('create');
   });
