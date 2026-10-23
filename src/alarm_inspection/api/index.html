@@ -875,7 +875,7 @@ button:active {
 <div id="admin-panel-panel-types" role="tabpanel" aria-labelledby="admin-tab-panel-types" class="hidden">
 <h3>Panel Types</h3>
 <p>Add the panel types technicians can select when uploading a Points List.</p>
-<form id="add-panel-type-form"><label for="panel-type-name">Panel Type Name</label><input id="panel-type-name" name="name" type="text" maxlength="40" required><button type="submit" id="add-panel-type">Add Panel Type</button></form>
+<form id="add-panel-type-form" autocomplete="off"><label for="panel-type-name">Panel Type Name</label><input id="panel-type-name" name="inspection_panel_type" type="text" autocomplete="off" maxlength="40" required><button type="submit" id="add-panel-type">Add Panel Type</button></form>
 <div id="panel-type-message" role="status"></div>
 <table class="table"><thead><tr><th>Panel Type</th></tr></thead><tbody id="panel-types-body"></tbody></table>
 </div>
