@@ -19,6 +19,8 @@ This online application turns alarm Points Lists and Event History files into re
 
 Inspections can be deleted from Home or from an open inspection after explicit confirmation. Deleted inspections disappear from the active list and cannot be opened or edited. Original uploads, review decisions, and successful mappings remain stored for audit.
 
+Inspection names use `{store number}-{City}-{ST}-{MM-YYYY}`, based on the inspection Start Date. The application generates the name for new and existing inspections and updates it when store number, city, state, or Start Date changes. New inspections require City and a two-letter State. Existing locations are extracted conservatively from their saved addresses; missing or ambiguous locations require correction. This naming convention does not change the final PDF filename format below.
+
 ## Points List rules
 
 The original specification requires support for XLS, XLSX, and PDF source files with layout variation. The parser must identify point and description columns by headers/content rather than fixed letters, handle blank columns, combine descriptions rendered across multiple rows, reject unassigned and placeholder rows, and reject point addresses outside 1 through 255.

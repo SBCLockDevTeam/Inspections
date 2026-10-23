@@ -6,7 +6,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from fastapi import APIRouter, Body, File, Form, Query, UploadFile
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from alarm_inspection.api.common import (
     UPLOAD_ROOT,
     as_bool,
@@ -22,6 +22,7 @@ from alarm_inspection.api.routers.inspections_export import register_export_rout
 from alarm_inspection.api.routers.inspections_nfpa_draft import register_nfpa_draft_routes
 from alarm_inspection.api.routers.inspections_points_workflow import register_point_workflow_routes
 from alarm_inspection.api.routers.inspections_templates import register_template_routes
+from alarm_inspection.domain.inspection_names import normalize_city, normalize_state, build_inspection_name
 from alarm_inspection.storage import (
     Inspection,
     PointList,
@@ -37,9 +38,27 @@ class NewInspection(BaseModel):
     store_number: str = Field(min_length=1, max_length=100)
     address: str = Field(min_length=1, max_length=500)
     store_type: str = Field(default="Walmart - Supercenter", min_length=1, max_length=80)
+    city: str = Field(min_length=1, max_length=120)
+    state: str = Field(min_length=2, max_length=2)
     inspector_name: str = Field(default="", max_length=120)
     start_date: date
     completion_date: date
+
+    @field_validator("city")
+    @classmethod
+    def clean_city(cls, value):
+        city = normalize_city(value)
+        if not city:
+            raise ValueError("City is required.")
+        return city
+
+    @field_validator("state")
+    @classmethod
+    def clean_state(cls, value):
+        state = normalize_state(value)
+        if not state:
+            raise ValueError("Enter a valid two-letter state abbreviation.")
+        return state
 
     @model_validator(mode="after")
     def check_dates(self):
@@ -68,16 +87,22 @@ def create_router(store) -> APIRouter:
                     created_at=created_at,
                 )
             )
-        return {"id": inspection_id, "status": "pending_event_history"}
+        return {"id": inspection_id, "name": build_inspection_name(payload.store_number, payload.city, payload.state, payload.start_date), "status": "pending_event_history"}
 
     @router.post("")
     async def create_inspection(
         store_number: str = Form(...),
         address: str = Form(...),
+        city: str = Form(...),
+        state: str = Form(...),
         point_list_categories: list[str] = Form(...),
         points_files: list[UploadFile] = File(...),
         point_decisions: str = Form("[]"),
     ) -> dict:
+        city = normalize_city(city)
+        state = normalize_state(state)
+        if not city or not state:
+            return {"error": "City and a valid two-letter state abbreviation are required."}
         inspection_id = str(uuid4())
         target = UPLOAD_ROOT / inspection_id
         target.mkdir(parents=True, exist_ok=True)
@@ -120,6 +145,8 @@ def create_router(store) -> APIRouter:
                     id=inspection_id,
                     store_number=store_number,
                     address=address,
+                    city=city,
+                    state=state,
                     store_type="Walmart - Supercenter",
                     inspector_name="",
                     start_date=inferred_date,
@@ -174,6 +201,7 @@ def create_router(store) -> APIRouter:
         return {
             "id": inspection_id,
             "status": "pending_event_history",
+            "name": build_inspection_name(store_number, city, state, inferred_date),
             "files": files,
             "accepted_points": sum(1 for d in decisions_to_store if as_bool(d.get("accepted"), default=False)),
         }
@@ -190,6 +218,9 @@ def create_router(store) -> APIRouter:
             return [
                 {
                     "id": row.id,
+                    "name": row.name,
+                    "city": row.city,
+                    "state": row.state,
                     "store_number": row.store_number,
                     "address": row.address,
                     "start_date": row.start_date.isoformat(),
@@ -257,6 +288,9 @@ def create_router(store) -> APIRouter:
             mapped_dates = {item.point_address: item.event_timestamp for item in saved_event_dates}
             return {
                 "id": inspection.id,
+                "name": inspection.name,
+                "city": inspection.city,
+                "state": inspection.state,
                 "store_number": inspection.store_number,
                 "store_type": inspection.store_type,
                 "address": inspection.address,
@@ -290,6 +324,11 @@ def create_router(store) -> APIRouter:
             if inspection is None or inspection.status == "deleted":
                 return {"error": "inspection not found"}
 
+            city = normalize_city(str(payload.get("city") or "")) if "city" in payload else inspection.city
+            state = normalize_state(str(payload.get("state") or "")) if "state" in payload else inspection.state
+            if ("city" in payload and (not city or len(city) > 120)) or ("state" in payload and not state):
+                return {"error": "City and a valid two-letter state abbreviation are required."}
+
             store_number = str(payload.get("store_number") or "").strip()
             store_type = str(payload.get("store_type") or "").strip()
             address = str(payload.get("address") or "").strip()
@@ -321,6 +360,8 @@ def create_router(store) -> APIRouter:
                 inspection.store_type = store_type
             if address:
                 inspection.address = address
+            inspection.city = city
+            inspection.state = state
             inspection.inspector_name = inspector_name
             if start_date is not None:
                 inspection.start_date = start_date
@@ -329,6 +370,9 @@ def create_router(store) -> APIRouter:
 
             return {
                 "id": inspection.id,
+                "name": inspection.name,
+                "city": inspection.city,
+                "state": inspection.state,
                 "store_number": inspection.store_number,
                 "store_type": inspection.store_type,
                 "address": inspection.address,

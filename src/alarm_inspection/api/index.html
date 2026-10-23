@@ -872,6 +872,8 @@ button:active {
 <label for="new-store-number">Store Number</label><input id="new-store-number" name="store_number" type="text" required>
 <label for="new-store-type">Store Type</label><select id="new-store-type" name="store_type"><option>Walmart - Supercenter</option><option>Walmart - Neighborhood Market</option><option>Sam's Club</option></select>
 <label for="new-address">Address</label><input id="new-address" name="address" type="text" required>
+<label for="new-city">City</label><input id="new-city" name="city" type="text" maxlength="120" required>
+<label for="new-state">State</label><input id="new-state" name="state" type="text" minlength="2" maxlength="2" placeholder="VA" required>
 <label for="new-inspector">Inspector</label><input id="new-inspector" name="inspector_name" type="text">
 <label for="new-start-date">Start Date</label><input id="new-start-date" name="start_date" type="date" required>
 <label for="new-end-date">End Date</label><input id="new-end-date" name="completion_date" type="date" required>
@@ -889,6 +891,7 @@ button:active {
 <div id="inspection-screen" class="card hidden">
 <div class="inspection-breadcrumb-row"><div class="inspection-breadcrumb"><a href="#" id="home-link-from-inspection" class="inspection-breadcrumb-link">Home</a></div><div class="inspection-header-actions"><button type="button" id="delete-open-inspection" class="danger">Delete Inspection</button><button type="button" id="save-all-inspection" class="secondary">Save</button><div id="inspection-menu-wrap" class="inspection-menu-wrap"><button type="button" id="inspection-menu-button" class="secondary" title="Inspection menu">☰</button><div id="inspection-menu" class="hidden"><div id="inspection-menu-option-open-another" class="inspection-menu-option disabled" role="menuitem" aria-disabled="true" tabindex="-1" title="Not ready yet">Open Another Inspection (coming soon)</div><div id="inspection-menu-option-add-point-list" class="inspection-menu-option" role="menuitem" tabindex="0">Add New Points List</div><div id="inspection-menu-option-delete-point-list" class="inspection-menu-option" role="menuitem" tabindex="0">Delete Points List</div><div id="inspection-menu-option-edit-nfpa" class="inspection-menu-option" role="menuitem" tabindex="0">Edit NFPA PDF</div><div id="inspection-menu-option-toggle-missing" class="inspection-menu-option" role="menuitem" tabindex="0">Show Missing Points Only</div><div id="inspection-menu-option-export-pdf" class="inspection-menu-option" role="menuitem" tabindex="0">Export PDF</div><div id="inspection-menu-option-clear-dates" class="inspection-menu-option" role="menuitem" tabindex="0">Clear Dates</div></div></div></div></div>
 
+<h2 id="inspection-name"></h2>
 <div class="inspection-details">
   <div class="details-row">
     <div class="compact-field">
@@ -907,6 +910,10 @@ button:active {
       <label for="inspection-address">Address</label>
       <input id="inspection-address" type="text" placeholder="Enter address">
     </div>
+  </div>
+  <div class="details-row">
+    <div class="compact-field"><label for="inspection-city">City</label><input id="inspection-city" type="text" maxlength="120" required></div>
+    <div class="compact-field"><label for="inspection-state">State</label><input id="inspection-state" type="text" minlength="2" maxlength="2" required></div>
   </div>
   <div class="details-row">
     <div class="compact-field">

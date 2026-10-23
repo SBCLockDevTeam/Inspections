@@ -50,6 +50,9 @@
 
   const inspectionStoreNumber = document.querySelector('#inspection-store-number');
   const inspectionStoreType = document.querySelector('#inspection-store-type');
+  const inspectionName = document.querySelector('#inspection-name');
+  const inspectionCity = document.querySelector('#inspection-city');
+  const inspectionState = document.querySelector('#inspection-state');
   const inspectionAddress = document.querySelector('#inspection-address');
   const inspectionInspector = document.querySelector('#inspection-inspector');
   const inspectionStartDate = document.querySelector('#inspection-start-date');
@@ -149,7 +152,7 @@
   }
 
   function formatInspectionLabel(inspection) {
-    return `${inspection.store_number} | ${inspection.address} | ${inspection.status}`;
+    return inspection.name;
   }
 
   function updateUserChrome() {
@@ -857,6 +860,8 @@
       store_number: inspectionStoreNumber?.value || '',
       store_type: inspectionStoreType?.value || '',
       address: inspectionAddress?.value || '',
+      city: inspectionCity?.value || '',
+      state: inspectionState?.value || '',
       inspector_name: inspectionInspector?.value || '',
       start_date: inspectionStartDate?.value || '',
       completion_date: inspectionEndDate?.value || '',
@@ -871,6 +876,9 @@
       inspectionMessage.textContent = result.error || result.detail || 'Saving inspection details failed.';
       return;
     }
+    inspectionName.textContent = result.name;
+    inspectionCity.value = result.city || '';
+    inspectionState.value = result.state || '';
     inspectionMessage.textContent = 'Inspection details saved.';
     await loadInspections();
   }
@@ -910,6 +918,9 @@
     tableEditable = false;
     syncTableEditButtons();
     currentInspectionId = inspection.id;
+    inspectionName.textContent = inspection.name;
+    inspectionCity.value = inspection.city || '';
+    inspectionState.value = inspection.state || '';
     currentPointListId = inspection.selected_point_list_id || null;
     suppressInspectionDetailsSave = true;
     if (inspectionStoreNumber) {
@@ -1772,7 +1783,7 @@
     }
   });
 
-  [inspectionStoreNumber, inspectionStoreType, inspectionAddress, inspectionInspector].forEach((element) => {
+  [inspectionStoreNumber, inspectionStoreType, inspectionAddress, inspectionCity, inspectionState, inspectionInspector].forEach((element) => {
     element?.addEventListener('change', async () => {
       await saveInspectionDetails();
     });

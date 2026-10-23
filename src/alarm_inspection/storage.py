@@ -10,6 +10,8 @@ from pathlib import Path
 from sqlalchemy import Boolean, Date, DateTime, String, create_engine, inspect, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 
+from alarm_inspection.domain.inspection_names import build_inspection_name, location_from_address
+
 
 class Base(DeclarativeBase):
     pass
@@ -22,11 +24,17 @@ class Inspection(Base):
     store_number: Mapped[str] = mapped_column(String(100))
     store_type: Mapped[str] = mapped_column(String(80), default="Walmart - Supercenter")
     address: Mapped[str] = mapped_column(String(500))
+    city: Mapped[str] = mapped_column(String(120), default="")
+    state: Mapped[str] = mapped_column(String(2), default="")
     inspector_name: Mapped[str] = mapped_column(String(120), default="")
     start_date: Mapped[date] = mapped_column(Date)
     completion_date: Mapped[date] = mapped_column(Date)
     status: Mapped[str] = mapped_column(String(40), default="received")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+    @property
+    def name(self) -> str:
+        return build_inspection_name(self.store_number, self.city or "", self.state or "", self.start_date)
 
 
 class User(Base):
@@ -149,11 +157,19 @@ def _ensure_inspection_columns(engine) -> None:
         statements.append(
             "ALTER TABLE inspections ADD COLUMN inspector_name VARCHAR(120) DEFAULT ''"
         )
-    if not statements:
-        return
+    for column, length in (("city", 120), ("state", 2)):
+        if column not in existing_columns:
+            statements.append(f"ALTER TABLE inspections ADD COLUMN {column} VARCHAR({length}) DEFAULT ''")
     with engine.begin() as connection:
         for statement in statements:
             connection.execute(text(statement))
+        rows = connection.execute(text(
+            "SELECT id, address, city, state FROM inspections WHERE city = '' OR state = '' OR city IS NULL OR state IS NULL"
+        )).mappings().all()
+        for row in rows:
+            city, state = location_from_address(row["address"] or "")
+            connection.execute(text("UPDATE inspections SET city = :city, state = :state WHERE id = :id"),
+                               {"id": row["id"], "city": row["city"] or city, "state": row["state"] or state})
 
 
 def _ensure_point_list_decision_columns(engine) -> None:
