@@ -449,7 +449,7 @@
     await openInspection(currentInspectionId, result.point_list_id || null);
     resetCreateForm();
     showScreen('inspection');
-    inspectionMessage.textContent = `Points List added: ${result.filename || 'uploaded file'}.`;
+    inspectionMessage.textContent = `Points List added: ${formatPointListLabel({ category, filename: result.filename || 'uploaded file' })}.`;
     return true;
   }
 
@@ -830,13 +830,18 @@
     return 'downloaded';
   }
 
+  function formatPointListLabel(item) {
+    const filename = (item.filename || '').replace(/^\d{14}-/, '');
+    return `${item.category || 'Panel'} (${filename})`;
+  }
+
   function renderInspectionPointListSelector(pointLists, selectedPointListId) {
     if (!inspectionPointListSelector) {
       return;
     }
     inspectionPointListSelector.replaceChildren();
     for (const item of pointLists || []) {
-      const label = `${item.category || 'Panel'} · ${item.filename || ''}`;
+      const label = formatPointListLabel(item);
       inspectionPointListSelector.add(new Option(label, item.id));
     }
     if (selectedPointListId) {
@@ -1046,7 +1051,7 @@
     const selected = previewLists[index];
     if (!selected) return;
     selectedListIndex = index;
-    summary.textContent = `${selected.category ? `${selected.category} · ` : ''}${selected.filename} — Accepted: ${selected.accepted} | Needs review: ${selected.rejected}`;
+    summary.textContent = `${formatPointListLabel(selected)} — Accepted: ${selected.accepted} | Needs review: ${selected.rejected}`;
     renderRows(selected.rows);
     renderedListIndex = index;
   }
@@ -1356,7 +1361,7 @@
       }
       listSelector.replaceChildren();
       for (const [index, item] of previewLists.entries()) {
-        const option = new Option(`${item.category ? `${item.category} · ` : ''}${item.filename}`, String(index));
+        const option = new Option(formatPointListLabel(item), String(index));
         listSelector.add(option);
       }
       listSelector.hidden = previewLists.length < 2;
@@ -1387,7 +1392,7 @@
     selectedListIndex = 0;
     listSelector.replaceChildren();
     for (const [index, item] of previewLists.entries()) {
-      const option = new Option(`${item.category ? `${item.category} · ` : ''}${item.filename}`, String(index));
+      const option = new Option(formatPointListLabel(item), String(index));
       listSelector.add(option);
     }
     listSelector.hidden = previewLists.length < 2;
