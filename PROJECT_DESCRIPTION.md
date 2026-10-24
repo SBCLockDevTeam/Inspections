@@ -27,7 +27,9 @@ Application form fields use a consistent inline `Label: Data` layout, including 
 
 The inspection form contains independently collapsible Store Data, Check List, and Points Lists & Events sections. Administrators manage shared checklist tasks under Administration → Inspection Tasks, including descriptions, order, and active status. Each inspection keeps its own checklist completion decisions with user, timestamp, and task text for audit. New tasks appear on existing and new inspections; deactivating a task retains earlier decisions. No checklist tasks are prefilled.
 
-Saved shared state refreshes across active devices approximately every three seconds, including inspection details, Device Type highlights, points, checklist decisions, administration, and PDF drafts. Unsaved local edits and pending Event History decisions remain private and are preserved during refresh. Hidden browser tabs catch up when reopened; interrupted connections retry automatically.
+The Points List table has its own horizontal scroll area, including in Edit mode, so the Test Result column and its full input remain reachable on narrow screens.
+
+Saved shared state refreshes across active devices approximately every three seconds, including inspection details, Device Type highlights, points, checklist decisions, administration, and PDF drafts. Unsaved local edits remain private and are preserved during refresh. Pending Event History matches are shared evidence and still require explicit acceptance. Hidden browser tabs catch up when reopened; interrupted connections retry automatically.
 
 ## Points List rules
 
@@ -35,7 +37,7 @@ The original specification requires support for XLS, XLSX, and PDF source files 
 
 Accepted and Review decisions must be visible to the technician. Descriptions are editable. The original source file must be retained for audit, while approved decisions become the working dataset. Corrections after approval require an explicit replacement or versioning action.
 
-Device Type cells toggle between white and very light green on double-click (or Enter/Space while focused). Highlights save automatically per accepted point and persist when reopening the inspection; they do not change review status or test results.
+Device Type cells toggle between white and very light green on double-click (or Enter/Space while focused). Highlights save automatically per accepted point and persist when reopening the inspection; they do not change review status or test results. After a successful Event History upload, a marked cell turns light yellow when it has neither a pending nor an accepted event time. A later matching upload restores green; accepted times keep their green status. Pending evidence accumulates across uploads and devices without automatically accepting results.
 
 ## Event History rules
 

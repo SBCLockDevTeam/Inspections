@@ -130,6 +130,7 @@ class PointListDecision(Base):
     text: Mapped[str] = mapped_column(String(500))
     location: Mapped[str] = mapped_column(String(500), default="")
     device_highlighted: Mapped[bool] = mapped_column(Boolean, default=False)
+    device_event_missing: Mapped[bool] = mapped_column(Boolean, default=False)
     accepted: Mapped[bool] = mapped_column(default=True)
     deleted: Mapped[bool] = mapped_column(default=False)
     reason: Mapped[str] = mapped_column(String(200), default="technician review")
@@ -142,6 +143,16 @@ class PointListEventDate(Base):
     inspection_id: Mapped[str] = mapped_column(String(36), index=True)
     point_list_id: Mapped[str] = mapped_column(String(36), index=True)
     point_address: Mapped[int] = mapped_column(index=True)
+    event_timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    source_filename: Mapped[str] = mapped_column(String(255), default="")
+
+
+class PointListPendingEventDate(Base):
+    __tablename__ = "point_list_pending_event_dates"
+
+    inspection_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    point_list_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    point_address: Mapped[int] = mapped_column(primary_key=True)
     event_timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     source_filename: Mapped[str] = mapped_column(String(255), default="")
 
@@ -218,6 +229,10 @@ def _ensure_point_list_decision_columns(engine) -> None:
     if "device_highlighted" not in existing_columns:
         statements.append(
             "ALTER TABLE point_list_decisions ADD COLUMN device_highlighted BOOLEAN DEFAULT FALSE"
+        )
+    if "device_event_missing" not in existing_columns:
+        statements.append(
+            "ALTER TABLE point_list_decisions ADD COLUMN device_event_missing BOOLEAN DEFAULT FALSE"
         )
     if not statements:
         return

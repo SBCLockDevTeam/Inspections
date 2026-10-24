@@ -254,22 +254,23 @@
         }
         rememberResponse('event-history-files', uploads);
         const points = result.accepted_points || [];
+        pendingEventDates = new Map(points.filter((point) => point.pending_event_date && !point.event_date).map((point) => [Number(point.address), point.pending_event_date]));
         if (tableEditable) {
           // Merge untouched fields while preserving each local table edit.
           for (const point of inspectionPoints) {
             const remote = points.find((item) => item.id === point.id);
             if (!remote || point.highlightSaving) continue;
             point.device_highlighted = remote.device_highlighted;
+            point.device_event_missing = remote.device_event_missing;
             const cell = [...acceptedPointsBody.querySelectorAll('.device-type-cell')].find((item) => item.dataset.pointId === point.id);
-            cell?.classList.toggle('device-highlighted', Boolean(remote.device_highlighted));
-            cell?.setAttribute('aria-pressed', String(Boolean(remote.device_highlighted)));
+            if (cell) updateDeviceCellStatus(cell, point);
             const fields = [['text', 'editableText'], ['address', 'editableAddress'], ['location', 'location'], ['event_date', 'editableEventDate']];
             fields.forEach(([key, localKey], index) => {
               const control = cell?.parentElement.cells[index]?.querySelector('input');
               if (control === document.activeElement) return;
               if (String(point[localKey] ?? '') !== String(point.serverValues?.[key] ?? '')) return;
               point[localKey] = remote[key] ?? '';
-              if (control) control.value = String(remote[key] ?? '');
+              if (control) control.value = key === 'event_date' && !remote[key] && remote.pending_event_date ? `${remote.pending_event_date} (pending)` : String(remote[key] ?? '');
               point.serverValues[key] = remote[key];
             });
           }
@@ -877,7 +878,19 @@
     return true;
   }
 
+  function updateDeviceCellStatus(cell, point) {
+    const marked = Boolean(point.device_highlighted);
+    const missing = marked && Boolean(point.device_event_missing);
+    cell.classList.toggle('device-highlighted', marked);
+    cell.classList.toggle('device-event-missing', missing);
+    cell.setAttribute('aria-pressed', String(marked));
+    cell.title = `${missing ? 'No pending or accepted event time. ' : ''}Double-click to toggle the highlight. Keyboard: Enter or Space.`;
+  }
+
   function renderVisibleAcceptedPoints() {
+    const scrollRegion = document.querySelector('#points-table-scroll');
+    const previousScroll = scrollRegion.scrollLeft;
+    acceptedPointsBody.closest('table').classList.toggle('table-editing', tableEditable);
     acceptedPointsBody.replaceChildren();
     const pointsToRender = showMissingOnly
       ? inspectionPoints.filter((point) => {
@@ -903,21 +916,22 @@
       const text = document.createElement('td');
       text.className = 'device-type-cell';
       text.dataset.pointId = point.id;
-      text.classList.toggle('device-highlighted', Boolean(point.device_highlighted));
+      updateDeviceCellStatus(text, point);
       text.tabIndex = 0;
       text.setAttribute('role', 'button');
       text.setAttribute('aria-pressed', String(Boolean(point.device_highlighted)));
-      text.title = 'Double-click to toggle the light green highlight. Keyboard: Enter or Space.';
+
       const inspectionId = currentInspectionId;
       const pointListId = currentPointListId;
       const toggleHighlight = async () => {
         if (point.highlightSaving) return;
         point.highlightSaving = true;
         const previous = Boolean(point.device_highlighted);
+        const previousMissing = Boolean(point.device_event_missing);
         const applyHighlight = (value) => {
           point.device_highlighted = value;
-          text.classList.toggle('device-highlighted', value);
-          text.setAttribute('aria-pressed', String(value));
+          point.device_event_missing = value === previous ? previousMissing : false;
+          updateDeviceCellStatus(text, point);
         };
         applyHighlight(!previous);
         try {
@@ -1007,10 +1021,12 @@
       row.append(text, address, locationCell, eventDate);
       acceptedPointsBody.append(row);
     }
+    scrollRegion.scrollLeft = previousScroll;
   }
 
   function renderAcceptedPoints(points) {
     rememberResponse('accepted-points', points);
+    pendingEventDates = new Map((points || []).filter((point) => point.pending_event_date && !point.event_date).map((point) => [Number(point.address), point.pending_event_date]));
     inspectionPoints = (points || []).map((point) => ({
       ...point,
       id: point.id ?? '',
@@ -1994,6 +2010,10 @@
         }
       }
 
+      for (const status of result.device_statuses || []) {
+        const point = inspectionPoints.find((item) => item.id === status.id);
+        if (point) Object.assign(point, status);
+      }
       eventHistoryForm.reset();
       setEventFileName();
       renderVisibleAcceptedPoints();

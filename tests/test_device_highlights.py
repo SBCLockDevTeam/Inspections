@@ -48,4 +48,5 @@ def test_existing_decisions_get_unhighlighted_default(tmp_path, monkeypatch):
     store = open_store()
     with store() as session:
         point = session.get(PointListDecision, 'old')
+        assert point.device_event_missing is False
         assert point.device_highlighted is False and point.accepted and point.location == 'Lobby'

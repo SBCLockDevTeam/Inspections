@@ -274,7 +274,13 @@ button:active {
 .inspection-task-row input[type=checkbox] { width: auto; margin: 3px 0 0; flex: 0 0 auto; }
 #refresh-checklist { width: auto; }
 #checklist-message { margin-top: 10px; }
-.table-scroll { overflow-x: auto; }
+.table-scroll { overflow-x: auto; max-width: 100%; min-width: 0; }
+#points-table-scroll { width: 100%; margin-top: 12px; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; }
+#points-table-scroll .table { min-width: 760px; margin-top: 0; }
+#points-table-scroll .table td:last-child,
+#points-table-scroll .table th:last-child { min-width: 280px; }
+#points-table-scroll .table-editing { min-width: 980px; }
+#points-table-scroll:focus-visible { outline: 2px solid var(--ring); }
 .admin-task-text { min-width: 240px; }
 .admin-task-order { width: 80px; }
 .admin-task-active { width: auto; }
@@ -887,7 +893,9 @@ button.inspection-menu-option {
 }
 .table td.device-type-cell { background-color: #fff; cursor: pointer; }
 .table td.device-type-cell.device-highlighted { background-color: #eaf7e9; }
-.table td.device-type-cell.device-highlighted input { background-color: transparent; }
+.table td.device-type-cell.device-event-missing { background-color: #fff3bf; }
+.table td.device-type-cell.device-highlighted input,
+.table td.device-type-cell.device-event-missing input { background-color: transparent; }
 .table td.device-type-cell:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
 </style></head>
 <body><div class="page-header"><h1>Inspections</h1><div id="user-bar" class="hidden"><span id="active-user-label"></span><span id="live-sync-status" role="status" style="font-size:0.8rem;color:var(--muted)">Live updates on</span><div id="avatar-wrap"><button type="button" id="avatar-button" class="secondary" title="Account menu">JP</button><div id="avatar-menu" class="hidden"><div id="avatar-menu-option-admin" class="avatar-menu-option hidden" role="menuitem" tabindex="0">Administration</div><div id="avatar-menu-option-logout" class="avatar-menu-option" role="menuitem" tabindex="0">Logout</div></div></div></div></div>
@@ -1035,7 +1043,7 @@ button.inspection-menu-option {
 </div>
 
 <div class="accepted-header-row"><h3>Accepted Points</h3><div class="user-actions"><button type="button" id="edit-table" class="ghost">Edit</button><button type="button" id="save-table" class="ghost">Save</button><button type="button" id="save-event-dates" class="ghost">Accept Results</button></div></div>
-<table class="table"><thead><tr><th>Device Type</th><th>Address</th><th>Location</th><th>Test Result</th></tr></thead><tbody id="accepted-points-body"></tbody></table>
+<div id="points-table-scroll" class="table-scroll" role="region" aria-label="Points List table, scroll horizontally to see all columns" tabindex="0"><table class="table"><thead><tr><th>Device Type</th><th>Address</th><th>Location</th><th>Test Result</th></tr></thead><tbody id="accepted-points-body"></tbody></table></div>
 </div></details>
 <div id="inspection-message"></div>
 <div id="inspection-busy-overlay" class="inspection-busy-overlay hidden"><div class="inspection-busy-card"><div class="inspection-busy-spinner" aria-hidden="true"></div><div id="inspection-busy-text" class="inspection-busy-text">Working...</div></div></div>

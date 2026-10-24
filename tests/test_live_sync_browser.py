@@ -58,8 +58,31 @@ def test_shared_changes_reach_other_sessions_without_reloading(tmp_path, monkeyp
                 async with a.expect_response(lambda r: '/highlight' in r.url and r.request.method == 'PATCH'):
                     await cell_a.dblclick()
                 await playwright.expect(cell_b).to_have_attribute('aria-pressed', 'true', timeout=12000)
+                # Missing event evidence turns the shared green marker yellow; a later match clears it.
+                from openpyxl import Workbook
+                async def upload_history(point):
+                    book = Workbook(); book.active.append(['Date', 'Zone', 'State']); book.active.append([datetime(2026,10,1,10), point, 'A'])
+                    data = io.BytesIO(); book.save(data)
+                    response = await a.request.post(base + f'/api/inspections/{inspection_id}/event-history', multipart={'point_list_id': list_id, 'event_file': {'name': 'history.xlsx', 'mimeType': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'buffer': data.getvalue()}})
+                    assert response.ok and (await response.json()).get('status') == 'matched'
+                await upload_history(99)
+                await playwright.expect(cell_b).to_have_css('background-color', 'rgb(255, 243, 191)', timeout=12000)
+                await upload_history(1)
+                await playwright.expect(cell_b).to_have_css('background-color', 'rgb(234, 247, 233)', timeout=12000)
+                await playwright.expect(b.locator('#accepted-points-body tr td').nth(3)).to_contain_text('(pending)', timeout=12000)
                 # A local draft survives, while another field and the marker still update.
                 await b.click('#edit-table'); await cell_b.locator('input').fill('Unsaved local device')
+                await b.set_viewport_size({'width': 390, 'height': 900})
+                region = b.locator('#points-table-scroll')
+                assert await region.evaluate('(el) => el.scrollWidth > el.clientWidth')
+                await region.evaluate('(el) => { el.scrollLeft = el.scrollWidth; }')
+                last_input = b.locator('#accepted-points-body tr td').nth(3).locator('input')
+                edge = await region.bounding_box(); last = await last_input.bounding_box()
+                assert last['x'] >= edge['x'] and last['x'] + last['width'] <= edge['x'] + edge['width'] + 1
+                await last_input.focus(); await last_input.press('End')
+                assert await b.evaluate('document.documentElement.scrollWidth <= document.documentElement.clientWidth')
+                await b.set_viewport_size({'width': 1280, 'height': 900})
+
                 await a.request.patch(base + f'/api/inspections/{inspection_id}', data={'address': 'Changed remotely'})
                 await playwright.expect(b.locator('#inspection-address')).to_have_value('Changed remotely', timeout=12000)
                 await playwright.expect(b.locator('#inspection-inspector')).to_have_value('Original inspector')

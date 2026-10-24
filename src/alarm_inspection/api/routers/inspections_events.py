@@ -12,12 +12,14 @@ from alarm_inspection.api.common import (
     parse_saved_timestamp,
 )
 from alarm_inspection.domain.points import normalize_point
+from alarm_inspection.domain.event_status import missing_event_for_marked_device
 from alarm_inspection.intake.event_history import parse_xlsx as parse_event_history_xlsx
 from alarm_inspection.storage import (
     Inspection,
     PointList,
     PointListDecision,
     PointListEventDate,
+    PointListPendingEventDate,
     SourceFile,
 )
 
@@ -47,7 +49,7 @@ def register_event_routes(router, store) -> None:
         filename = Path(event_file.filename or "event-history.bin").name
         if not filename.lower().endswith(".xlsx"):
             return {"error": "Event History processing currently supports XLSX files."}
-        destination = target / filename
+        destination = target / f"{uuid4().hex}-{filename}"
         destination.write_bytes(await event_file.read())
         try:
             extracted = parse_event_history_xlsx(destination)
@@ -55,33 +57,35 @@ def register_event_routes(router, store) -> None:
             destination.unlink(missing_ok=True)
             return {"error": f"{filename}: {exc}"}
 
-        with store() as session:
-            existing = (
-                session.query(PointListEventDate)
-                .filter(
-                    PointListEventDate.inspection_id == inspection_id,
-                    PointListEventDate.point_list_id == point_list_id,
-                )
-                .all()
-            )
-        existing_points = {item.point_address for item in existing}
-
-        pending_matches = [
-            {"point": point, "timestamp": format_event_date(timestamp)}
-            for point, timestamp in sorted(extracted.items())
-            if point not in existing_points
-        ]
-
         with store.begin() as session:
-            session.add(
-                SourceFile(
-                    id=str(uuid4()),
-                    inspection_id=inspection_id,
-                    filename=filename,
-                    path=str(destination),
-                    kind=event_history_kind(point_list_id),
-                )
-            )
+            # Serialize simultaneous evidence uploads for the same panel.
+            session.query(PointList).filter_by(id=point_list_id, inspection_id=inspection_id).with_for_update().one()
+            existing = session.query(PointListEventDate).filter_by(inspection_id=inspection_id, point_list_id=point_list_id).all()
+            existing_points = {item.point_address for item in existing}
+            decisions = session.query(PointListDecision).filter_by(inspection_id=inspection_id, point_list_id=point_list_id, accepted=True, deleted=False).all()
+            allowed_points = {item.address for item in decisions if item.address is not None}
+            pending = {item.point_address: item for item in session.query(PointListPendingEventDate).filter_by(inspection_id=inspection_id, point_list_id=point_list_id).all()}
+            for point, timestamp in extracted.items():
+                if point in existing_points or point not in allowed_points:
+                    continue
+                previous = pending.get(point)
+                if previous is None:
+                    previous = PointListPendingEventDate(inspection_id=inspection_id, point_list_id=point_list_id,
+                        point_address=point, event_timestamp=timestamp, source_filename=filename)
+                    session.add(previous)
+                    pending[point] = previous
+                elif timestamp.replace(tzinfo=None) < previous.event_timestamp.replace(tzinfo=None):
+                    previous.event_timestamp = timestamp
+                    previous.source_filename = filename
+            pending_points = set(pending) - existing_points
+            for decision in decisions:
+                decision.device_event_missing = missing_event_for_marked_device(
+                    decision.device_highlighted, decision.address, pending_points, existing_points)
+            pending_matches = [{"point": point, "timestamp": format_event_date(pending[point].event_timestamp)} for point in sorted(pending_points & allowed_points)]
+            device_statuses = [{"id": item.id, "device_highlighted": bool(item.device_highlighted),
+                                "device_event_missing": bool(item.device_event_missing)} for item in decisions]
+            session.add(SourceFile(id=str(uuid4()), inspection_id=inspection_id, filename=filename,
+                                   path=str(destination), kind=event_history_kind(point_list_id)))
         return {
             "inspection_id": inspection_id,
             "point_list_id": point_list_id,
@@ -89,7 +93,8 @@ def register_event_routes(router, store) -> None:
             "status": "matched",
             "matched_points": len(extracted),
             "pending_matches": pending_matches,
-            "ignored_existing": len(extracted) - len(pending_matches),
+            "device_statuses": device_statuses,
+            "ignored_existing": sum(point in existing_points for point in extracted),
         }
 
     @router.post("/{inspection_id}/event-dates/save")
@@ -162,6 +167,10 @@ def register_event_routes(router, store) -> None:
                         source_filename=source_filename,
                     )
                 )
+                session.query(PointListPendingEventDate).filter_by(inspection_id=inspection_id, point_list_id=point_list_id, point_address=point).delete(synchronize_session=False)
+                for decision in accepted_points:
+                    if decision.address == point:
+                        decision.device_event_missing = False
                 existing_points.add(point)
                 saved += 1
 

@@ -16,6 +16,7 @@ from alarm_inspection.storage import (
     PointList,
     PointListDecision,
     PointListEventDate,
+    PointListPendingEventDate,
     SourceFile,
 )
 
@@ -37,6 +38,7 @@ def register_point_workflow_routes(router, store) -> None:
                     or point.point_list_id != point_list_id or not point.accepted or point.deleted):
                 raise HTTPException(status_code=404, detail="Accepted point not found.")
             point.device_highlighted = payload.highlighted
+            point.device_event_missing = False
         return {"id": point_id, "device_highlighted": payload.highlighted}
 
     @router.post("/{inspection_id}/point-lists")
@@ -239,6 +241,8 @@ def register_point_workflow_routes(router, store) -> None:
                         source_filename="accepted_points_table",
                     )
                 )
+                session.query(PointListPendingEventDate).filter_by(inspection_id=inspection_id, point_list_id=point_list_id, point_address=normalized_address).delete(synchronize_session=False)
+                decision.device_event_missing = False
                 saved_event_dates += 1
 
         return {

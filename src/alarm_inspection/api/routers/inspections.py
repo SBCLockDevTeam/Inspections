@@ -29,6 +29,7 @@ from alarm_inspection.storage import (
     PointList,
     PointListDecision,
     PointListEventDate,
+    PointListPendingEventDate,
     SourceFile,
 )
 
@@ -294,6 +295,9 @@ def create_router(store) -> APIRouter:
                 .all()
             )
             mapped_dates = {item.point_address: item.event_timestamp for item in saved_event_dates}
+            pending_dates = {item.point_address: item.event_timestamp for item in session.query(PointListPendingEventDate).filter_by(
+                inspection_id=inspection_id, point_list_id=selected_point_list_id).all()
+                if item.point_address not in mapped_dates}
             return {
                 "id": inspection.id,
                 "name": inspection.name,
@@ -313,6 +317,8 @@ def create_router(store) -> APIRouter:
                         "text": point.text,
                         "location": point.location,
                         "device_highlighted": bool(point.device_highlighted),
+                        "device_event_missing": bool(point.device_highlighted and point.device_event_missing and point.address not in mapped_dates and point.address not in pending_dates),
+                        "pending_event_date": format_event_date(pending_dates.get(point.address)),
                         "event_date": format_event_date(
                             mapped_dates.get(point.address) if point.address is not None else None
                         ),

@@ -14,10 +14,13 @@ Defined in `src/alarm_inspection/storage.py`.
 - `SourceFile`
 - `PointListDecision`
 - `PointListEventDate`
+- `PointListPendingEventDate`
 
 These models are the persistence contract and should be treated as stable unless a migration plan is included.
 
 `PointListDecision.device_highlighted` stores the optional Device Type cell highlight, independently of acceptance and event mappings. Startup adds this Boolean column with a false default for existing databases; existing decisions and uploads remain intact. A scoped PATCH endpoint updates only accepted, undeleted points.
+
+`PointListDecision.device_event_missing` records the warning assessed after a successful upload. Startup adds this Boolean column with a false default; the new `point_list_pending_event_dates` table uses inspection, Points List, and address as its key. Pending matches are cumulative shared evidence, separate from accepted mappings. No existing accepted mappings are changed. Event uploads retain unique storage paths even when filenames repeat.
 
 ## API Module Dependency Map
 
