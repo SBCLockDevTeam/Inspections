@@ -27,6 +27,8 @@ Application form fields use a consistent inline `Label: Data` layout, including 
 
 The inspection form contains independently collapsible Store Data, Check List, and Points Lists & Events sections. Administrators manage shared checklist tasks under Administration → Inspection Tasks, including descriptions, order, and active status. Each inspection keeps its own checklist completion decisions with user, timestamp, and task text for audit. New tasks appear on existing and new inspections; deactivating a task retains earlier decisions. No checklist tasks are prefilled.
 
+Saved shared state refreshes across active devices approximately every three seconds, including inspection details, Device Type highlights, points, checklist decisions, administration, and PDF drafts. Unsaved local edits and pending Event History decisions remain private and are preserved during refresh. Hidden browser tabs catch up when reopened; interrupted connections retry automatically.
+
 ## Points List rules
 
 The original specification requires support for XLS, XLSX, and PDF source files with layout variation. The parser must identify point and description columns by headers/content rather than fixed letters, handle blank columns, combine descriptions rendered across multiple rows, reject unassigned and placeholder rows, and reject point addresses outside 1 through 255.

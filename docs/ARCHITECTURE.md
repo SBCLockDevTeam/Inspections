@@ -68,3 +68,9 @@ Use stable internal IDs. Treat point address as a normalized business key, not a
 - Store secrets only in deployment secret storage.
 - Never commit API keys, DigitalOcean tokens, database passwords, or `.env` files.
 - Log metadata and processing decisions, not sensitive file contents.
+
+## Shared browser state
+
+Authenticated, visible browsers poll the existing authorized read endpoints every three seconds. The database remains the shared source of truth across API processes; no in-memory event hub or extra infrastructure is required. Hidden tabs catch up on visibility change, and timeouts or disconnections retry on the next interval. The user bar reports connection status.
+
+Refreshes update the current inspection, checklist, points and highlights, panel types, active administration tab, and open PDF draft. Store Data saves send only fields changed locally. Untouched table/PDF fields can receive remote values while local edits remain private until saved. Refreshes discard responses when the user navigates, edits, or saves during a request. Deletion on another device closes the deleted inspection. Simultaneous edits to the same field retain the existing last-save behavior; this is synchronization, not document locking or conflict resolution.

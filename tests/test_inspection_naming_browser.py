@@ -56,7 +56,7 @@ def test_latest_details_win_when_autosaves_are_delayed(tmp_path, monkeypatch):
                 await playwright.expect(page.locator("#inspection-name")).to_have_text("0042-Norfolk-VA-09-2026")
 
                 async def delay_older_save(route):
-                    if route.request.method == "PATCH" and route.request.post_data_json["start_date"] == "2026-09-01":
+                    if route.request.method == "PATCH" and route.request.post_data_json.get("city") == "Virginia Beach":
                         await asyncio.sleep(0.4)
                     await route.continue_()
 
@@ -74,6 +74,9 @@ def test_latest_details_win_when_autosaves_are_delayed(tmp_path, monkeypatch):
                     const city = document.querySelector('#inspection-city');
                     city.value = 'Virginia Beach';
                     city.dispatchEvent(new Event('change'));
+                }""")
+                await page.wait_for_function("window.pendingNamingSaves === 1")
+                await page.evaluate("""() => {
                     const date = document.querySelector('#inspection-start-date');
                     date.value = '2026-08-31';
                     date.dispatchEvent(new Event('change'));

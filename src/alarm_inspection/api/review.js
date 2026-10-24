@@ -143,7 +143,183 @@
   let activePdfTemplateFields = {};
   let activePdfTemplateFieldNames = [];
 
+  // Poll shared server state; local drafts remain private until their existing Save action.
+  let currentScreen = 'login';
+  let viewVersion = 0;
+  let mutationVersion = 0;
+  let pendingWrites = 0;
+  let loadingInspection = 0;
+  let syncing = false;
+  const liveSnapshots = new Map();
+  const fieldBaselines = new WeakMap();
+  const controlValue = (control) => control.type === 'checkbox' ? control.checked : control.value;
+  const rememberControls = (root) => root?.querySelectorAll('input,select,textarea').forEach((control) => fieldBaselines.set(control, controlValue(control)));
+  const hasDraft = (root) => [...(root?.querySelectorAll('input,select,textarea') || [])].some((control) => fieldBaselines.has(control) && fieldBaselines.get(control) !== controlValue(control));
+  const rememberResponse = (url, value) => liveSnapshots.set(url, JSON.stringify(value));
+  const fetch = async (url, options = {}) => {
+    const write = !['GET', 'HEAD'].includes((options.method || 'GET').toUpperCase());
+    if (write) { pendingWrites++; mutationVersion++; }
+    try { return await window.fetch(url, options); }
+    finally { if (write) { pendingWrites--; mutationVersion++; liveSnapshots.clear(); } }
+  };
+  document.addEventListener('input', () => { mutationVersion++; });
+  document.addEventListener('change', () => { mutationVersion++; });
+  const detailFields = () => ({ store_number: inspectionStoreNumber, store_type: inspectionStoreType,
+    address: inspectionAddress, city: inspectionCity, state: inspectionState,
+    inspector_name: inspectionInspector, start_date: inspectionStartDate, completion_date: inspectionEndDate });
+
+  async function refreshSharedState() {
+    if (syncing || !currentUser || currentScreen === 'login' || document.hidden || pendingWrites || loadingInspection) return;
+    syncing = true;
+    const version = mutationVersion;
+    const view = viewVersion;
+    const inspectionId = currentInspectionId;
+    const listId = currentPointListId;
+    const valid = () => version === mutationVersion && view === viewVersion && !pendingWrites && !loadingInspection
+      && inspectionId === currentInspectionId && listId === currentPointListId;
+    const read = async (url) => {
+      const response = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(10000) });
+      if (response.status === 401) throw new Error('Session expired. Sign in again.');
+      if (!response.ok) throw new Error('Connection interrupted. Retrying automatically.');
+      const result = await response.json();
+      if (!valid()) return null;
+      return result;
+    };
+    const collection = async (url, root, reload, protectFocus = true) => {
+      const result = await read(url);
+      if (result && liveSnapshots.get(url) !== JSON.stringify(result) && (!protectFocus || !hasDraft(root)) && (!protectFocus || !root?.contains(document.activeElement))) await reload(result);
+    };
+    try {
+      const session = await read('/api/auth/me');
+      if (!session) return;
+      if (!session.authenticated || session.user.force_password_reset) {
+        currentUser = session.user || null; updateUserChrome();
+        document.querySelectorAll('.modal.open').forEach((item) => item.classList.remove('open'));
+        showScreen('login');
+        passwordResetForm.classList.toggle('hidden', !session.authenticated);
+        loginForm.classList.toggle('hidden', Boolean(session.authenticated));
+        loginMessage.textContent = session.authenticated ? 'Password reset is required before continuing.' : 'Session expired. Sign in again.';
+        return;
+      }
+      currentUser = session.user; updateUserChrome();
+      if (currentScreen === 'admin' && !currentUser.is_admin) { showScreen('home'); await loadInspections(); return; }
+      if (currentScreen === 'home') await collection('/api/inspections', homeScreen, loadInspections);
+      if (!valid()) return;
+      await collection('/api/point-lists/types', lists, loadPanelTypes);
+      if (!valid()) return;
+      if (currentScreen === 'admin') {
+        const tab = adminTabs.find((item) => item.getAttribute('aria-selected') === 'true')?.id;
+        if (tab === 'admin-tab-users') {
+          await collection('/api/admin/users', adminUsersBody, loadAdminUsers);
+          if (valid()) await collection('/api/admin/settings', document.querySelector('.settings-row'), loadAdminSettings);
+        } else if (tab === 'admin-tab-panel-types') {
+          // Shared panel types were refreshed above.
+        } else await collection('/api/admin/inspection-tasks', inspectionTasksBody, loadAdminInspectionTasks);
+      }
+      if (currentScreen === 'inspection' && inspectionId && valid()) {
+        const url = `/api/inspections/${inspectionId}${listId ? `?point_list_id=${encodeURIComponent(listId)}` : ''}`;
+        const response = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(10000) });
+        const result = await response.json();
+        if (!valid()) return;
+        if (response.status === 404 || result.error === 'inspection not found') {
+          currentInspectionId = null; currentPointListId = null;
+          showScreen('home'); await loadInspections();
+          homeMessage.textContent = 'This inspection was deleted on another device.';
+          return;
+        }
+        if (!response.ok || result.error) throw new Error('Connection interrupted. Retrying automatically.');
+        inspectionName.textContent = result.name;
+        for (const [key, control] of Object.entries(detailFields())) {
+          const value = String(result[key] ?? '');
+          if (control !== document.activeElement && (!fieldBaselines.has(control) || control.value === fieldBaselines.get(control))) {
+            control.value = value; fieldBaselines.set(control, value);
+          }
+        }
+        const pointLists = result.point_lists || [];
+        if (!listId && result.selected_point_list_id) {
+          await openInspection(inspectionId, result.selected_point_list_id); return;
+        }
+        if (listId && !pointLists.some((item) => item.id === listId)) {
+          await openInspection(inspectionId);
+          inspectionMessage.textContent = 'The selected Points List was deleted on another device.'; return;
+        }
+        const listSnapshot = JSON.stringify(pointLists);
+        if (liveSnapshots.get('inspection-point-lists') !== listSnapshot && document.activeElement !== inspectionPointListSelector) {
+          renderInspectionPointListSelector(pointLists, listId);
+          liveSnapshots.set('inspection-point-lists', listSnapshot);
+        }
+        const uploads = result.event_history_files || [];
+        if (uploads.length && liveSnapshots.get('event-history-files') !== JSON.stringify(uploads)) {
+          inspectionMessage.textContent = `Event History uploads: ${uploads.join(', ')}`;
+        }
+        rememberResponse('event-history-files', uploads);
+        const points = result.accepted_points || [];
+        if (tableEditable) {
+          // Merge untouched fields while preserving each local table edit.
+          for (const point of inspectionPoints) {
+            const remote = points.find((item) => item.id === point.id);
+            if (!remote || point.highlightSaving) continue;
+            point.device_highlighted = remote.device_highlighted;
+            const cell = [...acceptedPointsBody.querySelectorAll('.device-type-cell')].find((item) => item.dataset.pointId === point.id);
+            cell?.classList.toggle('device-highlighted', Boolean(remote.device_highlighted));
+            cell?.setAttribute('aria-pressed', String(Boolean(remote.device_highlighted)));
+            const fields = [['text', 'editableText'], ['address', 'editableAddress'], ['location', 'location'], ['event_date', 'editableEventDate']];
+            fields.forEach(([key, localKey], index) => {
+              const control = cell?.parentElement.cells[index]?.querySelector('input');
+              if (control === document.activeElement) return;
+              if (String(point[localKey] ?? '') !== String(point.serverValues?.[key] ?? '')) return;
+              point[localKey] = remote[key] ?? '';
+              if (control) control.value = String(remote[key] ?? '');
+              point.serverValues[key] = remote[key];
+            });
+          }
+          if (JSON.stringify(inspectionPoints.map((point) => point.id)) !== JSON.stringify(points.map((point) => point.id))) {
+            const active = document.activeElement;
+            const activeCell = active?.closest('.device-type-cell') || active?.closest('tr')?.querySelector('.device-type-cell');
+            const activeId = activeCell?.dataset.pointId;
+            const column = active?.closest('td')?.cellIndex;
+            const selection = active?.selectionStart;
+            const previous = new Map(inspectionPoints.map((point) => [point.id, point]));
+            inspectionPoints = points.map((point) => previous.get(point.id) || {
+              ...point, serverValues: { ...point }, editableText: point.text ?? '',
+              editableAddress: point.address ?? '', editableEventDate: point.event_date ?? '', location: point.location ?? '',
+            });
+            renderVisibleAcceptedPoints();
+            const cell = [...acceptedPointsBody.querySelectorAll('.device-type-cell')].find((item) => item.dataset.pointId === activeId);
+            const control = cell?.parentElement.cells[column]?.querySelector('input');
+            if (control) { control.focus({ preventScroll: true }); if (selection !== null && selection !== undefined) control.setSelectionRange(selection, selection); }
+          }
+        } else if (!inspectionPoints.some((point) => point.highlightSaving) && liveSnapshots.get('accepted-points') !== JSON.stringify(points)) {
+          renderAcceptedPoints(points);
+        }
+        if (valid() && !checklistSaves.size) await collection(`/api/inspections/${inspectionId}/checklist`, checklistContainer, (result) => loadInspectionChecklist(inspectionId, result), false);
+      }
+      if (valid() && nfpaDraftModal?.classList.contains('open')) {
+        const key = activePdfTemplateKey;
+        const result = await read(`/api/inspections/${inspectionId}/pdf-templates/${encodeURIComponent(key)}`);
+        if (result && key === activePdfTemplateKey) {
+          let changed = false;
+          for (const control of pdfTemplateFieldsContainer.querySelectorAll('input')) {
+            if (control === document.activeElement || control.value !== fieldBaselines.get(control)) continue;
+            const name = control.id.slice('pdf-field-'.length);
+            const value = String(result.fields?.[name] ?? '');
+            if (control.value !== value) changed = true;
+            control.value = value; fieldBaselines.set(control, value); activePdfTemplateFields[name] = value;
+          }
+          if (changed) refreshPdfTemplatePreviewFrame();
+        }
+      }
+      if (valid() && document.querySelector('#live-sync-status').textContent !== 'Live updates on') document.querySelector('#live-sync-status').textContent = 'Live updates on';
+    } catch (error) {
+      if (valid()) document.querySelector('#live-sync-status').textContent = 'Connection interrupted. Retrying automatically.';
+    } finally { syncing = false; }
+  }
+  window.setInterval(refreshSharedState, 3000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshSharedState(); });
+  window.addEventListener('online', refreshSharedState);
+
   function showScreen(name) {
+    currentScreen = name; viewVersion++;
     loginScreen?.classList.toggle('hidden', name !== 'login');
     homeScreen.classList.toggle('hidden', name !== 'home');
     createScreen.classList.toggle('hidden', name !== 'create');
@@ -194,10 +370,11 @@
     return result.error || result.detail || fallback;
   }
 
-  async function loadAdminInspectionTasks() {
-    const response = await fetch('/api/admin/inspection-tasks');
-    const result = await response.json();
+  async function loadAdminInspectionTasks(supplied = null) {
+    const response = supplied ? { ok: true } : await fetch('/api/admin/inspection-tasks');
+    const result = supplied || await response.json();
     if (!response.ok) throw new Error(taskError(result, 'Unable to load inspection tasks.'));
+    rememberResponse('/api/admin/inspection-tasks', result);
     inspectionTasksBody.replaceChildren();
     for (const task of result.tasks) {
       const row = document.createElement('tr');
@@ -240,6 +417,7 @@
       row.append(textCell, orderCell, activeCell, actions);
       inspectionTasksBody.append(row);
     }
+    rememberControls(inspectionTasksBody);
   }
 
   addInspectionTaskForm?.addEventListener('submit', async (event) => {
@@ -269,17 +447,18 @@
     checklistProgress.textContent = boxes.length ? `${boxes.filter((box) => box.checked).length} of ${boxes.length} complete` : '';
   }
 
-  async function loadInspectionChecklist(inspectionId) {
+  async function loadInspectionChecklist(inspectionId, supplied = null) {
     checklistContainer.textContent = 'Loading inspection tasks...';
     checklistMessage.textContent = '';
     checklistProgress.textContent = '';
     await Promise.all([...checklistSaves]);
     if (currentInspectionId !== inspectionId) return;
     try {
-      const response = await fetch(`/api/inspections/${inspectionId}/checklist`);
-      const result = await response.json();
+      const response = supplied ? { ok: true } : await fetch(`/api/inspections/${inspectionId}/checklist`);
+      const result = supplied || await response.json();
       if (currentInspectionId !== inspectionId) return;
       if (!response.ok) throw new Error(taskError(result, 'Unable to load the Check List.'));
+      rememberResponse(`/api/inspections/${inspectionId}/checklist`, result);
       checklistContainer.replaceChildren();
       if (!result.tasks.length) checklistContainer.textContent = 'No inspection tasks have been added. An administrator can add them under Administration → Inspection Tasks.';
       for (const task of result.tasks) {
@@ -337,10 +516,11 @@
     }
   }
 
-  async function loadPanelTypes() {
-    const response = await fetch('/api/point-lists/types');
-    const result = await response.json();
+  async function loadPanelTypes(supplied = null) {
+    const response = supplied ? { ok: true } : await fetch('/api/point-lists/types');
+    const result = supplied || await response.json();
     if (!response.ok || result.error) throw new Error(result.error || 'Unable to load panel types.');
+    rememberResponse('/api/point-lists/types', result);
     const types = result.panel_types || [];
     for (const select of document.querySelectorAll('select[name=point_list_category]')) {
       const selected = select.value || 'Combo';
@@ -500,29 +680,33 @@
     }
   }
 
-  async function loadAdminUsers() {
-    const response = await fetch('/api/admin/users');
-    const payload = await response.json();
+  async function loadAdminUsers(supplied = null) {
+    const response = supplied ? { ok: true } : await fetch('/api/admin/users');
+    const payload = supplied || await response.json();
     if (!response.ok || payload.error) {
       adminMessage.textContent = payload.error || payload.detail || 'Unable to load users.';
       return;
     }
+    rememberResponse('/api/admin/users', payload);
     renderAdminUsers(payload.users || []);
+    rememberControls(adminUsersBody);
   }
 
-  async function loadAdminSettings() {
-    const response = await fetch('/api/admin/settings');
-    const payload = await response.json();
+  async function loadAdminSettings(supplied = null) {
+    const response = supplied ? { ok: true } : await fetch('/api/admin/settings');
+    const payload = supplied || await response.json();
     if (!response.ok || payload.error) {
       adminMessage.textContent = payload.error || payload.detail || 'Unable to load admin settings.';
       return;
     }
+    rememberResponse('/api/admin/settings', payload);
     if (adminDefaultPassword) {
       adminDefaultPassword.value = payload.default_password || '';
     }
     if (adminForceResetDefault) {
       adminForceResetDefault.checked = Boolean(payload.force_password_reset_default);
     }
+    rememberControls(document.querySelector('.settings-row'));
   }
 
   async function saveAdminSettings() {
@@ -561,9 +745,12 @@
     adminAddUserModal?.classList.remove('open');
   }
 
-  async function loadInspections() {
-    const response = await fetch('/api/inspections');
-    const items = await response.json();
+  async function loadInspections(supplied = null) {
+    const response = supplied ? { ok: true } : await fetch('/api/inspections');
+    const items = supplied || await response.json();
+    if (!response.ok || !Array.isArray(items)) return;
+    rememberResponse('/api/inspections', items);
+    const selected = inspectionPicker.value;
     inspectionOptions = items;
     inspectionPicker.replaceChildren();
     if (!items.length) {
@@ -573,6 +760,7 @@
     for (const item of items) {
       inspectionPicker.add(new Option(formatInspectionLabel(item), item.id));
     }
+    if (items.some((item) => item.id === selected)) inspectionPicker.value = selected;
   }
 
   function openDeleteInspectionModal(selectedId = null) {
@@ -714,6 +902,7 @@
       const row = document.createElement('tr');
       const text = document.createElement('td');
       text.className = 'device-type-cell';
+      text.dataset.pointId = point.id;
       text.classList.toggle('device-highlighted', Boolean(point.device_highlighted));
       text.tabIndex = 0;
       text.setAttribute('role', 'button');
@@ -821,9 +1010,11 @@
   }
 
   function renderAcceptedPoints(points) {
+    rememberResponse('accepted-points', points);
     inspectionPoints = (points || []).map((point) => ({
       ...point,
       id: point.id ?? '',
+      serverValues: { ...point },
       editableText: point.editableText ?? point.text ?? '',
       editableAddress: point.editableAddress ?? (point.address ?? ''),
       location: point.location ?? '',
@@ -917,6 +1108,7 @@
     activePdfTemplateFieldNames = Array.isArray(payload.field_names) ? payload.field_names : [];
     activePdfTemplateFields = payload.fields || {};
     renderPdfTemplateFields();
+    rememberControls(pdfTemplateFieldsContainer);
     refreshPdfTemplatePreviewFrame();
     return { payload };
   }
@@ -938,6 +1130,7 @@
       return false;
     }
     activePdfTemplateFields = payload.fields || activePdfTemplateFields;
+    rememberControls(pdfTemplateFieldsContainer);
     nfpaDraftMessage.textContent = `Saved. ${payload.updated_at ? `Updated ${payload.updated_at}` : ''}`.trim();
     refreshPdfTemplatePreviewFrame();
     return true;
@@ -1162,6 +1355,10 @@
       start_date: inspectionStartDate?.value || '',
       completion_date: inspectionEndDate?.value || '',
     };
+    for (const [key, control] of Object.entries(detailFields())) {
+      if (fieldBaselines.has(control) && payload[key] === fieldBaselines.get(control)) delete payload[key];
+    }
+    if (!Object.keys(payload).length) return;
     const response = await fetch(`/api/inspections/${inspectionId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -1173,6 +1370,13 @@
       return;
     }
     if (currentInspectionId !== inspectionId) return;
+    for (const [key, value] of Object.entries(payload)) {
+      const control = detailFields()[key];
+      if (control.value === value) {
+        control.value = String(result[key] ?? value);
+        fieldBaselines.set(control, control.value);
+      }
+    }
     inspectionName.textContent = result.name;
     if (inspectionCity.value === payload.city) inspectionCity.value = result.city || '';
     if (inspectionState.value === payload.state) inspectionState.value = result.state || '';
@@ -1200,6 +1404,13 @@
   }
 
   async function openInspection(inspectionId, pointListId = null) {
+    loadingInspection++;
+    viewVersion++;
+    try { return await fetchAndOpenInspection(inspectionId, pointListId); }
+    finally { loadingInspection--; }
+  }
+
+  async function fetchAndOpenInspection(inspectionId, pointListId = null) {
     if (!inspectionId) {
       return;
     }
@@ -1245,6 +1456,9 @@
     const uploaded = (inspection.event_history_files || []).join(', ');
     inspectionMessage.textContent = uploaded ? `Event History uploads: ${uploaded}` : '';
     await loadInspectionChecklist(inspection.id);
+    rememberControls(inspectionScreen);
+    rememberResponse('inspection-point-lists', inspection.point_lists || []);
+    rememberResponse('event-history-files', inspection.event_history_files || []);
     showScreen('inspection');
   }
 

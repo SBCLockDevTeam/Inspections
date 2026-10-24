@@ -371,7 +371,8 @@ def create_router(store) -> APIRouter:
                 inspection.address = address
             inspection.city = city
             inspection.state = state
-            inspection.inspector_name = inspector_name
+            if "inspector_name" in payload:
+                inspection.inspector_name = inspector_name
             if start_date is not None:
                 inspection.start_date = start_date
             if completion_date is not None:
