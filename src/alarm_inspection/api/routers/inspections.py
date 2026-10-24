@@ -312,6 +312,7 @@ def create_router(store) -> APIRouter:
                         "address": point.address,
                         "text": point.text,
                         "location": point.location,
+                        "device_highlighted": bool(point.device_highlighted),
                         "event_date": format_event_date(
                             mapped_dates.get(point.address) if point.address is not None else None
                         ),

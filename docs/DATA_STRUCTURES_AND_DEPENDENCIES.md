@@ -17,6 +17,8 @@ Defined in `src/alarm_inspection/storage.py`.
 
 These models are the persistence contract and should be treated as stable unless a migration plan is included.
 
+`PointListDecision.device_highlighted` stores the optional Device Type cell highlight, independently of acceptance and event mappings. Startup adds this Boolean column with a false default for existing databases; existing decisions and uploads remain intact. A scoped PATCH endpoint updates only accepted, undeleted points.
+
 ## API Module Dependency Map
 
 ```mermaid

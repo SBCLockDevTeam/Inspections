@@ -129,6 +129,7 @@ class PointListDecision(Base):
     address: Mapped[int | None] = mapped_column(nullable=True)
     text: Mapped[str] = mapped_column(String(500))
     location: Mapped[str] = mapped_column(String(500), default="")
+    device_highlighted: Mapped[bool] = mapped_column(Boolean, default=False)
     accepted: Mapped[bool] = mapped_column(default=True)
     deleted: Mapped[bool] = mapped_column(default=False)
     reason: Mapped[str] = mapped_column(String(200), default="technician review")
@@ -213,6 +214,10 @@ def _ensure_point_list_decision_columns(engine) -> None:
     if "location" not in existing_columns:
         statements.append(
             "ALTER TABLE point_list_decisions ADD COLUMN location VARCHAR(500) DEFAULT ''"
+        )
+    if "device_highlighted" not in existing_columns:
+        statements.append(
+            "ALTER TABLE point_list_decisions ADD COLUMN device_highlighted BOOLEAN DEFAULT FALSE"
         )
     if not statements:
         return

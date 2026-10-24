@@ -713,6 +713,45 @@
     for (const point of pointsToRender) {
       const row = document.createElement('tr');
       const text = document.createElement('td');
+      text.className = 'device-type-cell';
+      text.classList.toggle('device-highlighted', Boolean(point.device_highlighted));
+      text.tabIndex = 0;
+      text.setAttribute('role', 'button');
+      text.setAttribute('aria-pressed', String(Boolean(point.device_highlighted)));
+      text.title = 'Double-click to toggle the light green highlight. Keyboard: Enter or Space.';
+      const inspectionId = currentInspectionId;
+      const pointListId = currentPointListId;
+      const toggleHighlight = async () => {
+        if (point.highlightSaving) return;
+        point.highlightSaving = true;
+        const previous = Boolean(point.device_highlighted);
+        const applyHighlight = (value) => {
+          point.device_highlighted = value;
+          text.classList.toggle('device-highlighted', value);
+          text.setAttribute('aria-pressed', String(value));
+        };
+        applyHighlight(!previous);
+        try {
+          const response = await fetch(`/api/inspections/${inspectionId}/point-lists/${pointListId}/points/${point.id}/highlight`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ highlighted: !previous }),
+          });
+          if (!response.ok) throw new Error('Saving Device Type highlight failed. Please try again.');
+        } catch (error) {
+          applyHighlight(previous);
+          if (currentInspectionId === inspectionId && currentPointListId === pointListId) inspectionMessage.textContent = error.message;
+        } finally {
+          point.highlightSaving = false;
+        }
+      };
+      text.addEventListener('dblclick', toggleHighlight);
+      text.addEventListener('keydown', (event) => {
+        if (event.target === text && (event.key === 'Enter' || event.key === ' ')) {
+          event.preventDefault();
+          toggleHighlight();
+        }
+      });
       const textValue = point.editableText ?? point.text ?? '';
       if (tableEditable) {
         const textInput = document.createElement('input');

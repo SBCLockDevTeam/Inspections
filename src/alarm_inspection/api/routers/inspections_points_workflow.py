@@ -5,7 +5,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
-from fastapi import Body, File, Form, UploadFile
+from fastapi import Body, File, Form, HTTPException, UploadFile
+from pydantic import BaseModel, StrictBool
 
 from alarm_inspection.api.common import as_bool, ensure_inspection_upload_dir, parse_saved_timestamp
 from alarm_inspection.domain.points import normalize_point
@@ -19,7 +20,25 @@ from alarm_inspection.storage import (
 )
 
 
+class DeviceHighlightUpdate(BaseModel):
+    highlighted: StrictBool
+
+
 def register_point_workflow_routes(router, store) -> None:
+    @router.patch("/{inspection_id}/point-lists/{point_list_id}/points/{point_id}/highlight")
+    def highlight_device(inspection_id: str, point_list_id: str, point_id: str, payload: DeviceHighlightUpdate) -> dict:
+        with store.begin() as session:
+            inspection = session.get(Inspection, inspection_id)
+            point_list = session.get(PointList, point_list_id)
+            point = session.get(PointListDecision, point_id)
+            if (inspection is None or inspection.status == "deleted"
+                    or point_list is None or point_list.inspection_id != inspection_id
+                    or point is None or point.inspection_id != inspection_id
+                    or point.point_list_id != point_list_id or not point.accepted or point.deleted):
+                raise HTTPException(status_code=404, detail="Accepted point not found.")
+            point.device_highlighted = payload.highlighted
+        return {"id": point_id, "device_highlighted": payload.highlighted}
+
     @router.post("/{inspection_id}/point-lists")
     async def add_point_list_to_inspection(
         inspection_id: str,

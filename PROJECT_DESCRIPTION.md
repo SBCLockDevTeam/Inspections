@@ -33,6 +33,8 @@ The original specification requires support for XLS, XLSX, and PDF source files 
 
 Accepted and Review decisions must be visible to the technician. Descriptions are editable. The original source file must be retained for audit, while approved decisions become the working dataset. Corrections after approval require an explicit replacement or versioning action.
 
+Device Type cells toggle between white and very light green on double-click (or Enter/Space while focused). Highlights save automatically per accepted point and persist when reopening the inspection; they do not change review status or test results.
+
 ## Event History rules
 
 Event History uploads are cumulative evidence batches. Keep event types `A` and `T`, normalize point addresses, and select the first qualifying timestamp for each approved point. Never silently replace a successful mapping. Later uploads may fill previously unmapped points.
