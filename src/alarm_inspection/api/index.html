@@ -745,9 +745,7 @@ button.inspection-menu-option {
   gap: 8px;
 }
 .nfpa-field-row {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+  font-size: 0.82rem;
 }
 .nfpa-field-row label {
   margin: 0;
@@ -852,19 +850,53 @@ button.inspection-menu-option {
     width: 100%;
   }
 }
+/* Standard field layout: label and value share one row at every screen size. */
+.form-field {
+  display: grid;
+  grid-template-columns: minmax(0, 8.5rem) minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0;
+  min-width: 0;
+}
+.form-field > label {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.form-field > input,
+.form-field > select,
+.form-field > textarea,
+.form-field > div {
+  min-width: 0;
+  margin: 0;
+}
+.compact-field .form-field,
+.settings-field .form-field,
+.nfpa-field-row {
+  margin: 0;
+}
+.compact-field .form-field {
+  grid-template-columns: minmax(0, 6.5rem) minmax(0, 1fr);
+}
+.nfpa-template-controls > .form-field {
+  flex: 1;
+}
+@media (max-width: 400px) {
+  .form-field { grid-template-columns: minmax(0, 6.5rem) minmax(0, 1fr); }
+}
 </style></head>
 <body><div class="page-header"><h1>Inspections</h1><div id="user-bar" class="hidden"><span id="active-user-label"></span><div id="avatar-wrap"><button type="button" id="avatar-button" class="secondary" title="Account menu">JP</button><div id="avatar-menu" class="hidden"><div id="avatar-menu-option-admin" class="avatar-menu-option hidden" role="menuitem" tabindex="0">Administration</div><div id="avatar-menu-option-logout" class="avatar-menu-option" role="menuitem" tabindex="0">Logout</div></div></div></div></div>
 
 <div id="login-screen" class="card auth-card">
 <h2>Login</h2>
 <form id="login-form">
-<label for="login-email">Email</label><input id="login-email" type="email" autocomplete="username" required>
-<label for="login-password">Password</label><input id="login-password" type="password" autocomplete="current-password" required>
+<div class="form-field"><label for="login-email">Email:</label><input id="login-email" type="email" autocomplete="username" required></div>
+<div class="form-field"><label for="login-password">Password:</label><input id="login-password" type="password" autocomplete="current-password" required></div>
 <button type="submit">Sign In</button>
 </form>
 <form id="password-reset-form" class="hidden">
-<label for="reset-current-password">Current password</label><input id="reset-current-password" type="password" autocomplete="current-password" required>
-<label for="reset-new-password">New password</label><input id="reset-new-password" type="password" autocomplete="new-password" required>
+<div class="form-field"><label for="reset-current-password">Current password:</label><input id="reset-current-password" type="password" autocomplete="current-password" required></div>
+<div class="form-field"><label for="reset-new-password">New password:</label><input id="reset-new-password" type="password" autocomplete="new-password" required></div>
 <button type="submit">Reset Password</button>
 </form>
 <div id="login-message"></div>
@@ -872,8 +904,8 @@ button.inspection-menu-option {
 
 <div id="home-screen" class="card hidden">
 <h2>Start</h2>
-<label for="inspection-picker">Existing inspections</label>
-<div class="row"><select id="inspection-picker"></select><button type="button" id="open-inspection" class="ghost">Open Inspection</button></div>
+<div class="form-field"><label for="inspection-picker">Existing inspections:</label>
+<div class="row"><select id="inspection-picker"></select><button type="button" id="open-inspection" class="ghost">Open Inspection</button></div></div>
 <button type="button" id="refresh-inspections" class="secondary">Refresh List</button>
 <button type="button" id="start-create">Create New Inspection</button>
 <button type="button" id="delete-inspection" class="danger">Delete Inspection</button>
@@ -892,38 +924,38 @@ button.inspection-menu-option {
 <div class="admin-grid">
 <div class="admin-list-header"><h3>User List</h3><button type="button" id="open-admin-add-user" class="secondary add-user-button">Add User</button></div>
 <table class="table"><thead><tr><th>Email</th><th>Admin</th><th>Actions</th></tr></thead><tbody id="admin-users-body"></tbody></table>
-<div class="settings-row"><div class="settings-field"><label for="admin-default-password">Default Password</label><input id="admin-default-password" type="text" required></div><label for="admin-force-reset-default" class="checkbox-inline"><input id="admin-force-reset-default" type="checkbox">Force Reset</label><button type="button" id="save-admin-settings">Save Settings</button><div class="inline-note">Default Password and Force Reset are global and apply to newly created users and reset actions.</div></div>
+<div class="settings-row"><div class="settings-field"><div class="form-field"><label for="admin-default-password">Default Password:</label><input id="admin-default-password" type="text" required></div></div><label for="admin-force-reset-default" class="checkbox-inline"><input id="admin-force-reset-default" type="checkbox">Force Reset</label><button type="button" id="save-admin-settings">Save Settings</button><div class="inline-note">Default Password and Force Reset are global and apply to newly created users and reset actions.</div></div>
 </div>
 <div id="admin-message" role="status"></div>
 </div>
 <div id="admin-panel-panel-types" role="tabpanel" aria-labelledby="admin-tab-panel-types" class="hidden">
 <h3>Panel Types</h3>
 <p>Add the panel types technicians can select when uploading a Points List.</p>
-<form id="add-panel-type-form" autocomplete="off"><label for="panel-type-name">Panel Type Name</label><input id="panel-type-name" name="inspection_panel_type" type="text" autocomplete="off" maxlength="40" required><button type="submit" id="add-panel-type">Add Panel Type</button></form>
+<form id="add-panel-type-form" autocomplete="off"><div class="form-field"><label for="panel-type-name">Panel Type Name:</label><input id="panel-type-name" name="inspection_panel_type" type="text" autocomplete="off" maxlength="40" required></div><button type="submit" id="add-panel-type">Add Panel Type</button></form>
 <div id="panel-type-message" role="status"></div>
 <table class="table"><thead><tr><th>Panel Type</th></tr></thead><tbody id="panel-types-body"></tbody></table>
 </div>
 <div id="admin-panel-inspection-tasks" role="tabpanel" aria-labelledby="admin-tab-inspection-tasks" class="hidden">
 <h3>Inspection Tasks</h3><p>Manage the tasks shown in each inspection's Check List. Inactive tasks keep their saved checklist history.</p>
-<form id="add-inspection-task-form" autocomplete="off"><label for="inspection-task-text">Task Description</label><input id="inspection-task-text" name="inspection_checklist_task" type="text" maxlength="200" autocomplete="off" required><label for="inspection-task-position">Order (optional)</label><input id="inspection-task-position" type="number" min="1" max="10000" step="1" placeholder="Next available position"><button type="submit" id="add-inspection-task">Add Task</button></form>
+<form id="add-inspection-task-form" autocomplete="off"><div class="form-field"><label for="inspection-task-text">Task Description:</label><input id="inspection-task-text" name="inspection_checklist_task" type="text" maxlength="200" autocomplete="off" required></div><div class="form-field"><label for="inspection-task-position">Order (optional):</label><input id="inspection-task-position" type="number" min="1" max="10000" step="1" placeholder="Next available position"></div><button type="submit" id="add-inspection-task">Add Task</button></form>
 <div id="inspection-tasks-message" role="status"></div>
 <div class="table-scroll"><table class="table"><thead><tr><th>Task</th><th>Order</th><th>Active</th><th>Actions</th></tr></thead><tbody id="inspection-tasks-body"></tbody></table></div>
 </div>
 </div>
 
-<div id="admin-add-user-modal" class="modal"><div class="modal-card"><button class="close" id="close-admin-add-user">Close</button><h2>Add User</h2><form id="admin-add-user-form"><label for="admin-add-user-email">Email</label><input id="admin-add-user-email" type="email" placeholder="user@example.com" required><div class="delete-actions"><button type="submit" id="confirm-admin-add-user" class="primary">OK</button><button type="button" id="cancel-admin-add-user" class="secondary">Cancel</button></div></form></div></div>
+<div id="admin-add-user-modal" class="modal"><div class="modal-card"><button class="close" id="close-admin-add-user">Close</button><h2>Add User</h2><form id="admin-add-user-form"><div class="form-field"><label for="admin-add-user-email">Email:</label><input id="admin-add-user-email" type="email" placeholder="user@example.com" required></div><div class="delete-actions"><button type="submit" id="confirm-admin-add-user" class="primary">OK</button><button type="button" id="cancel-admin-add-user" class="secondary">Cancel</button></div></form></div></div>
 
 <div id="new-inspection-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="new-inspection-title"><div class="modal-card">
 <h2 id="new-inspection-title">Create New Inspection</h2>
 <form id="new-inspection-form">
-<label for="new-store-number">Store Number</label><input id="new-store-number" name="store_number" type="text" required>
-<label for="new-store-type">Store Type</label><select id="new-store-type" name="store_type"><option>Walmart - Supercenter</option><option>Walmart - Neighborhood Market</option><option>Sam's Club</option></select>
-<label for="new-address">Address</label><input id="new-address" name="address" type="text" required>
-<label for="new-city">City</label><input id="new-city" name="city" type="text" maxlength="120" required>
-<label for="new-state">State</label><input id="new-state" name="state" type="text" minlength="2" maxlength="2" placeholder="VA" required>
-<label for="new-inspector">Inspector</label><input id="new-inspector" name="inspector_name" type="text">
-<label for="new-start-date">Start Date</label><input id="new-start-date" name="start_date" type="date" required>
-<label for="new-end-date">End Date</label><input id="new-end-date" name="completion_date" type="date" required>
+<div class="form-field"><label for="new-store-number">Store Number:</label><input id="new-store-number" name="store_number" type="text" required></div>
+<div class="form-field"><label for="new-store-type">Store Type:</label><select id="new-store-type" name="store_type"><option>Walmart - Supercenter</option><option>Walmart - Neighborhood Market</option><option>Sam's Club</option></select></div>
+<div class="form-field"><label for="new-address">Address:</label><input id="new-address" name="address" type="text" required></div>
+<div class="form-field"><label for="new-city">City:</label><input id="new-city" name="city" type="text" maxlength="120" required></div>
+<div class="form-field"><label for="new-state">State:</label><input id="new-state" name="state" type="text" minlength="2" maxlength="2" placeholder="VA" required></div>
+<div class="form-field"><label for="new-inspector">Inspector:</label><input id="new-inspector" name="inspector_name" type="text"></div>
+<div class="form-field"><label for="new-start-date">Start Date:</label><input id="new-start-date" name="start_date" type="date" required></div>
+<div class="form-field"><label for="new-end-date">End Date:</label><input id="new-end-date" name="completion_date" type="date" required></div>
 <div class="create-actions"><button type="submit" id="save-new-inspection">Save</button><button type="button" id="cancel-new-inspection" class="secondary">Cancel</button></div>
 <div id="new-inspection-message" role="status"></div>
 </form></div></div>
@@ -932,7 +964,7 @@ button.inspection-menu-option {
 <div class="nav"><button type="button" id="back-home-from-create" class="secondary">Back to Inspection</button></div>
 <h2>Add Points List</h2>
 <form id="inspection-form">
-<label>Security Panel Type</label><div id="point-lists"><div class="point-list"><select name="point_list_category" required disabled><option value="">Loading panel types...</option></select><input name="points_files" type="file" accept=".xls,.xlsx,.pdf" required></div></div><div class="create-actions"><button type="button" id="preview-list">Preview Points List</button></div><div id="preview"></div>
+<div class="form-field"><label for="point-list-category">Security Panel Type:</label><div id="point-lists"><div class="point-list"><select id="point-list-category" name="point_list_category" required disabled><option value="">Loading panel types...</option></select><input name="points_files" type="file" accept=".xls,.xlsx,.pdf" required></div></div></div><div class="create-actions"><button type="button" id="preview-list">Preview Points List</button></div><div id="preview"></div>
 <input type="hidden" name="point_decisions" id="point-decisions" value="[]"></form><div id="message"></div></div>
 
 <div id="inspection-screen" class="card hidden">
@@ -943,38 +975,32 @@ button.inspection-menu-option {
 <div class="inspection-details">
   <div class="details-row">
     <div class="compact-field">
-      <label for="inspection-store-number">Store Number</label>
-      <input id="inspection-store-number" type="text">
+      <div class="form-field"><label for="inspection-store-number">Store Number:</label><input id="inspection-store-number" type="text"></div>
     </div>
     <div class="compact-field">
-      <label for="inspection-store-type">Store Type</label>
-      <select id="inspection-store-type">
+      <div class="form-field"><label for="inspection-store-type">Store Type:</label><select id="inspection-store-type">
          <option>Walmart - Supercenter</option>
         <option>Walmart - Neighborhood Market</option>
         <option>Sam's Club</option>
-      </select>
+      </select></div>
     </div>
     <div class="compact-field">
-      <label for="inspection-address">Address</label>
-      <input id="inspection-address" type="text" placeholder="Enter address">
+      <div class="form-field"><label for="inspection-address">Address:</label><input id="inspection-address" type="text" placeholder="Enter address"></div>
     </div>
   </div>
   <div class="details-row">
-    <div class="compact-field"><label for="inspection-city">City</label><input id="inspection-city" type="text" maxlength="120" required></div>
-    <div class="compact-field"><label for="inspection-state">State</label><input id="inspection-state" type="text" minlength="2" maxlength="2" required></div>
+    <div class="compact-field"><div class="form-field"><label for="inspection-city">City:</label><input id="inspection-city" type="text" maxlength="120" required></div></div>
+    <div class="compact-field"><div class="form-field"><label for="inspection-state">State:</label><input id="inspection-state" type="text" minlength="2" maxlength="2" required></div></div>
   </div>
   <div class="details-row">
     <div class="compact-field">
-      <label for="inspection-inspector">Inspector</label>
-      <input id="inspection-inspector" type="text" placeholder="Enter inspector name">
+      <div class="form-field"><label for="inspection-inspector">Inspector:</label><input id="inspection-inspector" type="text" placeholder="Enter inspector name"></div>
     </div>
     <div class="compact-field">
-      <label for="inspection-start-date">Start Date</label>
-      <input id="inspection-start-date" type="date">
+      <div class="form-field"><label for="inspection-start-date">Start Date:</label><input id="inspection-start-date" type="date"></div>
     </div>
     <div class="compact-field">
-      <label for="inspection-end-date">End Date</label>
-      <input id="inspection-end-date" type="date">
+      <div class="form-field"><label for="inspection-end-date">End Date:</label><input id="inspection-end-date" type="date"></div>
     </div>
   </div>
 </div>
@@ -986,8 +1012,7 @@ button.inspection-menu-option {
 <details id="points-events-section" class="inspection-section" open><summary>Points Lists &amp; Events</summary><div class="inspection-section-body">
 <div class="inspection-actions-row">
   <div class="compact-field points-list-picker">
-    <label for="inspection-point-list-selector">Points List</label>
-    <select id="inspection-point-list-selector"></select>
+    <div class="form-field"><label for="inspection-point-list-selector">Points List:</label><select id="inspection-point-list-selector"></select></div>
   </div>
 
   <form id="event-history-form" class="inline-form">
@@ -1011,10 +1036,10 @@ button.inspection-menu-option {
 <div id="inspection-busy-overlay" class="inspection-busy-overlay hidden"><div class="inspection-busy-card"><div class="inspection-busy-spinner" aria-hidden="true"></div><div id="inspection-busy-text" class="inspection-busy-text">Working...</div></div></div>
 </div>
 
-<div id="nfpa-draft-modal" class="modal"><div class="modal-card"><button class="close" id="close-nfpa-draft">Close</button><h2>Embedded PDF Editor</h2><p>Edit the PDF fields directly in this screen. Save, come back later, and download when finished.</p><div class="nfpa-template-controls"><label for="pdf-template-key">Template</label><select id="pdf-template-key"><option value="nfpa72">NFPA 72 System Record</option></select><button type="button" id="refresh-pdf-template" class="ghost">Reload Template</button></div><div class="nfpa-editor-grid"><iframe id="pdf-template-preview" class="nfpa-preview-frame" title="PDF template preview"></iframe><div class="nfpa-fields-wrap"><div id="pdf-template-fields" class="nfpa-fields-grid"></div></div></div><div class="delete-actions nfpa-draft-actions"><button type="button" id="save-nfpa-draft" class="primary">Save</button><button type="button" id="download-nfpa-draft" class="ghost">Download Updated Version</button><button type="button" id="cancel-nfpa-draft" class="secondary">Close</button></div><div id="nfpa-draft-message"></div></div></div>
+<div id="nfpa-draft-modal" class="modal"><div class="modal-card"><button class="close" id="close-nfpa-draft">Close</button><h2>Embedded PDF Editor</h2><p>Edit the PDF fields directly in this screen. Save, come back later, and download when finished.</p><div class="nfpa-template-controls"><div class="form-field"><label for="pdf-template-key">Template:</label><select id="pdf-template-key"><option value="nfpa72">NFPA 72 System Record</option></select></div><button type="button" id="refresh-pdf-template" class="ghost">Reload Template</button></div><div class="nfpa-editor-grid"><iframe id="pdf-template-preview" class="nfpa-preview-frame" title="PDF template preview"></iframe><div class="nfpa-fields-wrap"><div id="pdf-template-fields" class="nfpa-fields-grid"></div></div></div><div class="delete-actions nfpa-draft-actions"><button type="button" id="save-nfpa-draft" class="primary">Save</button><button type="button" id="download-nfpa-draft" class="ghost">Download Updated Version</button><button type="button" id="cancel-nfpa-draft" class="secondary">Close</button></div><div id="nfpa-draft-message"></div></div></div>
 
-<div id="delete-inspection-modal" class="modal"><div class="modal-card"><button class="close" id="close-delete-inspection">Close</button><h2>Delete Inspection</h2><label for="delete-inspection-selector">Select inspection</label><select id="delete-inspection-selector"></select><div class="delete-actions"><button type="button" id="confirm-delete-inspection" class="danger">Delete</button><button type="button" id="cancel-delete-inspection" class="secondary">Cancel</button></div></div></div>
+<div id="delete-inspection-modal" class="modal"><div class="modal-card"><button class="close" id="close-delete-inspection">Close</button><h2>Delete Inspection</h2><div class="form-field"><label for="delete-inspection-selector">Select inspection:</label><select id="delete-inspection-selector"></select></div><div class="delete-actions"><button type="button" id="confirm-delete-inspection" class="danger">Delete</button><button type="button" id="cancel-delete-inspection" class="secondary">Cancel</button></div></div></div>
 
-<div id="preview-modal" class="modal"><div class="modal-card"><button class="close" id="close-preview">Close</button><h2>Points List Review</h2><label for="preview-list-selector">Points List</label><select id="preview-list-selector"></select><p id="preview-summary"></p><p>Edit descriptions and use each row's status button to toggle Accept or Review. Rows remain visible until you delete them.</p><div class="nav"><button type="button" class="delete-review-action">Delete all Review rows</button><button type="button" class="save-review-action">Save Decisions</button></div><table class="table"><thead><tr><th>Point</th><th>Description</th><th>Status</th></tr></thead><tbody id="preview-body"></tbody></table></div></div>
+<div id="preview-modal" class="modal"><div class="modal-card"><button class="close" id="close-preview">Close</button><h2>Points List Review</h2><div class="form-field"><label for="preview-list-selector">Points List:</label><select id="preview-list-selector"></select></div><p id="preview-summary"></p><p>Edit descriptions and use each row's status button to toggle Accept or Review. Rows remain visible until you delete them.</p><div class="nav"><button type="button" class="delete-review-action">Delete all Review rows</button><button type="button" class="save-review-action">Save Decisions</button></div><table class="table"><thead><tr><th>Point</th><th>Description</th><th>Status</th></tr></thead><tbody id="preview-body"></tbody></table></div></div>
 <script src="/review.js"></script>
 </body></html>

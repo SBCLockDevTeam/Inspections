@@ -825,9 +825,9 @@
 
     for (const fieldName of activePdfTemplateFieldNames) {
       const row = document.createElement('div');
-      row.className = 'nfpa-field-row';
+      row.className = 'nfpa-field-row form-field';
       const label = document.createElement('label');
-      label.textContent = fieldName;
+      label.textContent = `${fieldName}:`;
       label.setAttribute('for', `pdf-field-${fieldName}`);
       const input = document.createElement('input');
       input.type = 'text';
