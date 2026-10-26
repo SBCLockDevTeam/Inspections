@@ -10,33 +10,38 @@ from typing import Iterable
 from alarm_inspection.domain.points import first_event_by_point, normalize_point
 
 
-def _header_score(value: object, aliases: set[str]) -> int:
-    normalized = "" if value is None else re.sub(r"[^a-z0-9]+", "", str(value).strip().lower())
-    normalized_aliases = {re.sub(r"[^a-z0-9]+", "", alias.lower()) for alias in aliases}
-    return 1 if normalized in normalized_aliases else 0
+def _normalize_header(value: object) -> str:
+    return "" if value is None else re.sub(r"[^a-z0-9]+", "", str(value).strip().lower())
+
+
+_DATE_HEADERS = frozenset(_normalize_header(value) for value in (
+    "date", "datetime", "time", "timestamp", "event date", "event time",
+))
+_POINT_HEADERS = frozenset(_normalize_header(value) for value in (
+    "zone", "point", "point number", "point #", "address", "device address",
+))
+_STATE_HEADERS = frozenset(_normalize_header(value) for value in (
+    "state", "event type", "type", "status",
+))
 
 
 def detect_columns(rows: list[list[object]]) -> tuple[int, int, int, int]:
-    """Return header row, date column, zone column, and state column indexes."""
-    date_aliases = {"date", "datetime", "time", "timestamp", "event date", "event time"}
-    zone_aliases = {"zone", "point", "point number", "point #", "address", "device address"}
-    state_aliases = {"state", "event type", "type", "status"}
-
-    best = (-1, 0, 0, 0, 0)
+    """Find the first complete header within 30 rows, taking each field's first column."""
     for row_index, row in enumerate(rows[:30]):
-        for date_index, date_value in enumerate(row):
-            for zone_index, zone_value in enumerate(row):
-                for state_index, state_value in enumerate(row):
-                    score = (
-                        _header_score(date_value, date_aliases)
-                        + _header_score(zone_value, zone_aliases)
-                        + _header_score(state_value, state_aliases)
-                    )
-                    if score > best[0]:
-                        best = (score, row_index, date_index, zone_index, state_index)
-    if best[0] < 3:
-        raise ValueError("Could not identify Date, Zone, and State columns")
-    return best[1], best[2], best[3], best[4]
+        date_col = point_col = state_col = None
+        for column_index, value in enumerate(row):
+            header = _normalize_header(value)
+            if date_col is None and header in _DATE_HEADERS:
+                date_col = column_index
+            if point_col is None and header in _POINT_HEADERS:
+                point_col = column_index
+            if state_col is None and header in _STATE_HEADERS:
+                state_col = column_index
+            # A complete header has the old detector's maximum score. Later rows
+            # cannot improve it, and its first matching columns win every tie.
+            if date_col is not None and point_col is not None and state_col is not None:
+                return row_index, date_col, point_col, state_col
+    raise ValueError("Could not identify Date, Zone, and State columns")
 
 
 def _parse_timestamp(value: object) -> datetime | None:
