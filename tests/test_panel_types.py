@@ -24,7 +24,8 @@ def panel_app(tmp_path, monkeypatch):
     for module in (common, point_lists, inspections):
         monkeypatch.setattr(module, "UPLOAD_ROOT", tmp_path / "uploads")
     client = TestClient(create_app())
-    assert client.post("/api/auth/login", json={"email": "john.porter@securitybuildingcontrols.com", "password": "password"}).status_code == 200
+    assert client.post("/api/auth/login", json={"email": "john.porter@securitybuildingcontrols.com", "password": "TestBootstrapPassword42!"}).status_code == 200
+    client.post("/api/auth/reset-password", json={"current_password": "TestBootstrapPassword42!", "new_password": "TestBootstrapPassword42!"})
     return client, open_store()
 
 

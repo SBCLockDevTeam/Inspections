@@ -3,7 +3,9 @@ from __future__ import annotations
 from pathlib import Path
 from uuid import uuid4
 
-from fastapi import Body, File, Form, UploadFile
+from fastapi import Body, File, Form, HTTPException, Request, UploadFile
+
+from alarm_inspection.api.audit import record_decision
 
 from alarm_inspection.api.common import (
     ensure_inspection_upload_dir,
@@ -38,7 +40,7 @@ def register_event_routes(router, store) -> None:
 
             point_list = (
                 session.query(PointList)
-                .filter(PointList.inspection_id == inspection_id, PointList.id == point_list_id)
+                .filter(PointList.inspection_id == inspection_id, PointList.id == point_list_id, PointList.deleted_at.is_(None))
                 .first()
             )
             if point_list is None:
@@ -59,7 +61,9 @@ def register_event_routes(router, store) -> None:
 
         with store.begin() as session:
             # Serialize simultaneous evidence uploads for the same panel.
-            session.query(PointList).filter_by(id=point_list_id, inspection_id=inspection_id).with_for_update().one()
+            panel = session.query(PointList).filter_by(id=point_list_id, inspection_id=inspection_id).with_for_update().one()
+            if panel.deleted_at is not None:
+                raise HTTPException(status_code=404, detail="Points List not found.")
             existing = session.query(PointListEventDate).filter_by(inspection_id=inspection_id, point_list_id=point_list_id).all()
             existing_points = {item.point_address for item in existing}
             decisions = session.query(PointListDecision).filter_by(inspection_id=inspection_id, point_list_id=point_list_id, accepted=True, deleted=False).all()
@@ -98,7 +102,7 @@ def register_event_routes(router, store) -> None:
         }
 
     @router.post("/{inspection_id}/event-dates/save")
-    def save_event_dates(inspection_id: str, payload: dict = Body(default={})) -> dict:
+    def save_event_dates(inspection_id: str, request: Request, payload: dict = Body(default={})) -> dict:
         matches = payload.get("matches", [])
         point_list_id = str(payload.get("point_list_id") or "").strip()
         if not isinstance(matches, list):
@@ -113,8 +117,8 @@ def register_event_routes(router, store) -> None:
         with store.begin() as session:
             point_list = (
                 session.query(PointList)
-                .filter(PointList.inspection_id == inspection_id, PointList.id == point_list_id)
-                .first()
+                .filter(PointList.inspection_id == inspection_id, PointList.id == point_list_id, PointList.deleted_at.is_(None))
+                .with_for_update().first()
             )
             if point_list is None:
                 return {"error": "Selected Points List was not found for this inspection."}
@@ -157,6 +161,14 @@ def register_event_routes(router, store) -> None:
                     ignored_existing += 1
                     continue
 
+                pending = session.get(PointListPendingEventDate, (inspection_id, point_list_id, point))
+                if pending and timestamp.replace(tzinfo=None) == pending.event_timestamp.replace(tzinfo=None):
+                    source_filename = pending.source_filename
+                else:
+                    source_filename = "manual_event_acceptance"
+                record_decision(session, request, inspection_id, point_list_id, "event_accepted",
+                                {"point": point, "timestamp": timestamp, "source_filename": source_filename})
+
                 session.add(
                     PointListEventDate(
                         id=str(uuid4()),
@@ -184,11 +196,26 @@ def register_event_routes(router, store) -> None:
         }
 
     @router.post("/{inspection_id}/event-dates/clear")
-    def clear_event_dates(inspection_id: str, payload: dict = Body(default={})) -> dict:
+    def clear_event_dates(inspection_id: str, request: Request, payload: dict = Body(default={})) -> dict:
         point_list_id = str(payload.get("point_list_id") or "").strip()
         if not point_list_id:
             return {"error": "point_list_id is required"}
+        if payload.get("confirmed") is not True:
+            raise HTTPException(status_code=400, detail="Explicit confirmation is required to clear accepted test results.")
         with store.begin() as session:
+            panel = session.query(PointList).filter(
+                PointList.id == point_list_id, PointList.inspection_id == inspection_id,
+                PointList.deleted_at.is_(None),
+            ).with_for_update().first()
+            if panel is None:
+                raise HTTPException(status_code=404, detail="Points List not found.")
+            previous = session.query(PointListEventDate).filter_by(
+                inspection_id=inspection_id, point_list_id=point_list_id,
+            ).all()
+            record_decision(session, request, inspection_id, point_list_id, "event_results_cleared", [
+                {"id": item.id, "point": item.point_address, "timestamp": item.event_timestamp,
+                 "source_filename": item.source_filename} for item in previous
+            ])
             cleared = (
                 session.query(PointListEventDate)
                 .filter(

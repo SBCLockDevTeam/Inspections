@@ -34,7 +34,7 @@ def test_admin_choices_and_typed_checklist_values_sync(tmp_path, monkeypatch):
                 a, b, c = pages; errors = []
                 for page in pages:
                     page.on('pageerror', lambda error: errors.append(str(error)))
-                    await page.goto(base); await page.fill('#login-email', 'john.porter@securitybuildingcontrols.com'); await page.fill('#login-password', 'password')
+                    await page.goto(base); await page.fill('#login-email', 'john.porter@securitybuildingcontrols.com'); await page.fill('#login-password', 'TestBootstrapPassword42!')
                     await page.locator('#login-form button').click()
                     await playwright.expect(page.locator('#home-screen')).to_be_visible()
                 response = await a.request.post(base+'/api/inspections/blank', data={'store_number':'TYPED','address':'Test','city':'Norfolk','state':'VA','start_date':'2026-10-01','completion_date':'2026-10-02'})

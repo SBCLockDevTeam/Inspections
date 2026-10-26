@@ -11,7 +11,8 @@ def test_highlights_are_persisted_and_scoped(tmp_path, monkeypatch):
     monkeypatch.setenv('DATABASE_URL', f"sqlite:///{tmp_path / 'highlight.db'}")
     from alarm_inspection.api.app import create_app
     client = TestClient(create_app())
-    client.post('/api/auth/login', json={'email': 'john.porter@securitybuildingcontrols.com', 'password': 'password'})
+    client.post('/api/auth/login', json={'email': 'john.porter@securitybuildingcontrols.com', 'password': 'TestBootstrapPassword42!'})
+    client.post("/api/auth/reset-password", json={"current_password": "TestBootstrapPassword42!", "new_password": "TestBootstrapPassword42!"})
     def make(number):
         return client.post('/api/inspections/blank', json=dict(store_number=number, address='Test', city='Norfolk', state='VA', start_date='2026-10-01', completion_date='2026-10-02')).json()['id']
     one, two = make('1'), make('2')

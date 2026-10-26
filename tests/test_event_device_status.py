@@ -19,7 +19,8 @@ def test_event_statuses_are_cumulative_shared_and_require_acceptance(tmp_path, m
     monkeypatch.setenv('DATABASE_URL', f"sqlite:///{tmp_path / 'events.db'}")
     from alarm_inspection.api.app import create_app
     client = TestClient(create_app())
-    client.post('/api/auth/login', json={'email': 'john.porter@securitybuildingcontrols.com', 'password': 'password'})
+    client.post('/api/auth/login', json={'email': 'john.porter@securitybuildingcontrols.com', 'password': 'TestBootstrapPassword42!'})
+    client.post("/api/auth/reset-password", json={"current_password": "TestBootstrapPassword42!", "new_password": "TestBootstrapPassword42!"})
     inspection_id = client.post('/api/inspections/blank', json=dict(store_number='EVENTS', address='Test', city='Norfolk', state='VA', start_date='2026-10-01', completion_date='2026-10-02')).json()['id']
     store = open_store(); list_id, other_list_id = str(uuid4()), str(uuid4())
     point_ids = {address: str(uuid4()) for address in range(1, 6)}

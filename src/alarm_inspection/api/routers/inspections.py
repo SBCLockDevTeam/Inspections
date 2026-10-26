@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 from uuid import uuid4
 
-from fastapi import APIRouter, Body, File, Form, Query, UploadFile
+from fastapi import APIRouter, Body, File, Form, HTTPException, Query, UploadFile
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from alarm_inspection.api.common import (
     UPLOAD_ROOT,
@@ -260,10 +260,12 @@ def create_router(store) -> APIRouter:
 
             point_lists = (
                 session.query(PointList)
-                .filter(PointList.inspection_id == inspection_id)
+                .filter(PointList.inspection_id == inspection_id, PointList.deleted_at.is_(None))
                 .order_by(PointList.accepted_at.asc(), PointList.filename.asc())
                 .all()
             )
+            if point_list_id and not any(item.id == point_list_id for item in point_lists):
+                raise HTTPException(status_code=404, detail="Points List not found.")
             selected_point_list_id = point_list_id or (point_lists[0].id if point_lists else None)
 
             scoped_points = (

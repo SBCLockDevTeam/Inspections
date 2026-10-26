@@ -76,6 +76,20 @@ class PointList(Base):
     filename: Mapped[str] = mapped_column(String(255))
     path: Mapped[str] = mapped_column(String(1000))
     accepted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    deleted_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+
+
+class InspectionAuditEntry(Base):
+    __tablename__ = "inspection_audit_entries"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    inspection_id: Mapped[str] = mapped_column(String(36), index=True)
+    point_list_id: Mapped[str] = mapped_column(String(36), index=True)
+    action: Mapped[str] = mapped_column(String(80))
+    details_json: Mapped[str] = mapped_column(Text)
+    decided_by: Mapped[str] = mapped_column(String(36))
+    decided_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
 class PanelType(Base):
@@ -190,6 +204,7 @@ def open_store():
     _ensure_inspection_columns(engine)
     _ensure_point_list_decision_columns(engine)
     _ensure_checklist_columns(engine)
+    _ensure_point_list_columns(engine)
     return sessionmaker(bind=engine, expire_on_commit=False)
 
 
@@ -258,3 +273,12 @@ def _ensure_checklist_columns(engine) -> None:
             for name, definition in columns.items():
                 if name not in existing:
                     connection.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {definition}"))
+
+
+def _ensure_point_list_columns(engine) -> None:
+    existing = {column["name"] for column in inspect(engine).get_columns("point_lists")}
+    with engine.begin() as connection:
+        for name, definition in (("deleted_at", "TIMESTAMP WITH TIME ZONE" if engine.dialect.name == "postgresql" else "DATETIME"),
+                                 ("deleted_by", "VARCHAR(36)")):
+            if name not in existing:
+                connection.execute(text(f"ALTER TABLE point_lists ADD COLUMN {name} {definition}"))

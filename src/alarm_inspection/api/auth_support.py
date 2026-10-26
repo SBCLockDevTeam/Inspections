@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import os
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 if TYPE_CHECKING:
     from fastapi import Request
 
-from alarm_inspection.api.security import DEFAULT_PASSWORD_FALLBACK, DEFAULT_PASSWORD_SETTING_KEY, password_record
+from alarm_inspection.api.security import DEFAULT_PASSWORD_FALLBACK, DEFAULT_PASSWORD_SETTING_KEY, password_record, verify_password
 from alarm_inspection.storage import AppSetting, User, UserSession
 
 
@@ -84,18 +85,32 @@ def seed_initial_admin(store) -> None:
         set_force_password_reset_default(session, get_force_password_reset_default(session))
         existing = session.query(User).filter(User.email == admin_email).first()
         if existing is not None:
+            # Retire the original predictable bootstrap credential on existing installations too.
+            if verify_password(DEFAULT_PASSWORD_FALLBACK, existing.password_hash):
+                existing.password_hash = password_record(_bootstrap_password())
+                existing.force_password_reset = True
+                session.query(UserSession).filter_by(user_id=existing.id).delete(synchronize_session=False)
+            return
+        if session.query(User).filter(User.is_admin.is_(True)).first() is not None:
             return
         session.add(
             User(
                 id=str(uuid4()),
                 email=admin_email,
-                password_hash=password_record(default_password),
+                password_hash=password_record(_bootstrap_password()),
                 is_admin=True,
                 force_password_reset=True,
                 is_active=True,
                 created_at=datetime.now(timezone.utc),
             )
         )
+
+
+def _bootstrap_password() -> str:
+    password = os.getenv("INSPECTIONS_BOOTSTRAP_ADMIN_PASSWORD", "")
+    if len(password) < 12 or password == DEFAULT_PASSWORD_FALLBACK:
+        raise RuntimeError("Set INSPECTIONS_BOOTSTRAP_ADMIN_PASSWORD to a unique secret of at least 12 characters before initializing the administrator.")
+    return password
 
 
 def get_user_from_request(store, request: "Request", session_cookie: str) -> User | None:

@@ -5,6 +5,8 @@ import io
 import json
 import re
 
+from alarm_inspection.domain.export import validate_export_rows
+
 
 def _clean_filename_part(value: str, fallback: str) -> str:
     text = value.strip()
@@ -24,8 +26,11 @@ def _city_state_from_address(address: str) -> tuple[str, str]:
     return "Unknown", "ST"
 
 
-def build_report_filename(store_number: str, address: str, category: str, completion_date: date) -> str:
-    city, state = _city_state_from_address(address)
+def build_report_filename(store_number: str, address: str, category: str, completion_date: date,
+                          *, city: str | None = None, state: str | None = None) -> str:
+    address_city, address_state = _city_state_from_address(address)
+    city = address_city if city is None else city
+    state = address_state if state is None else state
     safe_store = _clean_filename_part(store_number, "store")
     safe_city = _clean_filename_part(city, "Unknown")
     safe_state = _clean_filename_part(state, "ST")
@@ -232,11 +237,6 @@ def normalize_export_rows(raw_rows: object) -> list[dict[str, str]]:
     return rows
 
 
-def validate_export_rows(rows: list[dict[str, str]]) -> str | None:
-    # Export should proceed with any available data, including partial rows.
-    if not isinstance(rows, list):
-        return "Rows payload must be a list."
-    return None
 
 
 def render_report_pdf(

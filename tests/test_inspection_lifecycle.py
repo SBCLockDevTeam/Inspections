@@ -17,8 +17,9 @@ def inspection_app(tmp_path, monkeypatch):
 
     client = TestClient(create_app())
     response = client.post("/api/auth/login", json={
-        "email": "john.porter@securitybuildingcontrols.com", "password": "password",
+        "email": "john.porter@securitybuildingcontrols.com", "password": "TestBootstrapPassword42!",
     })
+    client.post("/api/auth/reset-password", json={"current_password": "TestBootstrapPassword42!", "new_password": "TestBootstrapPassword42!"})
     assert response.status_code == 200
     return client, open_store(), tmp_path
 

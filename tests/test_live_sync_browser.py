@@ -49,7 +49,7 @@ def test_shared_changes_reach_other_sessions_without_reloading(tmp_path, monkeyp
                     page.on('pageerror', lambda error: errors.append(str(error)))
                     await page.goto(base)
                     await page.fill('#login-email', 'john.porter@securitybuildingcontrols.com')
-                    await page.fill('#login-password', 'password')
+                    await page.fill('#login-password', 'TestBootstrapPassword42!')
                     await page.locator('#login-form button').click()
                     await playwright.expect(page.locator('#home-screen')).to_be_visible()
                     await page.select_option('#inspection-picker', inspection_id); await page.click('#open-inspection')

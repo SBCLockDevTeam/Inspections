@@ -41,14 +41,14 @@ def test_normalize_export_rows_keeps_expected_fields():
     ]
 
 
-def test_validate_export_rows_allows_partial_rows():
+def test_validate_export_rows_rejects_partial_rows():
     assert validate_export_rows([
         {"text": "Smoke", "address": "2", "location": "", "event_date": "2026-09-22 08:05:00"}
-    ]) is None
+    ]) is not None
 
     assert validate_export_rows([
         {"text": "Smoke", "address": "2", "location": "Front", "event_date": "2026-09-22 (pending)"}
-    ]) is None
+    ]) is not None
 
 
 def test_build_nfpa_draft_filename_uses_required_pattern():

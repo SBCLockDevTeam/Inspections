@@ -57,7 +57,7 @@ def create_app():
         user = get_user_from_request(store, request, SESSION_COOKIE)
         if user is None:
             return JSONResponse(status_code=401, content={"error": "Authentication required."})
-        if user.force_password_reset and not user.is_admin:
+        if user.force_password_reset:
             return JSONResponse(
                 status_code=403,
                 content={"error": "Password reset is required before continuing."},

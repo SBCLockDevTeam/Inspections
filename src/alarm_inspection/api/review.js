@@ -221,6 +221,11 @@
         const response = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(10000) });
         const result = await response.json();
         if (!valid()) return;
+        if (response.status === 404 && result.detail === 'Points List not found.') {
+          await openInspection(inspectionId);
+          inspectionMessage.textContent = 'The selected Points List was deleted on another device.';
+          return;
+        }
         if (response.status === 404 || result.error === 'inspection not found') {
           currentInspectionId = null; currentPointListId = null;
           showScreen('home'); await loadInspections();
@@ -1493,12 +1498,26 @@
     if (!currentInspectionId || !currentPointListId) {
       return { error: 'No inspection or Points List selected.' };
     }
+    const changes = [];
+    for (const row of rows) {
+      const point = inspectionPoints.find((item) => String(item.id) === row.id);
+      const baseline = point?.serverValues || {};
+      const change = { id: row.id };
+      for (const key of ['text', 'address', 'location', 'event_date']) {
+        if (String(row[key] ?? '') === String(baseline[key] ?? '')) continue;
+        if (key === 'event_date' && baseline.event_date && !row.event_date) {
+          return { error: 'Use Clear Dates to explicitly clear accepted test results.' };
+        }
+        change[key] = row[key];
+      }
+      if (Object.keys(change).length > 1) changes.push(change);
+    }
     const response = await fetch(`/api/inspections/${currentInspectionId}/accepted-points/save`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         point_list_id: currentPointListId,
-        rows,
+        rows: changes,
       }),
     });
     const result = await response.json();
@@ -1522,8 +1541,8 @@
     const query = pointListId ? `?point_list_id=${encodeURIComponent(pointListId)}` : '';
     const response = await fetch(`/api/inspections/${inspectionId}${query}`);
     const inspection = await response.json();
-    if (inspection.error) {
-      inspectionMessage.textContent = inspection.error;
+    if (!response.ok || inspection.error) {
+      inspectionMessage.textContent = inspection.error || inspection.detail || 'Loading the inspection failed.';
       return;
     }
     pendingEventDates = new Map();
@@ -2210,11 +2229,12 @@
       inspectionMessage.textContent = 'Select a Points List first.';
       return;
     }
+    if (!window.confirm('Clear all accepted test results for this Points List? Previous results will remain in the audit history.')) return;
     inspectionMessage.textContent = 'Clearing saved dates...';
     const response = await fetch(`/api/inspections/${currentInspectionId}/event-dates/clear`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ point_list_id: currentPointListId }),
+      body: JSON.stringify({ point_list_id: currentPointListId, confirmed: true }),
     });
     const result = await response.json();
     if (!response.ok || result.error) {

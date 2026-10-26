@@ -3,6 +3,8 @@ services:
     image: ${INSPECTIONS_IMAGE:?Set INSPECTIONS_IMAGE}
     restart: unless-stopped
     env_file: ../.env.inspections
+    volumes:
+      - inspections_uploads:/tmp/alarm-inspection-uploads
     ports:
       - "18080:8000"
     depends_on:
@@ -25,3 +27,4 @@ services:
 
 volumes:
   inspections_postgres:
+  inspections_uploads:

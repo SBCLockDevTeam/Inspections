@@ -2,6 +2,8 @@ services:
   api:
     build: .
     env_file: .env
+    volumes:
+      - inspection-uploads:/tmp/alarm-inspection-uploads
     ports:
       - "127.0.0.1:18080:8000"
     depends_on:
@@ -20,4 +22,5 @@ services:
 
 volumes:
   inspection-db:
+  inspection-uploads:
 

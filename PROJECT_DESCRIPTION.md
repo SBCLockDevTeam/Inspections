@@ -47,6 +47,14 @@ Event History uploads are cumulative evidence batches. Keep event types `A` and 
 
 The final output is an Initiating Devices PDF. It must not be created while any required result, mapping, location, description, or exception remains unresolved.
 
+Final Initiating Devices exports use saved, accepted points and accepted test times
+for the explicitly selected panel. Request data cannot substitute or omit points.
+Ordinary table saves preserve accepted mappings and their evidence; correcting an
+accepted test time requires explicitly clearing saved dates first. Clearing results,
+editing accepted points, accepting event times, and deleting panels record the user,
+time, and prior data in an append-only audit table. Deleted panels are hidden while
+their source files, decisions, and mappings remain stored.
+
 Filename format:
 
 ```text

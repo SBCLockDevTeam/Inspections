@@ -42,7 +42,7 @@ def test_latest_details_win_when_autosaves_are_delayed(tmp_path, monkeypatch):
                 base = f"http://127.0.0.1:{port}"
                 await page.goto(base)
                 await page.fill("#login-email", "john.porter@securitybuildingcontrols.com")
-                await page.fill("#login-password", "password")
+                await page.fill("#login-password", "TestBootstrapPassword42!")
                 await page.locator("#login-form button[type=submit]").click()
                 await playwright.expect(page.locator("#home-screen")).to_be_visible()
                 response = await page.request.post(base + "/api/inspections/blank", data={

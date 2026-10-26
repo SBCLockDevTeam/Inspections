@@ -7,9 +7,9 @@ from fastapi import Body, HTTPException
 from fastapi.responses import StreamingResponse
 
 from alarm_inspection.api.common import ensure_inspection_upload_dir, format_event_date
+from alarm_inspection.domain.inspection_names import normalize_city, normalize_state
 from alarm_inspection.api.pdf_export import (
     build_report_filename,
-    normalize_export_rows,
     render_report_pdf,
     validate_export_rows,
 )
@@ -30,11 +30,20 @@ def register_export_routes(router, store) -> None:
 
             point_list = (
                 session.query(PointList)
-                .filter(PointList.inspection_id == inspection_id, PointList.id == point_list_id)
-                .first()
+                .filter(PointList.inspection_id == inspection_id, PointList.id == point_list_id, PointList.deleted_at.is_(None))
+                .with_for_update().first()
             )
             if point_list is None:
                 raise HTTPException(status_code=404, detail="Selected Points List was not found for this inspection.")
+
+            if not (inspection.store_number.strip() and inspection.address.strip()
+                    and normalize_city(inspection.city or "") and normalize_state(inspection.state or "")):
+                raise HTTPException(status_code=400, detail="Store number, address, city, and valid state are required before export.")
+            unresolved = session.query(PointListDecision).filter_by(
+                inspection_id=inspection_id, point_list_id=point_list_id, accepted=False, deleted=False,
+            ).count()
+            if unresolved:
+                raise HTTPException(status_code=400, detail=f"Resolve {unresolved} Review rows before export.")
 
             accepted_points = (
                 session.query(PointListDecision)
@@ -57,20 +66,18 @@ def register_export_routes(router, store) -> None:
             )
 
         mapped_dates = {item.point_address: item.event_timestamp for item in saved_event_dates}
-        rows = normalize_export_rows(payload.get("rows"))
-        if not rows:
-            rows = [
-                {
-                    "text": point.text,
-                    "address": "" if point.address is None else str(point.address),
-                    "location": point.location,
-                    "event_date": (
-                        format_event_date(mapped_dates.get(point.address)) if point.address in mapped_dates else ""
-                    )
-                    or "",
-                }
-                for point in accepted_points
-            ]
+        if len(mapped_dates) != len(saved_event_dates):
+            raise HTTPException(status_code=400, detail="Duplicate accepted mappings require explicit correction before export.")
+        # The saved, approved dataset is authoritative; request rows cannot bypass completion checks.
+        rows = [
+            {
+                "text": point.text,
+                "address": "" if point.address is None else str(point.address),
+                "location": point.location,
+                "event_date": format_event_date(mapped_dates.get(point.address)) or "",
+            }
+            for point in accepted_points
+        ]
 
         validation_error = validate_export_rows(rows)
         if validation_error:
@@ -96,9 +103,10 @@ def register_export_routes(router, store) -> None:
             inspection.address,
             point_list.category,
             inspection.completion_date,
+            city=inspection.city, state=inspection.state,
         )
         export_dir = ensure_inspection_upload_dir(inspection_id)
-        export_path = export_dir / filename
+        export_path = export_dir / f"{uuid4().hex}-{filename}"
         export_path.write_bytes(pdf_bytes)
 
         with store.begin() as session:

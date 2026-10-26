@@ -5,9 +5,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
-from fastapi import Body, File, Form, HTTPException, UploadFile
+from fastapi import Body, File, Form, HTTPException, Request, UploadFile
 from pydantic import BaseModel, StrictBool
 
+from alarm_inspection.api.audit import record_decision
 from alarm_inspection.api.common import as_bool, ensure_inspection_upload_dir, parse_saved_timestamp
 from alarm_inspection.domain.points import normalize_point
 from alarm_inspection.api.panel_types import resolve_panel_type
@@ -33,7 +34,7 @@ def register_point_workflow_routes(router, store) -> None:
             point_list = session.get(PointList, point_list_id)
             point = session.get(PointListDecision, point_id)
             if (inspection is None or inspection.status == "deleted"
-                    or point_list is None or point_list.inspection_id != inspection_id
+                    or point_list is None or point_list.deleted_at is not None or point_list.inspection_id != inspection_id
                     or point is None or point.inspection_id != inspection_id
                     or point.point_list_id != point_list_id or not point.accepted or point.deleted):
                 raise HTTPException(status_code=404, detail="Accepted point not found.")
@@ -131,125 +132,90 @@ def register_point_workflow_routes(router, store) -> None:
         }
 
     @router.delete("/{inspection_id}/point-lists/{point_list_id}")
-    def delete_point_list_from_inspection(inspection_id: str, point_list_id: str) -> dict:
-        file_to_remove: Path | None = None
+    def delete_point_list_from_inspection(inspection_id: str, point_list_id: str, request: Request) -> dict:
         with store.begin() as session:
-            inspection = session.get(Inspection, inspection_id)
-            if inspection is None:
-                return {"error": "inspection not found"}
-
-            point_list = (
-                session.query(PointList)
-                .filter(PointList.inspection_id == inspection_id, PointList.id == point_list_id)
-                .first()
-            )
+            point_list = session.query(PointList).filter(
+                PointList.inspection_id == inspection_id, PointList.id == point_list_id,
+                PointList.deleted_at.is_(None),
+            ).with_for_update().first()
             if point_list is None:
-                return {"error": "point list not found"}
-
-            file_to_remove = Path(point_list.path) if point_list.path else None
-
-            session.query(PointListEventDate).filter(
-                PointListEventDate.inspection_id == inspection_id,
-                PointListEventDate.point_list_id == point_list_id,
-            ).delete(synchronize_session=False)
-            session.query(PointListDecision).filter(
-                PointListDecision.inspection_id == inspection_id,
-                PointListDecision.point_list_id == point_list_id,
-            ).delete(synchronize_session=False)
-            session.query(SourceFile).filter(
-                SourceFile.inspection_id == inspection_id,
-                SourceFile.kind == "points_list",
-                SourceFile.filename == point_list.filename,
-            ).delete(synchronize_session=False)
-            session.delete(point_list)
-
-        if file_to_remove is not None and file_to_remove.exists() and file_to_remove.is_file():
-            file_to_remove.unlink(missing_ok=True)
+                raise HTTPException(status_code=404, detail="Points List not found.")
+            point_list.deleted_at = datetime.now(timezone.utc)
+            point_list.deleted_by = request.state.current_user.id
+            record_decision(session, request, inspection_id, point_list_id, "panel_deleted",
+                            {"filename": point_list.filename, "category": point_list.category})
 
         return {"inspection_id": inspection_id, "point_list_id": point_list_id, "status": "deleted"}
 
     @router.post("/{inspection_id}/accepted-points/save")
-    def save_accepted_points(inspection_id: str, payload: dict = Body(default={})) -> dict:
+    def save_accepted_points(inspection_id: str, request: Request, payload: dict = Body(default={})) -> dict:
         point_list_id = str(payload.get("point_list_id") or "").strip()
         rows = payload.get("rows", [])
-        if not point_list_id:
-            return {"error": "point_list_id is required"}
-        if not isinstance(rows, list):
-            return {"error": "rows must be a list"}
-
-        updated_rows = 0
-        saved_event_dates = 0
-        ignored_rows = 0
-
+        if not point_list_id or not isinstance(rows, list):
+            raise HTTPException(status_code=400, detail="point_list_id and a rows list are required.")
+        updated_rows = saved_event_dates = ignored_rows = 0
         with store.begin() as session:
-            point_list = (
-                session.query(PointList)
-                .filter(PointList.inspection_id == inspection_id, PointList.id == point_list_id)
-                .first()
-            )
-            if point_list is None:
-                return {"error": "Selected Points List was not found for this inspection."}
-
-            decisions = (
-                session.query(PointListDecision)
-                .filter(
-                    PointListDecision.inspection_id == inspection_id,
-                    PointListDecision.point_list_id == point_list_id,
-                    PointListDecision.accepted.is_(True),
-                    PointListDecision.deleted.is_(False),
-                )
-                .all()
-            )
+            panel = session.query(PointList).filter(
+                PointList.inspection_id == inspection_id, PointList.id == point_list_id,
+                PointList.deleted_at.is_(None),
+            ).with_for_update().first()
+            if panel is None:
+                raise HTTPException(status_code=404, detail="Selected Points List was not found for this inspection.")
+            decisions = session.query(PointListDecision).filter_by(
+                inspection_id=inspection_id, point_list_id=point_list_id, accepted=True, deleted=False,
+            ).all()
             decisions_by_id = {item.id: item for item in decisions}
-
-            # Explicit technician save replaces current event-date table for this points list.
-            session.query(PointListEventDate).filter(
-                PointListEventDate.inspection_id == inspection_id,
-                PointListEventDate.point_list_id == point_list_id,
-            ).delete(synchronize_session=False)
-
+            mappings = {item.point_address: item for item in session.query(PointListEventDate).filter_by(
+                inspection_id=inspection_id, point_list_id=point_list_id,
+            ).all()}
             for row in rows:
-                if not isinstance(row, dict):
+                if not isinstance(row, dict) or row.get("id") not in decisions_by_id:
                     ignored_rows += 1
                     continue
-
-                decision_id = str(row.get("id") or "").strip()
-                decision = decisions_by_id.get(decision_id)
-                if decision is None:
-                    ignored_rows += 1
-                    continue
-
-                normalized_address = normalize_point(row.get("address"))
-                decision.address = normalized_address
-                decision.text = str(row.get("text") or "").strip()
-                decision.location = str(row.get("location") or "").strip()
+                decision = decisions_by_id[row["id"]]
+                before = {"address": decision.address, "text": decision.text, "location": decision.location}
+                address = normalize_point(row.get("address", decision.address))
+                if address is None or not 1 <= address <= 255:
+                    raise HTTPException(status_code=400, detail="Point addresses must be between 1 and 255.")
+                if address != decision.address and decision.address in mappings:
+                    raise HTTPException(status_code=409, detail="Clear accepted test results explicitly before changing a mapped point address.")
+                decision.address = address
+                if "text" in row:
+                    decision.text = str(row["text"] or "").strip()
+                if "location" in row:
+                    decision.location = str(row["location"] or "").strip()
+                after = {"address": decision.address, "text": decision.text, "location": decision.location}
+                if before != after:
+                    record_decision(session, request, inspection_id, point_list_id, "point_edited",
+                                    {"point_id": decision.id, "before": before, "after": after})
                 updated_rows += 1
-
-                if normalized_address is None:
+                raw_timestamp = str(row.get("event_date") or "").strip()
+                # Empty/stale fields never clear accepted mappings during an ordinary save.
+                if not raw_timestamp:
                     continue
-                timestamp = parse_saved_timestamp(row.get("event_date"))
+                timestamp = parse_saved_timestamp(raw_timestamp)
                 if timestamp is None:
+                    raise HTTPException(status_code=400, detail=f"Point {address}: invalid test timestamp.")
+                existing = mappings.get(address)
+                if existing is not None:
+                    if timestamp.replace(tzinfo=None) != existing.event_timestamp.replace(tzinfo=None):
+                        raise HTTPException(status_code=409, detail=f"Point {address}: accepted test results changed. Reload, or explicitly clear results before correcting them.")
                     continue
-
-                session.add(
-                    PointListEventDate(
-                        id=str(uuid4()),
-                        inspection_id=inspection_id,
-                        point_list_id=point_list_id,
-                        point_address=normalized_address,
-                        event_timestamp=timestamp,
-                        source_filename="accepted_points_table",
-                    )
+                mapping = PointListEventDate(
+                    id=str(uuid4()), inspection_id=inspection_id, point_list_id=point_list_id,
+                    point_address=address, event_timestamp=timestamp, source_filename="accepted_points_table",
                 )
-                session.query(PointListPendingEventDate).filter_by(inspection_id=inspection_id, point_list_id=point_list_id, point_address=normalized_address).delete(synchronize_session=False)
+                session.add(mapping)
+                mappings[address] = mapping
+                record_decision(session, request, inspection_id, point_list_id, "manual_event_accepted",
+                                {"point": address, "timestamp": timestamp, "source_filename": mapping.source_filename})
+                session.query(PointListPendingEventDate).filter_by(
+                    inspection_id=inspection_id, point_list_id=point_list_id, point_address=address,
+                ).delete(synchronize_session=False)
                 decision.device_event_missing = False
                 saved_event_dates += 1
-
-        return {
-            "inspection_id": inspection_id,
-            "point_list_id": point_list_id,
-            "status": "saved",
-            "updated_rows": updated_rows,
-            "saved_event_dates": saved_event_dates,
-            "ignored_rows": ignored_rows,
-        }
+            addresses = [item.address for item in decisions if item.address is not None]
+            if len(set(addresses)) != len(addresses):
+                raise HTTPException(status_code=400, detail="Duplicate point addresses require correction before saving.")
+        return {"inspection_id": inspection_id, "point_list_id": point_list_id, "status": "saved",
+                "updated_rows": updated_rows, "saved_event_dates": saved_event_dates, "ignored_rows": ignored_rows}
