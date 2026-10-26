@@ -67,6 +67,15 @@ def test_admin_choices_and_typed_checklist_values_sync(tmp_path, monkeypatch):
                 # Header Save flushes the local text before reopening the inspection.
                 await c.click('#save-all-inspection')
                 await playwright.expect(b.locator(text)).to_have_value('Private draft',timeout=12000)
+                # Returning to administration must not expose stale rows during its request.
+                await a.click('#back-home-from-admin')
+                await a.locator('#avatar-button').click(button='right'); await a.click('#avatar-menu-option-admin')
+                async def delayed_tasks(route):
+                    await asyncio.sleep(0.4)
+                    await route.continue_()
+                await a.route('**/api/admin/inspection-tasks', delayed_tasks)
+                await a.click('#admin-tab-inspection-tasks')
+                await playwright.expect(a.locator('#inspection-tasks-body')).to_contain_text('Loading inspection tasks...')
                 row = a.locator(f'tr[data-task-id="{ids["Condition"]}"]')
                 await row.locator('.remove-task-choice').first.click(); await row.locator('.add-task-choice').click(); await row.locator('.task-option-input').last.fill('Not tested')
                 await row.locator('td').last.locator('button').click()

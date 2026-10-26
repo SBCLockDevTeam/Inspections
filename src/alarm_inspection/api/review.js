@@ -416,6 +416,11 @@
   const newTaskOptions = createTaskOptionsEditor(document.querySelector('#inspection-task-options'), newTaskType);
 
   async function loadAdminInspectionTasks(supplied = null) {
+    if (!supplied) {
+      const loading = document.createElement('tr');
+      const cell = document.createElement('td'); cell.colSpan = 5; cell.textContent = 'Loading inspection tasks...';
+      loading.append(cell); inspectionTasksBody.replaceChildren(loading);
+    }
     const response = supplied ? { ok: true } : await fetch('/api/admin/inspection-tasks');
     const result = supplied || await response.json();
     if (!response.ok) throw new Error(taskError(result, 'Unable to load inspection tasks.'));
