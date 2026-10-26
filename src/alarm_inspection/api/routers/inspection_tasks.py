@@ -1,19 +1,29 @@
 """Administrator-managed tasks and auditable per-inspection checklist decisions."""
+import json
+from typing import Literal
 from datetime import datetime, timezone
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, Field, StrictBool, field_validator, model_validator
+from pydantic import BaseModel, Field, StrictBool, StrictStr, field_validator, model_validator
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 
 from alarm_inspection.api.auth_support import require_admin
+from alarm_inspection.domain.checklist import validate_options, validate_answer
 from alarm_inspection.storage import Inspection, InspectionTask, InspectionChecklistDecision
 
 
 class TaskCreate(BaseModel):
     text: str = Field(min_length=1, max_length=200)
     position: int | None = Field(default=None, ge=1, le=10000, strict=True)
+    input_type: Literal["checkbox", "textbox", "dropdown"] = "checkbox"
+    options: list[StrictStr] = Field(default_factory=list, max_length=50)
+
+    @model_validator(mode="after")
+    def validate_definition(self):
+        self.options = validate_options(self.input_type, self.options)
+        return self
 
     @field_validator("text")
     @classmethod
@@ -28,6 +38,8 @@ class TaskUpdate(BaseModel):
     text: str | None = Field(default=None, min_length=1, max_length=200)
     position: int | None = Field(default=None, ge=1, le=10000, strict=True)
     active: StrictBool | None = None
+    input_type: Literal["checkbox", "textbox", "dropdown"] | None = None
+    options: list[StrictStr] | None = Field(default=None, max_length=50)
 
     @model_validator(mode="after")
     def validate_changes(self):
@@ -42,11 +54,12 @@ class TaskUpdate(BaseModel):
 
 
 class ChecklistUpdate(BaseModel):
-    completed: StrictBool
+    completed: StrictBool | None = None
+    value: StrictStr | None = Field(default=None, max_length=2000)
 
 
 def serialize_task(task):
-    return {"id": task.id, "text": task.text, "position": task.position, "active": task.active}
+    return {"id": task.id, "text": task.text, "position": task.position, "active": task.active, "input_type": task.input_type, "options": json.loads(task.options_json or "[]")}
 
 
 def admin_only(request: Request):
@@ -71,6 +84,7 @@ def create_admin_router(store):
             with store.begin() as session:
                 position = payload.position or ((session.query(func.max(InspectionTask.position)).scalar() or 0) + 1)
                 task = InspectionTask(id=str(uuid4()), text=payload.text, text_key=payload.text.casefold(),
+                                      input_type=payload.input_type, options_json=json.dumps(payload.options),
                                       position=position, active=True, created_at=datetime.now(timezone.utc))
                 session.add(task)
                 session.flush()
@@ -86,6 +100,14 @@ def create_admin_router(store):
                 task = session.get(InspectionTask, task_id)
                 if task is None:
                     raise HTTPException(status_code=404, detail="Task not found.")
+                input_type = payload.input_type or task.input_type
+                options = payload.options if payload.options is not None else (json.loads(task.options_json or "[]") if input_type == "dropdown" else [])
+                try:
+                    options = validate_options(input_type, options)
+                except ValueError as exc:
+                    raise HTTPException(status_code=422, detail=str(exc)) from exc
+                task.input_type = input_type
+                task.options_json = json.dumps(options)
                 if payload.text is not None:
                     task.text = payload.text
                     task.text_key = payload.text.casefold()
@@ -125,7 +147,12 @@ def create_checklist_router(store):
             rows = []
             for task in tasks:
                 decision = latest.get(task.id)
-                rows.append({**serialize_task(task), "completed": bool(decision and decision.completed)})
+                same_type = bool(decision and decision.input_type == task.input_type)
+                value = decision.value if same_type and task.input_type != "checkbox" else ""
+                completed = bool(decision and decision.completed) if same_type else False
+                rows.append({**serialize_task(task), "completed": completed, "value": value,
+                             "previous_type": decision.input_type if decision and not same_type else None,
+                             "removed_choice": bool(value and task.input_type == "dropdown" and value not in json.loads(task.options_json or "[]"))})
             return {"tasks": rows, "completed_count": sum(row["completed"] for row in rows), "total_count": len(rows)}
 
     @router.patch("/{task_id}")
@@ -135,11 +162,17 @@ def create_checklist_router(store):
             task = session.get(InspectionTask, task_id)
             if task is None or not task.active:
                 raise HTTPException(status_code=404, detail="Active task not found.")
+            options = json.loads(task.options_json or "[]")
+            try:
+                completed, value = validate_answer(task.input_type, payload.completed, payload.value, options)
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
             session.add(InspectionChecklistDecision(
                 id=str(uuid4()), inspection_id=inspection_id, task_id=task.id, task_text=task.text,
-                completed=payload.completed, decided_by=request.state.current_user.id,
+                input_type=task.input_type, value=value, options_json=task.options_json,
+                completed=completed, decided_by=request.state.current_user.id,
                 decided_at=datetime.now(timezone.utc),
             ))
-        return {"task_id": task_id, "completed": payload.completed, "status": "saved"}
+        return {"task_id": task_id, "completed": completed, "value": value, "status": "saved"}
 
     return router

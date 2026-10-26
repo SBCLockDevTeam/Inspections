@@ -7,7 +7,7 @@ import tempfile
 from datetime import date, datetime
 from pathlib import Path
 
-from sqlalchemy import Boolean, Date, DateTime, String, create_engine, inspect, text
+from sqlalchemy import Boolean, Date, DateTime, String, Text, create_engine, inspect, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 
 from alarm_inspection.domain.inspection_names import build_inspection_name, location_from_address
@@ -93,6 +93,8 @@ class InspectionTask(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     text: Mapped[str] = mapped_column(String(200))
     text_key: Mapped[str] = mapped_column(String(600), unique=True)
+    input_type: Mapped[str] = mapped_column(String(20), default="checkbox")
+    options_json: Mapped[str] = mapped_column(Text, default="[]")
     position: Mapped[int] = mapped_column(default=1)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
@@ -105,6 +107,9 @@ class InspectionChecklistDecision(Base):
     inspection_id: Mapped[str] = mapped_column(String(36), index=True)
     task_id: Mapped[str] = mapped_column(String(36), index=True)
     task_text: Mapped[str] = mapped_column(String(200))
+    input_type: Mapped[str] = mapped_column(String(20), default="checkbox")
+    value: Mapped[str] = mapped_column(String(2000), default="")
+    options_json: Mapped[str] = mapped_column(Text, default="[]")
     completed: Mapped[bool] = mapped_column(Boolean)
     decided_by: Mapped[str] = mapped_column(String(36))
     decided_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
@@ -184,6 +189,7 @@ def open_store():
     Base.metadata.create_all(engine)
     _ensure_inspection_columns(engine)
     _ensure_point_list_decision_columns(engine)
+    _ensure_checklist_columns(engine)
     return sessionmaker(bind=engine, expire_on_commit=False)
 
 
@@ -239,3 +245,16 @@ def _ensure_point_list_decision_columns(engine) -> None:
     with engine.begin() as connection:
         for statement in statements:
             connection.execute(text(statement))
+
+
+def _ensure_checklist_columns(engine) -> None:
+    additions = {
+        "inspection_tasks": {"input_type": "VARCHAR(20) DEFAULT 'checkbox'", "options_json": "TEXT DEFAULT '[]'"},
+        "inspection_checklist_decisions": {"input_type": "VARCHAR(20) DEFAULT 'checkbox'", "value": "VARCHAR(2000) DEFAULT ''", "options_json": "TEXT DEFAULT '[]'"},
+    }
+    for table, columns in additions.items():
+        existing = {column["name"] for column in inspect(engine).get_columns(table)}
+        with engine.begin() as connection:
+            for name, definition in columns.items():
+                if name not in existing:
+                    connection.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {definition}"))

@@ -22,6 +22,8 @@ These models are the persistence contract and should be treated as stable unless
 
 `PointListDecision.device_event_missing` records the warning assessed after a successful upload. Startup adds this Boolean column with a false default; the new `point_list_pending_event_dates` table uses inspection, Points List, and address as its key. Pending matches are cumulative shared evidence, separate from accepted mappings. No existing accepted mappings are changed. Event uploads retain unique storage paths even when filenames repeat.
 
+Checklist definitions include `input_type` and `options_json`; decision history includes the type, captured `value`, and a snapshot of choices as well as the legacy completion flag. Startup adds these columns with checkbox/empty defaults to preserve existing checked values. Text values are limited to 2000 characters; dropdowns allow 1–50 distinct nonempty choices of up to 120 characters. Removing a choice never erases historical answers. New selections are validated against current choices in `domain/checklist.py`.
+
 ## API Module Dependency Map
 
 ```mermaid

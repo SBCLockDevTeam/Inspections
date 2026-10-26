@@ -154,7 +154,7 @@
   const fieldBaselines = new WeakMap();
   const controlValue = (control) => control.type === 'checkbox' ? control.checked : control.value;
   const rememberControls = (root) => root?.querySelectorAll('input,select,textarea').forEach((control) => fieldBaselines.set(control, controlValue(control)));
-  const hasDraft = (root) => [...(root?.querySelectorAll('input,select,textarea') || [])].some((control) => fieldBaselines.has(control) && fieldBaselines.get(control) !== controlValue(control));
+  const hasDraft = (root) => Boolean(root?.querySelector('[data-checklist-dirty="true"]')) || [...(root?.querySelectorAll('input,select,textarea') || [])].some((control) => fieldBaselines.has(control) && fieldBaselines.get(control) !== controlValue(control));
   const rememberResponse = (url, value) => liveSnapshots.set(url, JSON.stringify(value));
   const fetch = async (url, options = {}) => {
     const write = !['GET', 'HEAD'].includes((options.method || 'GET').toUpperCase());
@@ -293,7 +293,7 @@
         } else if (!inspectionPoints.some((point) => point.highlightSaving) && liveSnapshots.get('accepted-points') !== JSON.stringify(points)) {
           renderAcceptedPoints(points);
         }
-        if (valid() && !checklistSaves.size) await collection(`/api/inspections/${inspectionId}/checklist`, checklistContainer, (result) => loadInspectionChecklist(inspectionId, result), false);
+        if (valid() && !checklistSaves.size && !hasDraft(checklistContainer)) await collection(`/api/inspections/${inspectionId}/checklist`, checklistContainer, (result) => loadInspectionChecklist(inspectionId, result), false);
       }
       if (valid() && nfpaDraftModal?.classList.contains('open')) {
         const key = activePdfTemplateKey;
@@ -371,6 +371,50 @@
     return result.error || result.detail || fallback;
   }
 
+  function makeTaskTypeSelect(value) {
+    const select = document.createElement('select');
+    select.className = 'admin-task-type'; select.setAttribute('aria-label', 'Task type');
+    for (const [key, label] of [['checkbox', 'Checkbox'], ['textbox', 'Textbox'], ['dropdown', 'Dropdown']]) select.add(new Option(label, key));
+    select.value = value || 'checkbox';
+    return select;
+  }
+
+  function createTaskOptionsEditor(root, typeSelect, options = []) {
+    root.classList.add('task-options-editor');
+    const rows = document.createElement('div');
+    const add = document.createElement('button');
+    add.type = 'button'; add.className = 'secondary add-task-choice'; add.textContent = 'Add Choice';
+    const dirty = () => { root.dataset.checklistDirty = 'true'; mutationVersion++; };
+    const append = (value = '') => {
+      const row = document.createElement('div'); row.className = 'task-option-row';
+      const input = document.createElement('input'); input.type = 'text'; input.value = value;
+      input.className = 'task-option-input'; input.maxLength = 120; input.autocomplete = 'off';
+      input.setAttribute('aria-label', 'Dropdown choice'); input.placeholder = 'Choice';
+      input.required = true; input.disabled = typeSelect.value !== 'dropdown';
+      const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'secondary remove-task-choice'; remove.textContent = 'Remove';
+      remove.addEventListener('click', () => { row.remove(); dirty(); });
+      row.append(input, remove); rows.append(row);
+      return input;
+    };
+    root.replaceChildren(rows, add);
+    for (const option of options) append(option);
+    const refresh = () => {
+      const dropdown = typeSelect.value === 'dropdown'; root.classList.toggle('hidden', !dropdown);
+      if (dropdown && !rows.children.length) append();
+      for (const input of rows.querySelectorAll('input')) input.disabled = !dropdown;
+    };
+    typeSelect.addEventListener('change', () => { refresh(); dirty(); });
+    add.addEventListener('click', () => { append().focus(); dirty(); });
+    refresh();
+    return {
+      values: () => typeSelect.value === 'dropdown' ? [...rows.querySelectorAll('input')].map((input) => input.value) : [],
+      valid: () => [...rows.querySelectorAll('input')].filter((input) => !input.disabled).every((input) => input.reportValidity()),
+      reset: () => { rows.replaceChildren(); delete root.dataset.checklistDirty; refresh(); },
+    };
+  }
+  const newTaskType = document.querySelector('#inspection-task-type');
+  const newTaskOptions = createTaskOptionsEditor(document.querySelector('#inspection-task-options'), newTaskType);
+
   async function loadAdminInspectionTasks(supplied = null) {
     const response = supplied ? { ok: true } : await fetch('/api/admin/inspection-tasks');
     const result = supplied || await response.json();
@@ -386,6 +430,11 @@
       text.autocomplete = 'off'; text.name = `inspection_task_${task.id}`;
       text.className = 'admin-task-text'; text.setAttribute('aria-label', 'Task description');
       textCell.append(text);
+      const typeCell = document.createElement('td');
+      const type = makeTaskTypeSelect(task.input_type);
+      const optionsRoot = document.createElement('div');
+      const editor = createTaskOptionsEditor(optionsRoot, type, task.options || []);
+      typeCell.append(type, optionsRoot);
       const orderCell = document.createElement('td');
       const position = document.createElement('input');
       position.type = 'number'; position.required = true; position.min = '1'; position.max = '10000'; position.step = '1';
@@ -399,13 +448,13 @@
       const save = document.createElement('button');
       save.type = 'button'; save.textContent = 'Save';
       save.addEventListener('click', async () => {
-        if (!text.reportValidity() || !position.reportValidity()) return;
+        if (!text.reportValidity() || !position.reportValidity() || !editor.valid()) return;
         save.disabled = true;
         inspectionTasksMessage.textContent = 'Saving task...';
         try {
           const response = await fetch(`/api/admin/inspection-tasks/${task.id}`, {
             method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text: text.value, position: Number(position.value), active: active.checked }),
+            body: JSON.stringify({ text: text.value, position: Number(position.value), active: active.checked, input_type: type.value, options: editor.values() }),
           });
           const result = await response.json();
           if (!response.ok) throw new Error(taskError(result, 'Saving task failed.'));
@@ -415,7 +464,7 @@
         finally { save.disabled = false; }
       });
       actions.append(save);
-      row.append(textCell, orderCell, activeCell, actions);
+      row.append(textCell, typeCell, orderCell, activeCell, actions);
       inspectionTasksBody.append(row);
     }
     rememberControls(inspectionTasksBody);
@@ -428,7 +477,8 @@
     button.disabled = true;
     inspectionTasksMessage.textContent = 'Adding task...';
     const position = document.querySelector('#inspection-task-position').value;
-    const payload = { text: document.querySelector('#inspection-task-text').value };
+    if (!newTaskOptions.valid()) { button.disabled = false; return; }
+    const payload = { text: document.querySelector('#inspection-task-text').value, input_type: newTaskType.value, options: newTaskOptions.values() };
     if (position) payload.position = Number(position);
     try {
       const response = await fetch('/api/admin/inspection-tasks', {
@@ -437,6 +487,7 @@
       const result = await response.json();
       if (!response.ok) throw new Error(taskError(result, 'Adding task failed.'));
       addInspectionTaskForm.reset();
+      newTaskOptions.reset();
       await loadAdminInspectionTasks();
       inspectionTasksMessage.textContent = 'Task added.';
     } catch (error) { inspectionTasksMessage.textContent = error.message; }
@@ -444,14 +495,12 @@
   });
 
   function updateChecklistProgress() {
-    const boxes = [...checklistContainer.querySelectorAll('input[type=checkbox]')];
-    checklistProgress.textContent = boxes.length ? `${boxes.filter((box) => box.checked).length} of ${boxes.length} complete` : '';
+    const controls = [...checklistContainer.querySelectorAll('[data-task-id]')];
+    const complete = controls.filter((control) => control.type === 'checkbox' ? control.checked : Boolean(control.value.trim())).length;
+    checklistProgress.textContent = controls.length ? `${complete} of ${controls.length} complete` : '';
   }
 
   async function loadInspectionChecklist(inspectionId, supplied = null) {
-    checklistContainer.textContent = 'Loading inspection tasks...';
-    checklistMessage.textContent = '';
-    checklistProgress.textContent = '';
     await Promise.all([...checklistSaves]);
     if (currentInspectionId !== inspectionId) return;
     try {
@@ -460,51 +509,83 @@
       if (currentInspectionId !== inspectionId) return;
       if (!response.ok) throw new Error(taskError(result, 'Unable to load the Check List.'));
       rememberResponse(`/api/inspections/${inspectionId}/checklist`, result);
+      const focused = checklistContainer.contains(document.activeElement) ? document.activeElement : null;
+      const focusedId = focused?.id;
+      const selectionStart = focused?.selectionStart;
+      const selectionEnd = focused?.selectionEnd;
       checklistContainer.replaceChildren();
       if (!result.tasks.length) checklistContainer.textContent = 'No inspection tasks have been added. An administrator can add them under Administration → Inspection Tasks.';
       for (const task of result.tasks) {
-        const row = document.createElement('label');
-        row.className = 'inspection-task-row';
-        const checkbox = document.createElement('input');
-        checkbox.type = 'checkbox'; checkbox.checked = task.completed; checkbox.dataset.taskId = task.id;
-        const text = document.createElement('span'); text.textContent = task.text;
-        row.append(checkbox, text); checklistContainer.append(row);
-        checkbox.addEventListener('change', () => {
-          const completed = checkbox.checked;
-          checkbox.disabled = true;
+        const checkbox = task.input_type === 'checkbox';
+        const row = document.createElement('div'); row.className = checkbox ? 'inspection-task-row' : 'form-field inspection-task-value';
+        const control = document.createElement(task.input_type === 'dropdown' ? 'select' : 'input');
+        control.id = `checklist-task-${task.id}`; control.dataset.taskId = task.id;
+        const label = document.createElement('label'); label.htmlFor = control.id; label.textContent = task.text + (checkbox ? '' : ':');
+        label.style.margin = '0'; label.style.fontWeight = '400';
+        if (checkbox) { control.type = 'checkbox'; control.checked = task.completed; row.append(control, label); }
+        else {
+          if (task.input_type === 'dropdown') {
+            control.add(new Option('Select...', ''));
+            for (const choice of task.options) control.add(new Option(choice, choice));
+            if (task.removed_choice) control.add(new Option(`${task.value} (removed choice)`, task.value));
+          } else { control.type = 'text'; control.maxLength = 2000; control.autocomplete = 'off'; }
+          control.value = task.value || ''; row.append(label, control);
+        }
+        if (task.previous_type || task.removed_choice) {
+          const note = document.createElement('span'); note.className = 'task-value-note';
+          note.textContent = task.removed_choice ? 'Saved choice retained. Select a current choice to change it.' : 'The previous answer is retained in history. Enter a value for the new type.';
+          row.append(note);
+        }
+        checklistContainer.append(row);
+        control.addEventListener('input', updateChecklistProgress);
+        if (!checkbox) control.addEventListener('keydown', (event) => {
+          if (event.key === 'Enter' && control.tagName === 'INPUT') { event.preventDefault(); control.dispatchEvent(new Event('change', { bubbles: true })); }
+        });
+        control.addEventListener('change', () => {
+          if (control.disabled) return;
+          const previous = fieldBaselines.get(control);
+          const value = controlValue(control);
+          if (value === previous) return;
+          control.disabled = true;
+          checklistMessage.textContent = 'Saving checklist value...';
           const save = (async () => {
             try {
               const response = await fetch(`/api/inspections/${inspectionId}/checklist/${task.id}`, {
-                method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ completed }),
+                method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(checkbox ? { completed: value } : { value }),
               });
               const result = await response.json();
-              if (!response.ok) throw new Error(taskError(result, 'Saving checklist item failed.'));
+              if (!response.ok) throw new Error(taskError(result, 'Saving checklist value failed.'));
+              fieldBaselines.set(control, value);
               if (currentInspectionId === inspectionId) checklistMessage.textContent = 'Check List saved.';
               return true;
             } catch (error) {
-              checkbox.checked = !completed;
+              if (checkbox) control.checked = previous;
               if (currentInspectionId === inspectionId) checklistMessage.textContent = error.message;
               return false;
             } finally {
-              checkbox.disabled = false;
+              control.disabled = false;
               if (currentInspectionId === inspectionId) updateChecklistProgress();
             }
           })();
-          checklistSaves.add(save);
-          save.finally(() => checklistSaves.delete(save));
+          checklistSaves.add(save); save.finally(() => checklistSaves.delete(save));
         });
+      }
+      rememberControls(checklistContainer);
+      if (focusedId) {
+        const replacement = document.getElementById(focusedId);
+        replacement?.focus({ preventScroll: true });
+        if (replacement?.type === 'text' && typeof selectionStart === 'number') replacement.setSelectionRange(selectionStart, selectionEnd);
       }
       updateChecklistProgress();
     } catch (error) {
-      if (currentInspectionId !== inspectionId) return;
-      checklistContainer.textContent = '';
-      checklistMessage.textContent = error.message;
+      if (currentInspectionId === inspectionId) checklistMessage.textContent = error.message;
     }
   }
 
   document.querySelector('#refresh-checklist')?.addEventListener('click', async () => {
     if (!currentInspectionId) return;
     await Promise.all([...checklistSaves]);
+    if (hasDraft(checklistContainer)) { checklistMessage.textContent = 'Save the edited checklist value before refreshing.'; return; }
     await loadInspectionChecklist(currentInspectionId);
   });
 
@@ -1235,6 +1316,9 @@
       return;
     }
     inspectionMessage.textContent = 'Saving all changes...';
+    for (const control of checklistContainer.querySelectorAll('[data-task-id]')) {
+      if (!control.disabled && fieldBaselines.get(control) !== controlValue(control)) control.dispatchEvent(new Event('change', { bubbles: true }));
+    }
     if ((await Promise.all([...checklistSaves])).includes(false)) {
       inspectionMessage.textContent = 'A checklist item could not be saved. Please try again.';
       return;
