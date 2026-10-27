@@ -25,6 +25,20 @@ def _header_score(value: object, aliases: set[str]) -> int:
     return 1 if normalized in aliases else 0
 
 
+def _header_values(rows: list[list[object]], row_index: int) -> list[list[object]]:
+    """Try a single header row, then vertically wrapped header cells."""
+    row = rows[row_index]
+    if row_index == 0:
+        return [row]
+    previous = rows[row_index - 1]
+    wrapped = [
+        " ".join(str(values[index]).strip() for values in (previous, row)
+                 if index < len(values) and values[index] is not None)
+        for index in range(max(len(previous), len(row)))
+    ]
+    return [row, wrapped]
+
+
 def detect_columns(rows: list[list[object]]) -> tuple[int, int, int]:
     """Return header row, point column, and text column indexes."""
     point_aliases = {
@@ -32,16 +46,15 @@ def detect_columns(rows: list[list[object]]) -> tuple[int, int, int]:
         "point numbers", "point #", "point no", "point id", "address", "device address",
     }
     text_aliases = {"text", "point text", "description", "device", "device type", "device description"}
-    best = (-1, 0, 0, 0)
-    for row_index, row in enumerate(rows[:30]):
-        for point_index, value in enumerate(row):
-            for text_index, text_value in enumerate(row):
-                score = _header_score(value, point_aliases) + _header_score(text_value, text_aliases)
-                if score > best[0]:
-                    best = (score, row_index, point_index, text_index)
-    if best[0] < 2:
-        raise ValueError("Could not identify point and text columns")
-    return best[1], best[2], best[3]
+    for row_index in range(min(30, len(rows))):
+        for row in _header_values(rows, row_index):
+            point_columns = [i for i, value in enumerate(row) if _header_score(value, point_aliases)]
+            text_columns = [i for i, value in enumerate(row) if _header_score(value, text_aliases)]
+            for point_index in point_columns:
+                for text_index in text_columns:
+                    if point_index != text_index:
+                        return row_index, point_index, text_index
+    raise ValueError("Could not identify point and text columns")
 
 
 def normalize_rows(rows: Iterable[list[object]]) -> list[NormalizedPoint]:
@@ -51,6 +64,22 @@ def normalize_rows(rows: Iterable[list[object]]) -> list[NormalizedPoint]:
     orphan_text: list[str] = []
     orphan_start_row: int | None = None
     current_point_index: int | None = None
+    # Repeated print headers and page furniture are structural boundaries.
+    single_signature = materialized[header_row]
+    try:
+        detect_columns([single_signature])
+        header_signature = single_signature
+    except ValueError:
+        header_signature = _header_values(materialized, header_row)[-1]
+    repeated_headers = {
+        index for index in range(header_row, len(materialized))
+        if single_signature == materialized[index]
+        and (header_signature == single_signature
+             or header_signature in _header_values(materialized, index))
+    }
+    header_starts = {index - 1 for index in repeated_headers
+                     if header_signature != single_signature}
+    in_page_furniture = False
 
     def flush_orphan_text() -> None:
         nonlocal orphan_start_row
@@ -65,6 +94,16 @@ def normalize_rows(rows: Iterable[list[object]]) -> list[NormalizedPoint]:
         orphan_start_row = None
 
     for row_number, row in enumerate(materialized[header_row + 1 :], header_row + 2):
+        row_index = row_number - 1
+        footer = " ".join(str(value).strip() for value in row if value is not None)
+        if re.search(r"\bPage\s+\d+\s+of\s+\d+\s*$", footer, re.IGNORECASE):
+            in_page_furniture = True
+        if row_index in repeated_headers or row_index in header_starts or in_page_furniture:
+            flush_orphan_text()
+            current_point_index = None
+            if row_index in repeated_headers:
+                in_page_furniture = False
+            continue
         point_value = row[point_col] if point_col < len(row) else None
         text_value = row[text_col] if text_col < len(row) else None
         text = "" if text_value is None else str(text_value).strip()
