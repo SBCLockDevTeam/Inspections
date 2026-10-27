@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import os
 import tempfile
+import time
 from datetime import date, datetime
 from pathlib import Path
 
 from sqlalchemy import Boolean, Date, DateTime, String, Text, create_engine, inspect, text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 
 from alarm_inspection.domain.inspection_names import build_inspection_name, location_from_address
@@ -199,13 +201,26 @@ def open_store():
         default_db = Path(tempfile.gettempdir()) / "alarm-inspection.db"
         default_db.parent.mkdir(parents=True, exist_ok=True)
         url = f"sqlite:///{default_db.as_posix()}"
-    engine = create_engine(url, pool_pre_ping=True)
-    Base.metadata.create_all(engine)
-    _ensure_inspection_columns(engine)
-    _ensure_point_list_decision_columns(engine)
-    _ensure_checklist_columns(engine)
-    _ensure_point_list_columns(engine)
-    return sessionmaker(bind=engine, expire_on_commit=False)
+
+    last_error: Exception | None = None
+    for attempt in range(1, 6):
+        try:
+            engine = create_engine(url, pool_pre_ping=True)
+            Base.metadata.create_all(engine)
+            _ensure_inspection_columns(engine)
+            _ensure_point_list_decision_columns(engine)
+            _ensure_checklist_columns(engine)
+            _ensure_point_list_columns(engine)
+            return sessionmaker(bind=engine, expire_on_commit=False)
+        except SQLAlchemyError as exc:  # pragma: no cover - depends on external DB readiness
+            last_error = exc
+            if attempt == 5 or url.startswith("sqlite"):
+                raise
+            time.sleep(2)
+
+    if last_error is not None:
+        raise last_error
+    raise RuntimeError("Unable to initialize the inspection database store.")
 
 
 def _ensure_inspection_columns(engine) -> None:
