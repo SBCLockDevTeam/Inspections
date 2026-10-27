@@ -189,3 +189,54 @@ def test_legacy_checklist_migration_preserves_existing_answers(tmp_path, monkeyp
         task = session.get(InspectionTask, 'old-task'); answer = session.get(InspectionChecklistDecision, 'old-answer')
         assert task.input_type == 'checkbox' and task.options_json == '[]'
         assert answer.input_type == 'checkbox' and answer.completed and answer.decided_by == 'user'
+
+
+def test_checkbox_answers_are_exclusive_audited_and_independent(task_app):
+    import json
+    client, store = task_app
+    task = add_task(client)
+    one, two = make_inspection(client), make_inspection(client, '0043')
+    path = f'/api/inspections/{one}/checklist'
+    for value in ('Yes', 'No', 'NA', ''):
+        result = client.patch(path+'/'+task['id'], json={'value': value})
+        assert result.status_code == 200
+        assert result.json()['value'] == value
+        rows = client.get(path).json()
+        assert rows['tasks'][0]['value'] == value
+        assert rows['completed_count'] == int(bool(value))
+        assert client.get(f'/api/inspections/{two}/checklist').json()['tasks'][0]['value'] == ''
+    for payload in ({'value': 'Yes,No'}, {'value': ['Yes', 'No']}, {'value': 'N/A'},
+                    {'value': 'Yes', 'completed': True}, {}, {'value': None}):
+        assert client.patch(path+'/'+task['id'], json=payload).status_code == 422
+    with store() as session:
+        decisions = session.query(InspectionChecklistDecision).filter_by(task_id=task['id']).order_by(InspectionChecklistDecision.decided_at).all()
+        assert [d.value for d in decisions] == ['Yes', 'No', 'NA', '']
+        assert [d.completed for d in decisions] == [True, True, True, False]
+        assert all(json.loads(d.options_json) == ['Yes', 'No', 'NA'] and d.decided_by and d.decided_at for d in decisions)
+
+
+def test_existing_checkbox_answers_use_new_format_without_rewriting_history(task_app):
+    client, store = task_app
+    one, two = make_inspection(client), make_inspection(client, '0043')
+    task = add_task(client)
+    with store.begin() as session:
+        for inspection_id, completed in ((one, True), (two, False)):
+            session.add(InspectionChecklistDecision(
+                id=str(uuid4()), inspection_id=inspection_id, task_id=task['id'],
+                task_text=task['text'], input_type='checkbox', completed=completed,
+                value='', options_json='[]', decided_by='original-user',
+                decided_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
+            ))
+    for inspection_id, value in ((one, 'Yes'), (two, '')):
+        for _ in range(2):
+            row = client.get(f'/api/inspections/{inspection_id}/checklist').json()['tasks'][0]
+            assert row['input_type'] == 'checkbox' and row['value'] == value
+            assert row['completed'] == bool(value)
+    with store() as session:
+        decisions = session.query(InspectionChecklistDecision).all()
+        assert len(decisions) == 2
+        assert all(d.value == '' and d.options_json == '[]' and d.decided_by == 'original-user' for d in decisions)
+    # Subsequent choices append a decision rather than replacing the legacy answer.
+    assert client.patch(f'/api/inspections/{one}/checklist/{task["id"]}', json={'value': 'NA'}).status_code == 200
+    with store() as session:
+        assert session.query(InspectionChecklistDecision).count() == 3

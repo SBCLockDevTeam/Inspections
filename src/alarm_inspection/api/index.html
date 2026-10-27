@@ -270,8 +270,11 @@ button:active {
 .inspection-section > summary:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
 .inspection-section-body { padding: 16px; }
 #checklist-progress { font-size: 0.9rem; font-weight: 400; color: var(--muted); margin-left: 10px; }
-.inspection-task-row { display: flex; align-items: flex-start; gap: 10px; padding: 11px 0; margin: 0; font-weight: 400; }
-.inspection-task-row input[type=checkbox] { width: auto; margin: 3px 0 0; flex: 0 0 auto; }
+.inspection-task-row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 16px; padding: 11px 0; margin: 0; font-weight: 400; }
+.inspection-task-description { flex: 1 1 220px; min-width: 0; overflow-wrap: anywhere; }
+.task-checkbox-choices { display: flex; flex: 0 0 auto; gap: 16px; }
+.task-checkbox-choices label { display: inline-flex; align-items: center; gap: 6px; margin: 0; font-weight: 400; cursor: pointer; }
+.inspection-task-row input[type=checkbox] { width: auto; margin: 0; flex: 0 0 auto; }
 #refresh-checklist { width: auto; }
 #checklist-message { margin-top: 10px; }
 .inspection-task-value { margin: 10px 0; }
@@ -959,7 +962,7 @@ button.inspection-menu-option {
 </div>
 <div id="admin-panel-inspection-tasks" role="tabpanel" aria-labelledby="admin-tab-inspection-tasks" class="hidden">
 <h3>Inspection Tasks</h3><p>Choose Checkbox, Textbox, or Dropdown for each item. Add or remove dropdown choices below. Existing answers remain in history when you change a type or remove a choice.</p>
-<form id="add-inspection-task-form" autocomplete="off"><div class="form-field"><label for="inspection-task-text">Task Description:</label><input id="inspection-task-text" name="inspection_checklist_task" type="text" maxlength="200" autocomplete="off" required></div><div class="form-field"><label for="inspection-task-type">Type:</label><select id="inspection-task-type" name="inspection_task_type"><option value="checkbox">Checkbox</option><option value="textbox">Textbox</option><option value="dropdown">Dropdown</option></select></div><div id="inspection-task-options"></div><div class="form-field"><label for="inspection-task-position">Order (optional):</label><input id="inspection-task-position" type="number" min="1" max="10000" step="1" placeholder="Next available position"></div><button type="submit" id="add-inspection-task">Add Task</button></form>
+<form id="add-inspection-task-form" autocomplete="off"><div class="form-field"><label for="inspection-task-text">Task Description:</label><input id="inspection-task-text" name="inspection_checklist_task" type="text" maxlength="200" autocomplete="off" required></div><div class="form-field"><label for="inspection-task-type">Type:</label><select id="inspection-task-type" name="inspection_task_type"><option value="checkbox">Checkbox (Yes / No / NA)</option><option value="textbox">Textbox</option><option value="dropdown">Dropdown</option></select></div><div id="inspection-task-options"></div><div class="form-field"><label for="inspection-task-position">Order (optional):</label><input id="inspection-task-position" type="number" min="1" max="10000" step="1" placeholder="Next available position"></div><button type="submit" id="add-inspection-task">Add Task</button></form>
 <div id="inspection-tasks-message" role="status"></div>
 <div class="table-scroll"><table class="table"><thead><tr><th>Task</th><th>Type &amp; Choices</th><th>Order</th><th>Active</th><th>Actions</th></tr></thead><tbody id="inspection-tasks-body"></tbody></table></div>
 </div>

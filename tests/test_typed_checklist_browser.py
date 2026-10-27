@@ -54,12 +54,38 @@ def test_admin_choices_and_typed_checklist_values_sync(tmp_path, monkeypatch):
                 for page in (b,c):
                     await page.click('#refresh-inspections'); await page.select_option('#inspection-picker',inspection_id); await page.click('#open-inspection')
                     await playwright.expect(page.locator('#inspection-screen')).to_be_visible()
-                text = f'#checklist-task-{ids["Panel serial"]}'; dropdown = f'#checklist-task-{ids["Condition"]}'; checkbox = f'#checklist-task-{ids["Restore system"]}'
+                text = f'#checklist-task-{ids["Panel serial"]}'; dropdown = f'#checklist-task-{ids["Condition"]}'; checkbox = f'#checklist-task-{ids["Restore system"]}-yes'
                 await b.locator(checkbox).check(); await b.fill(text,'SN-0042'); await b.locator(text).press('Tab')
                 await b.select_option(dropdown,'Ready'); await b.locator('#inspection-name').click()
                 await playwright.expect(c.locator(text)).to_have_value('SN-0042',timeout=12000)
                 await playwright.expect(c.locator(dropdown)).to_have_value('Ready',timeout=12000)
                 await playwright.expect(c.locator(checkbox)).to_be_checked(timeout=12000)
+                choices = f'#checklist-task-{ids["Restore system"]}'
+                await playwright.expect(b.locator('.task-checkbox-choices input')).to_have_count(3)
+                assert await b.locator('.task-checkbox-choices label').all_text_contents() == ['Yes', 'No', 'NA']
+                # Each answer replaces the previous one and synchronizes to other devices.
+                await c.locator(choices+'-no').check()
+                await playwright.expect(b.locator(choices+'-no')).to_be_checked(timeout=12000)
+                await playwright.expect(b.locator(checkbox)).not_to_be_checked()
+                await c.locator(choices+'-na').focus(); await c.locator(choices+'-na').press('Space')
+                await playwright.expect(b.locator(choices+'-na')).to_be_checked(timeout=12000)
+                await playwright.expect(b.locator(choices+'-no')).not_to_be_checked()
+                await playwright.expect(b.locator('#checklist-progress')).to_have_text('3 of 3 complete')
+                await c.locator(choices+'-na').uncheck()
+                await playwright.expect(b.locator('.task-checkbox-choices input:checked')).to_have_count(0,timeout=12000)
+                await playwright.expect(b.locator('#checklist-progress')).to_have_text('2 of 3 complete')
+                await b.locator(checkbox).check()
+                await playwright.expect(c.locator(checkbox)).to_be_checked(timeout=12000)
+                # Failed saves restore the last saved selection and keep the boxes usable.
+                async def reject_checkbox(route):
+                    await route.fulfill(status=422,json={'detail':'Test save failure'})
+                await b.route('**/checklist/'+ids['Restore system'],reject_checkbox)
+                await b.locator(choices+'-no').check()
+                await playwright.expect(b.locator('#checklist-message')).to_have_text('Test save failure')
+                await playwright.expect(b.locator(checkbox)).to_be_checked()
+                await playwright.expect(b.locator(choices+'-no')).not_to_be_checked()
+                await playwright.expect(b.locator(checkbox)).to_be_enabled()
+                await b.unroute('**/checklist/'+ids['Restore system'],reject_checkbox)
                 await c.fill(text,'Private draft')
                 await b.fill(text,'Shared value'); await b.locator(text).press('Tab')
                 await asyncio.sleep(3.5)
@@ -87,6 +113,7 @@ def test_admin_choices_and_typed_checklist_values_sync(tmp_path, monkeypatch):
                 await c.reload(); await playwright.expect(c.locator('#home-screen')).to_be_visible(); await c.select_option('#inspection-picker',inspection_id); await c.click('#open-inspection')
                 await playwright.expect(c.locator(text)).to_have_value('Private draft')
                 await playwright.expect(c.locator(dropdown)).to_have_value('Not tested')
+                await playwright.expect(c.locator(checkbox)).to_be_checked()
                 await c.set_viewport_size({'width':390,'height':1000})
                 assert await c.locator('#checklist-section').evaluate('(el)=>el.scrollWidth<=el.clientWidth')
                 assert errors == []

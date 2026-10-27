@@ -10,7 +10,7 @@ from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 
 from alarm_inspection.api.auth_support import require_admin
-from alarm_inspection.domain.checklist import validate_options, validate_answer
+from alarm_inspection.domain.checklist import CHECKBOX_CHOICES, checkbox_value, validate_options, validate_answer
 from alarm_inspection.storage import Inspection, InspectionTask, InspectionChecklistDecision
 
 
@@ -148,8 +148,10 @@ def create_checklist_router(store):
             for task in tasks:
                 decision = latest.get(task.id)
                 same_type = bool(decision and decision.input_type == task.input_type)
-                value = decision.value if same_type and task.input_type != "checkbox" else ""
-                completed = bool(decision and decision.completed) if same_type else False
+                value = decision.value if same_type else ""
+                if same_type and task.input_type == "checkbox":
+                    value = checkbox_value(value, decision.completed)
+                completed = bool(value.strip())
                 rows.append({**serialize_task(task), "completed": completed, "value": value,
                              "previous_type": decision.input_type if decision and not same_type else None,
                              "removed_choice": bool(value and task.input_type == "dropdown" and value not in json.loads(task.options_json or "[]"))})
@@ -169,7 +171,8 @@ def create_checklist_router(store):
                 raise HTTPException(status_code=422, detail=str(exc)) from exc
             session.add(InspectionChecklistDecision(
                 id=str(uuid4()), inspection_id=inspection_id, task_id=task.id, task_text=task.text,
-                input_type=task.input_type, value=value, options_json=task.options_json,
+                input_type=task.input_type, value=value,
+                options_json=json.dumps(CHECKBOX_CHOICES) if task.input_type == "checkbox" else task.options_json,
                 completed=completed, decided_by=request.state.current_user.id,
                 decided_at=datetime.now(timezone.utc),
             ))

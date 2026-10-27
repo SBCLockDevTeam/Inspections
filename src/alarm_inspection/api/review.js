@@ -379,7 +379,7 @@
   function makeTaskTypeSelect(value) {
     const select = document.createElement('select');
     select.className = 'admin-task-type'; select.setAttribute('aria-label', 'Task type');
-    for (const [key, label] of [['checkbox', 'Checkbox'], ['textbox', 'Textbox'], ['dropdown', 'Dropdown']]) select.add(new Option(label, key));
+    for (const [key, label] of [['checkbox', 'Checkbox (Yes / No / NA)'], ['textbox', 'Textbox'], ['dropdown', 'Dropdown']]) select.add(new Option(label, key));
     select.value = value || 'checkbox';
     return select;
   }
@@ -506,7 +506,7 @@
 
   function updateChecklistProgress() {
     const controls = [...checklistContainer.querySelectorAll('[data-task-id]')];
-    const complete = controls.filter((control) => control.type === 'checkbox' ? control.checked : Boolean(control.value.trim())).length;
+    const complete = controls.filter((control) => Boolean(control.value.trim())).length;
     checklistProgress.textContent = controls.length ? `${complete} of ${controls.length} complete` : '';
   }
 
@@ -530,9 +530,38 @@
         const row = document.createElement('div'); row.className = checkbox ? 'inspection-task-row' : 'form-field inspection-task-value';
         const control = document.createElement(task.input_type === 'dropdown' ? 'select' : 'input');
         control.id = `checklist-task-${task.id}`; control.dataset.taskId = task.id;
-        const label = document.createElement('label'); label.htmlFor = control.id; label.textContent = task.text + (checkbox ? '' : ':');
+        const label = document.createElement(checkbox ? 'span' : 'label');
+        if (!checkbox) label.htmlFor = control.id;
+        label.textContent = task.text + (checkbox ? '' : ':');
         label.style.margin = '0'; label.style.fontWeight = '400';
-        if (checkbox) { control.type = 'checkbox'; control.checked = task.completed; row.append(control, label); }
+        const choices = [];
+        const syncChoices = () => {
+          for (const choice of choices) {
+            choice.checked = choice.value === control.value;
+            choice.disabled = control.disabled;
+            fieldBaselines.set(choice, choice.checked);
+          }
+        };
+        if (checkbox) {
+          control.type = 'hidden'; control.value = task.value || '';
+          label.id = `${control.id}-label`; label.className = 'inspection-task-description';
+          const group = document.createElement('div'); group.className = 'task-checkbox-choices';
+          group.setAttribute('role', 'group'); group.setAttribute('aria-labelledby', label.id);
+          for (const value of ['Yes', 'No', 'NA']) {
+            const choice = document.createElement('input'); choice.type = 'checkbox'; choice.value = value;
+            choice.id = `${control.id}-${value.toLowerCase()}`;
+            choice.dataset.checklistChoice = value;
+            const option = document.createElement('label'); option.htmlFor = choice.id;
+            option.append(choice, document.createTextNode(value)); group.append(option); choices.push(choice);
+            choice.addEventListener('change', () => {
+              if (control.disabled) return;
+              control.value = choice.checked ? value : '';
+              syncChoices(); updateChecklistProgress();
+              control.dispatchEvent(new Event('change', { bubbles: true }));
+            });
+          }
+          syncChoices(); row.append(label, control, group);
+        }
         else {
           if (task.input_type === 'dropdown') {
             control.add(new Option('Select...', ''));
@@ -557,11 +586,12 @@
           const value = controlValue(control);
           if (value === previous) return;
           control.disabled = true;
+          syncChoices();
           checklistMessage.textContent = 'Saving checklist value...';
           const save = (async () => {
             try {
               const response = await fetch(`/api/inspections/${inspectionId}/checklist/${task.id}`, {
-                method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(checkbox ? { completed: value } : { value }),
+                method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ value }),
               });
               const result = await response.json();
               if (!response.ok) throw new Error(taskError(result, 'Saving checklist value failed.'));
@@ -569,11 +599,12 @@
               if (currentInspectionId === inspectionId) checklistMessage.textContent = 'Check List saved.';
               return true;
             } catch (error) {
-              if (checkbox) control.checked = previous;
+              if (checkbox) control.value = previous;
               if (currentInspectionId === inspectionId) checklistMessage.textContent = error.message;
               return false;
             } finally {
               control.disabled = false;
+              syncChoices();
               if (currentInspectionId === inspectionId) updateChecklistProgress();
             }
           })();

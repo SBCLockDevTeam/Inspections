@@ -1,5 +1,12 @@
 """Deterministic validation of checklist definitions and captured values."""
 
+CHECKBOX_CHOICES = ("Yes", "No", "NA")
+
+
+def checkbox_value(value: str, completed: bool) -> str:
+    """Display legacy checked answers as Yes without rewriting their audit rows."""
+    return value or ("Yes" if completed else "")
+
 
 def validate_options(input_type: str, options: list[str]) -> list[str]:
     if input_type not in {"checkbox", "textbox", "dropdown"}:
@@ -18,9 +25,14 @@ def validate_options(input_type: str, options: list[str]) -> list[str]:
 
 def validate_answer(input_type: str, completed: bool | None, value: str | None, options: list[str]):
     if input_type == "checkbox":
-        if completed is None or value is not None:
-            raise ValueError("A checkbox requires a true or false completion value.")
-        return completed, ""
+        if value is not None and completed is None:
+            if value not in ("", *CHECKBOX_CHOICES):
+                raise ValueError("Choose Yes, No, or NA, or clear the answer.")
+            return bool(value), value
+        # Older clients may still submit a single completion checkbox.
+        if completed is not None and value is None:
+            return completed, checkbox_value("", completed)
+        raise ValueError("Provide one checkbox answer: Yes, No, or NA.")
     if value is None or completed is not None:
         raise ValueError("Provide a text value for this checklist item.")
     if len(value) > 2000:
