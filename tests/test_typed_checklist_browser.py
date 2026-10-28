@@ -1,5 +1,6 @@
 """Administration choice editing and captured values across independent devices."""
 import asyncio
+import json
 import os
 import socket
 import threading
@@ -15,7 +16,7 @@ pytestmark = pytest.mark.skipif(os.getenv('INSPECTIONS_RUN_BROWSER_TESTS') != '1
 def test_admin_choices_and_typed_checklist_values_sync(tmp_path, monkeypatch):
     monkeypatch.setenv('DATABASE_URL', f"sqlite:///{tmp_path / 'typed-browser.db'}")
     from alarm_inspection.api.app import create_app
-    from alarm_inspection.storage import open_store, User
+    from alarm_inspection.storage import open_store, User, InspectionChecklistDecision
     app = create_app()
     with open_store().begin() as session: session.query(User).one().force_password_reset = False
     sock = socket.socket(); sock.bind(('127.0.0.1', 0))
@@ -47,6 +48,11 @@ def test_admin_choices_and_typed_checklist_values_sync(tmp_path, monkeypatch):
                         await choices.nth(0).fill('Ready'); await a.locator('#inspection-task-options .add-task-choice').click(); await choices.nth(1).fill('Remove me')
                         await a.locator('#inspection-task-options .remove-task-choice').nth(1).click()
                         await a.locator('#inspection-task-options .add-task-choice').click(); await choices.nth(1).fill('Needs repair')
+                        await playwright.expect(a.locator('#inspection-task-options .move-task-choice-up').first).to_be_disabled()
+                        await playwright.expect(a.locator('#inspection-task-options .move-task-choice-down').last).to_be_disabled()
+                        await a.locator('#inspection-task-options .move-task-choice-up').last.click()
+                        assert await choices.evaluate_all('(inputs)=>inputs.map(el=>el.value)') == ['Needs repair','Ready']
+                        await a.locator('#inspection-task-options .move-task-choice-down').first.click()
                     await a.click('#add-inspection-task'); await playwright.expect(a.locator('#inspection-tasks-message')).to_have_text('Task added.')
                 tasks = (await (await a.request.get(base+'/api/admin/inspection-tasks')).json())['tasks']
                 ids = {task['text']:task['id'] for task in tasks}
@@ -103,7 +109,21 @@ def test_admin_choices_and_typed_checklist_values_sync(tmp_path, monkeypatch):
                 await a.click('#admin-tab-inspection-tasks')
                 await playwright.expect(a.locator('#inspection-tasks-body')).to_contain_text('Loading inspection tasks...')
                 row = a.locator(f'tr[data-task-id="{ids["Condition"]}"]')
-                await row.locator('.remove-task-choice').first.click(); await row.locator('.add-task-choice').click(); await row.locator('.task-option-input').last.fill('Not tested')
+                await row.locator('.move-task-choice-up').last.click()
+                await asyncio.sleep(3.5)
+                assert await row.locator('.task-option-input').evaluate_all('(inputs)=>inputs.map(el=>el.value)') == ['Needs repair','Ready']
+                await row.locator('td').last.locator('button').click()
+                await playwright.expect(a.locator('#inspection-tasks-message')).to_have_text('Task updated.')
+                await playwright.expect(b.locator(dropdown+' option')).to_have_text(['Select...','Needs repair','Ready'],timeout=12000)
+                await playwright.expect(c.locator(dropdown)).to_have_value('Ready')
+                with open_store()() as session:
+                    answer = session.query(InspectionChecklistDecision).filter_by(task_id=ids['Condition']).one()
+                    assert answer.value == 'Ready' and json.loads(answer.options_json) == ['Ready','Needs repair']
+                # Persisted order survives reopening administration.
+                await a.click('#back-home-from-admin')
+                await a.locator('#avatar-button').click(button='right'); await a.click('#avatar-menu-option-admin'); await a.click('#admin-tab-inspection-tasks')
+                await playwright.expect(row.locator('.task-option-input').first).to_have_value('Needs repair')
+                await row.locator('.remove-task-choice').last.click(); await row.locator('.add-task-choice').click(); await row.locator('.task-option-input').last.fill('Not tested')
                 await row.locator('td').last.locator('button').click()
                 await playwright.expect(a.locator('#inspection-tasks-message')).to_have_text('Task updated.')
                 await b.locator('#inspection-name').click()

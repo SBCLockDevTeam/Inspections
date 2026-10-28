@@ -390,15 +390,36 @@
     const add = document.createElement('button');
     add.type = 'button'; add.className = 'secondary add-task-choice'; add.textContent = 'Add Choice';
     const dirty = () => { root.dataset.checklistDirty = 'true'; mutationVersion++; };
+    const refreshOrder = () => {
+      [...rows.children].forEach((row, index) => {
+        row.querySelector('.move-task-choice-up').disabled = index === 0 || typeSelect.value !== 'dropdown';
+        row.querySelector('.move-task-choice-down').disabled = index === rows.children.length - 1 || typeSelect.value !== 'dropdown';
+      });
+    };
     const append = (value = '') => {
       const row = document.createElement('div'); row.className = 'task-option-row';
       const input = document.createElement('input'); input.type = 'text'; input.value = value;
       input.className = 'task-option-input'; input.maxLength = 120; input.autocomplete = 'off';
       input.setAttribute('aria-label', 'Dropdown choice'); input.placeholder = 'Choice';
       input.required = true; input.disabled = typeSelect.value !== 'dropdown';
+      const moveButtons = [];
+      for (const [direction, symbol] of [['up', '↑'], ['down', '↓']]) {
+        const move = document.createElement('button');
+        move.type = 'button'; move.className = `secondary move-task-choice-${direction}`; move.textContent = symbol;
+        move.setAttribute('aria-label', `Move choice ${direction}`); move.title = `Move choice ${direction}`;
+        move.addEventListener('click', () => {
+          const sibling = direction === 'up' ? row.previousElementSibling : row.nextElementSibling;
+          if (!sibling) return;
+          if (direction === 'up') rows.insertBefore(row, sibling);
+          else rows.insertBefore(sibling, row);
+          dirty(); refreshOrder();
+          (move.disabled ? input : move).focus();
+        });
+        moveButtons.push(move);
+      }
       const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'secondary remove-task-choice'; remove.textContent = 'Remove';
-      remove.addEventListener('click', () => { row.remove(); dirty(); });
-      row.append(input, remove); rows.append(row);
+      remove.addEventListener('click', () => { row.remove(); dirty(); refreshOrder(); });
+      row.append(input, ...moveButtons, remove); rows.append(row); refreshOrder();
       return input;
     };
     root.replaceChildren(rows, add);
@@ -407,6 +428,7 @@
       const dropdown = typeSelect.value === 'dropdown'; root.classList.toggle('hidden', !dropdown);
       if (dropdown && !rows.children.length) append();
       for (const input of rows.querySelectorAll('input')) input.disabled = !dropdown;
+      refreshOrder();
     };
     typeSelect.addEventListener('change', () => { refresh(); dirty(); });
     add.addEventListener('click', () => { append().focus(); dirty(); });
