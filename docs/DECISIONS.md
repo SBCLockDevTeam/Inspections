@@ -1,5 +1,9 @@
 # Decision Log
 
+## 2026 10 28 Isolated PDF integration feasibility
+
+The first PDF integration implementation batch adds offline inventory and always-watermarked diagnostic rendering tools under `integrations/`, generated synthetic PDF tests, and a disposable data-preservation/backup baseline. No existing application route, model, UI asset, or export helper is changed, and no new integration is enabled. Occurrence identities use the immutable original PDF fingerprint and location; diagnostic derivatives clear widget presets and use location-specific vector overlays in a fresh document. Production publication, signing policies, security/resource isolation, and final mapping remain later-phase requirements. See [technical/business decisions](PDF_INTEGRATION_DECISIONS.md) and [verification evidence](PDF_INTEGRATION_PART1_REPORT.md).
+
 ## 2026 09 18 Separate application
 
 The inspection processor will be a new application and repository. The existing Work_Order project remains untouched.

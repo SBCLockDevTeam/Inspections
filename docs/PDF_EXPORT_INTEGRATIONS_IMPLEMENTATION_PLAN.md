@@ -1,6 +1,6 @@
 # PDF Export Integrations Implementation Plan
 
-Status: planned; implementation has not started.
+Status: first implementation batch delivered (P0 baseline and P1 offline feasibility); production integration work remains pending.
 Date: October 28, 2026.
 Requirements: [PDF Export Integrations Specification](PDF_EXPORT_INTEGRATIONS_SPEC.md).
 
@@ -242,7 +242,7 @@ Rollback: disable new integrations/actions first. If necessary, restore the prev
 
 Keep each batch reviewable; split a batch further if it grows. Update checkboxes only when the exit gate is met, not when code is merely written.
 
-- [ ] Baseline/decision register and synthetic PDF fixture support (P0–P1).
+- [x] Baseline/decision register and synthetic PDF fixture support (P0–P1). See [part 1 evidence and limitations](PDF_INTEGRATION_PART1_REPORT.md); final mapping, viewer/print acceptance, and production intake hardening remain later-phase gates.
 - [ ] Typed contracts, additive tables/private file lifecycle, disabled feature switch (P2).
 - [ ] Saved source catalog, deterministic mapping and readiness rules (P3).
 - [ ] Admin draft/test/publication/version lifecycle APIs (P4).

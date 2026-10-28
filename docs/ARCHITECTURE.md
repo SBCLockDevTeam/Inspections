@@ -1,5 +1,9 @@
 # Application Architecture
 
+## PDF integration feasibility tools (October 28, 2026)
+
+`integrations/pdf_inventory.py` inspects private PDF widget occurrences and geometry; `integrations/pdf_renderer.py` creates watermarked vector probe documents; `integrations/pdf_probe.py` is their private offline command. They are not imported or registered by the application and do not change existing PDF drafts/exports or storage. Original uploads and private proof artifacts remain outside Git. See [part 1 report](PDF_INTEGRATION_PART1_REPORT.md) for scope, tooling, and remaining production gates.
+
 ## Recommended shape
 
 Use a small web application with a browser interface, an API, a background processing worker, relational storage, and object storage for source and generated files.
