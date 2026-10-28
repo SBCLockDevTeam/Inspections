@@ -4,6 +4,8 @@
 
 `integrations/pdf_inventory.py` inspects private PDF widget occurrences and geometry; `integrations/pdf_renderer.py` creates watermarked vector probe documents; `integrations/pdf_probe.py` is their private offline command. They are not imported or registered by the application and do not change existing PDF drafts/exports or storage. Original uploads and private proof artifacts remain outside Git. See [part 1 report](PDF_INTEGRATION_PART1_REPORT.md) for scope, tooling, and remaining production gates.
 
+The P1 follow-up routes the CLI through `pdf_probe_limits.py` and `pdf_probe_worker.py`: a fresh Linux process enforces resource limits, stages private results and publishes only a completed proof with retained original/hash/correspondence manifest. This is not an HTTP endpoint or a filesystem/network sandbox. See [P1 report](PDF_INTEGRATION_P1_REPORT.md).
+
 ## Recommended shape
 
 Use a small web application with a browser interface, an API, a background processing worker, relational storage, and object storage for source and generated files.

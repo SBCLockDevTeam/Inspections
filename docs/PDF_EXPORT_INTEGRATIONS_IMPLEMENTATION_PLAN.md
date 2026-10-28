@@ -1,6 +1,6 @@
 # PDF Export Integrations Implementation Plan
 
-Status: first implementation batch delivered (P0 baseline and P1 offline feasibility); production integration work remains pending.
+Status: P0 baseline and P1 feasibility delivered, including bounded execution and two browser PDF-viewer checks; P2 and later phases remain pending.
 Date: October 28, 2026.
 Requirements: [PDF Export Integrations Specification](PDF_EXPORT_INTEGRATIONS_SPEC.md).
 
@@ -90,6 +90,8 @@ Tasks:
 9. Measure preview/export execution time, memory, upload sizes, page limits, and output sizes. Set bounded execution and resource limits. A renderer failure must remain isolated from current application routes.
 
 Exit gate: inspect all five included pages; prove duplicate isolation, removal of presets/scripts, page selection, and printable self-contained appearances in two independent viewers. Resolve the PDF toolchain and any required Python/system dependency changes before building the full workspace. This is a feasibility gate, not final business mapping approval.
+
+P1 evidence: [phase report and bounds](PDF_INTEGRATION_P1_REPORT.md). The initial first batch supplied the prototypes; the P1 follow-up adds the explicit limits, lineage manifest, native comparison, mirroring/rotation tests and two-viewer checks. Production form/physical-print approval remains a later release gate.
 
 ## 6. P2 — Contracts, additive persistence, and private files
 

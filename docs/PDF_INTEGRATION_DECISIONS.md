@@ -15,6 +15,11 @@ Scope: first implementation batch, P0–P1 of the [implementation plan](PDF_EXPO
 | T06 | Use existing `pypdf` and ReportLab dependencies for vector inspection/rendering; Poppler for optional local preview images | No new runtime dependency or deployment change. Poppler is not assumed installed in the production image. MuPDF was used only as a second local verification engine, not imported by application code |
 | T07 | Initial offline limits: 40 MiB source bytes, 50 source pages, 5,000 selected widget occurrences, parent depth 32 | Sufficient for supplied forms, with cyclic/malformed/encrypted/unsupported-geometry cases rejected. These limits are not a hostile-PDF sandbox; isolation/time/memory bounds must precede web intake |
 | T08 | Keep generated inventories and proofs private and outside Git | New output directories use owner-only permissions; files use owner-only permissions where supported. Original/default values in inventory JSON are private data |
+| T09 | Enforce bounded CLI execution in a fresh Linux worker | Default 30 s wall time; 20 s CPU and 512 MiB address space per process; 64 MiB per file; 128 MiB published output set. Failure/timeout terminates descendants; no partial result is published. This is a resource boundary, not an HTTP upload sandbox |
+| T10 | Retain original bytes and a target-to-output lineage manifest with each proof | Exact original/output hashes and target page/rectangle correspondence are private evidence. Optional approved fingerprint rejects replacement sources |
+| T11 | Choose Poppler for future mapping-workspace page images | P1 uses local `pdftoppm`. Install `poppler-utils` in the inspection image when P5 introduces runtime previews. No deployment change is made now |
+
+T07 describes the first prototype's input bounds; T09 adds enforced subprocess limits in the P1 follow-up. See [P1 evidence](PDF_INTEGRATION_P1_REPORT.md) for native comparison, all-rotation/mirroring tests and two browser viewers.
 
 These technical decisions establish feasibility only. They do not approve any business mapping, constant, test result, signature, or production configuration.
 

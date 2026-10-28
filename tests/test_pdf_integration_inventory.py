@@ -132,3 +132,14 @@ def test_indirect_annotation_array_and_appearance_dictionary():
     writer.write(stream)
     inventory = inspect_pdf(stream.getvalue(), pages=(1,))
     assert inventory['targets'][2]['export_states'] == ['/Off', '/Yes']
+
+
+def test_fractional_rotation_is_not_silently_truncated():
+    from pypdf import PdfReader, PdfWriter
+    from pypdf.generic import FloatObject, NameObject
+    writer = PdfWriter()
+    writer.clone_document_from_reader(PdfReader(BytesIO(synthetic_form())))
+    writer.pages[0][NameObject('/Rotate')] = FloatObject(90.5)
+    stream = BytesIO(); writer.write(stream)
+    with pytest.raises(PdfInspectionError, match='rotation'):
+        inspect_pdf(stream.getvalue(), pages=(1,))

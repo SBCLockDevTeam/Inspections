@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 from hashlib import sha256
 import json
+import math
 import os
 from pathlib import Path
 import shutil
@@ -34,7 +35,8 @@ def _pages(value):
 
 
 def run_probe(source: Path, output_dir: Path, *, pages: tuple[int, ...],
-              values: dict[str, object] | None = None, previews=False) -> dict:
+              values: dict[str, object] | None = None, previews=False,
+              expected_sha256=None, execution_limits=None) -> dict:
     """Write private inventory/diagnostics and a watermarked vector derivative.
 
     The output directory must not already exist, preventing accidental overwrite.
@@ -45,11 +47,20 @@ def run_probe(source: Path, output_dir: Path, *, pages: tuple[int, ...],
     started = time.perf_counter()
     with source.open('rb') as stream:
         data = stream.read(40 * 1024 * 1024 + 1)
+    fingerprint = sha256(data).hexdigest()
+    if expected_sha256 is not None and expected_sha256 != fingerprint:
+        raise ValueError('Source fingerprint does not match the approved original.')
     inventory = inspect_pdf(data, pages=pages)
+    if previews:
+        pixels = sum(math.ceil(page['display_width'] * 96 / 72)
+                     * math.ceil(page['display_height'] * 96 / 72) for page in inventory['pages'])
+        if pixels > 40_000_000:
+            raise ValueError('Selected preview pages exceed the pixel limit.')
     inspected = time.perf_counter()
     pdf = render_feasibility_pdf(data, inventory, values or {})
     rendered = time.perf_counter()
     output_dir.mkdir(mode=0o700, parents=True, exist_ok=False)
+    _write_private(output_dir / 'original.pdf', data)
     _write_private(output_dir / 'inventory.json', json.dumps(inventory, indent=2).encode())
     _write_private(output_dir / 'feasibility.pdf', pdf)
     if previews:
@@ -71,6 +82,7 @@ def run_probe(source: Path, output_dir: Path, *, pages: tuple[int, ...],
         'inspection_seconds': round(inspected - started, 3),
         'render_seconds': round(rendered - inspected, 3),
         'total_seconds': round(time.perf_counter() - started, 3),
+        'execution_limits': execution_limits,
     }
     try:
         import resource
@@ -79,6 +91,19 @@ def run_probe(source: Path, output_dir: Path, *, pages: tuple[int, ...],
         report['process_peak_rss_bytes'] = peak if sys.platform == 'darwin' else peak * 1024
     except ImportError:  # Windows has no stdlib resource module.
         report['process_peak_rss_bytes'] = None
+    manifest = {
+        'schema_version': 1, 'purpose': report['purpose'],
+        'source_file': 'original.pdf', 'source_sha256': fingerprint,
+        'output_file': 'feasibility.pdf', 'output_sha256': report['output_sha256'],
+        'selected_source_pages': list(pages),
+        'target_correspondence': [
+            {'source_target_id': target['id'], 'source_page': target['page'],
+             'output_page': list(pages).index(target['page']) + 1,
+             'rect': target['rect'], 'has_probe_value': target['id'] in (values or {})}
+            for target in inventory['targets']
+        ],
+    }
+    _write_private(output_dir / 'manifest.json', json.dumps(manifest, indent=2).encode())
     _write_private(output_dir / 'report.json', json.dumps(report, indent=2).encode())
     return report
 
@@ -90,12 +115,22 @@ def main(argv=None):
     parser.add_argument('--output-dir', required=True, type=Path)
     parser.add_argument('--values-json', type=Path, help='Optional private target-ID-to-probe-value JSON object.')
     parser.add_argument('--previews', action='store_true', help='Rasterize the sanitized output with local Poppler.')
+    parser.add_argument('--expected-sha256', help='Reject a source that differs from this approved fingerprint.')
     args = parser.parse_args(argv)
     try:
-        values = json.loads(args.values_json.read_text()) if args.values_json else {}
+        if args.values_json:
+            with args.values_json.open('rb') as stream:
+                encoded = stream.read(2 * 1024**2 + 1)
+            if len(encoded) > 2 * 1024**2:
+                raise ValueError('Probe values exceed their size limit.')
+            values = json.loads(encoded)
+        else:
+            values = {}
         if not isinstance(values, dict):
             raise ValueError('Probe values must be a JSON object.')
-        report = run_probe(args.source, args.output_dir, pages=args.pages, values=values, previews=args.previews)
+        from alarm_inspection.integrations.pdf_probe_limits import run_bounded_probe
+        report = run_bounded_probe(args.source, args.output_dir, pages=args.pages, values=values,
+                                   previews=args.previews, expected_sha256=args.expected_sha256)
     except (ValueError, OSError, subprocess.SubprocessError) as exc:
         # Do not print supplied values or raw parser errors to the terminal.
         parser.exit(1, f'Probe failed ({type(exc).__name__}); check private inputs and output directory.\n')

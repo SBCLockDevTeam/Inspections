@@ -4,6 +4,8 @@ Date: October 28, 2026.
 Baseline application commit: `d9323e7` (documentation changes only after application commit `1b968ce`).
 Scope: first commit batch of the [implementation plan](PDF_EXPORT_INTEGRATIONS_IMPLEMENTATION_PLAN.md), P0–P1. No production deployment.
 
+Follow-up: the [explicit P1 completion report](PDF_INTEGRATION_P1_REPORT.md) records enforced subprocess bounds, retained originals/lineage manifests, expanded geometry/mirroring tests, native-fill comparison and actual Firefox/Chromium PDF-viewer checks added after this initial prototype batch. Measurements and outstanding items below describe the initial run unless superseded by that report.
+
 ## Delivered
 
 - Read-only occurrence inventory with stable IDs, page geometry, display rectangles, inherited field metadata, defaults, choices/export states, duplicate-name groups, and parser diagnostics.

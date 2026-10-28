@@ -135,9 +135,10 @@ def inspect_pdf(data: bytes, *, pages: tuple[int, ...], max_bytes=40 * 1024 * 10
             for number in pages:
                 page = reader.pages[number - 1]
                 crop, media = _box(page.cropbox), _box(page.mediabox)
-                rotation = int(page.get('/Rotate', 0)) % 360
-                if rotation not in (0, 90, 180, 270):
+                raw_rotation = float(page.get('/Rotate', 0))
+                if not math.isfinite(raw_rotation) or raw_rotation % 360 not in (0, 90, 180, 270):
                     raise PdfInspectionError('Unsupported page rotation.')
+                rotation = int(raw_rotation) % 360
                 unit = float(page.get('/UserUnit', 1))
                 if not math.isfinite(unit) or unit != 1:
                     raise PdfInspectionError('Nonstandard page units need a reviewed rendering strategy.')

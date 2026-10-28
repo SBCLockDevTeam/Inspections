@@ -66,6 +66,43 @@ def test_signature_invalid_checkbox_unsupported_glyph_and_overflow_fail():
             render_feasibility_pdf(source, inventory, {target['id']: value})
 
 
+def test_explicit_mirroring_and_independent_changes_are_distinct():
+    source = synthetic_form()
+    inventory = inspect_pdf(source, pages=(1,))
+    a, b = [t for t in inventory['targets'] if t['qualified_name'] == 'duplicate']
+    for first, second in [('MIRRORED', 'MIRRORED'), ('INDEPENDENT', 'MIRRORED')]:
+        output = render_feasibility_pdf(source, inventory, {a['id']: first, b['id']: second})
+        text = pypdf.PdfReader(BytesIO(output)).pages[0].extract_text()
+        assert text.count('MIRRORED') == (2 if first == second else 1)
+        assert text.count('INDEPENDENT') == (0 if first == second else 1)
+
+
+@pytest.mark.skipif(not shutil.which('pdftoppm'), reason='Geometry proof requires Poppler')
+@pytest.mark.parametrize('rotation', [0, 90, 180, 270])
+def test_rotated_crop_preview_matches_actual_mark_pixels(tmp_path, rotation):
+    from pypdf.generic import NameObject, NumberObject
+    from PIL import Image, ImageChops
+    writer = pypdf.PdfWriter()
+    writer.clone_document_from_reader(pypdf.PdfReader(BytesIO(synthetic_form())))
+    writer.pages[0].cropbox.lower_left = (20, 30)
+    writer.pages[0][NameObject('/Rotate')] = NumberObject(rotation)
+    stream = BytesIO(); writer.write(stream)
+    source = stream.getvalue()
+    inventory = inspect_pdf(source, pages=(1,))
+    target = next(t for t in inventory['targets'] if t['kind'] == 'checkbox')
+    for name, value in [('off', False), ('on', True)]:
+        path = tmp_path / f'{name}.pdf'
+        path.write_bytes(render_feasibility_pdf(source, inventory, {target['id']: value}))
+        subprocess.run(['pdftoppm', '-cropbox', '-r', '72', '-singlefile', '-png', str(path), str(tmp_path / name)],
+                       check=True, capture_output=True, timeout=10)
+    with Image.open(tmp_path / 'off.png') as a, Image.open(tmp_path / 'on.png') as b:
+        bbox = ImageChops.difference(a.convert('RGB'), b.convert('RGB')).getbbox()
+    assert bbox is not None
+    x0, y0, x1, y1 = target['preview_rect']
+    assert x0 - 1 <= bbox[0] <= bbox[2] <= x1 + 1
+    assert y0 - 1 <= bbox[1] <= bbox[3] <= y1 + 1
+
+
 @pytest.mark.skipif(not shutil.which('pdftoppm'), reason='Poppler raster comparison requires pdftoppm')
 def test_checked_preset_does_not_survive_and_each_location_is_independent(tmp_path):
     from PIL import Image, ImageChops

@@ -1,5 +1,11 @@
 # Engineering Change Notes
 
+## October 28, 2026 — Explicit P1 completion
+
+- Added enforced offline subprocess CPU/address-space/file/wall limits, staged publication, retained original bytes and target-to-output manifests.
+- Added mirroring, four-rotation raster alignment, malformed rotation and resource-enforcement tests; compared native filling with overlays and checked all five pages in Firefox/Chromium PDF viewers.
+- No application UI/routes/schema/deployment changed. See [P1 report](PDF_INTEGRATION_P1_REPORT.md); production HTTP isolation, mapping approval and physical-printer acceptance remain later gates.
+
 ## October 28, 2026 — PDF integration part 1
 
 - Added isolated offline PDF occurrence inventory, watermarked feasibility renderer, and private probe command; current application behavior and schema are unchanged.
