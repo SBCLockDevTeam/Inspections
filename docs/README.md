@@ -32,4 +32,5 @@ The initial work is planning and architecture. Implement the deterministic proce
 - [AI engineering guide](AI_ENGINEERING_GUIDE.md)
 - [Deployment isolation plan](DEPLOYMENT.md)
 - [Decision log](DECISIONS.md)
+- [PDF export integrations specification](PDF_EXPORT_INTEGRATIONS_SPEC.md)
 
