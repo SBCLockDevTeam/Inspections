@@ -33,4 +33,5 @@ The initial work is planning and architecture. Implement the deterministic proce
 - [Deployment isolation plan](DEPLOYMENT.md)
 - [Decision log](DECISIONS.md)
 - [PDF export integrations specification](PDF_EXPORT_INTEGRATIONS_SPEC.md)
+- [PDF export integrations implementation plan](PDF_EXPORT_INTEGRATIONS_IMPLEMENTATION_PLAN.md)
 
