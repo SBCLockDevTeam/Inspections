@@ -125,3 +125,16 @@ def test_explicit_empty_group_choice_clears_single_na_marker():
     for answer,checked in [('Yes',True),('No',False)]:
         source=SourceValue(source=SourceRef(kind='manual',id='na'),type='choice',state='ready',value=answer,fingerprint='a'*64)
         assert map_answer_group(config,config.answer_groups[0],lambda _:source)[target['id']].checked is checked
+
+
+def test_editable_combo_accepts_configured_company_but_closed_choice_does_not():
+    import pytest
+    from pdf_storage_fixtures import config_data
+    from alarm_inspection.domain.pdf_integrations import IntegrationConfig,SourceRef
+    from alarm_inspection.domain.pdf_mapping import SourceValue,map_target,MappingError
+    config=IntegrationConfig.model_validate(config_data());target=next(t for t in config.inventory.targets if t.kind=='choice')
+    mapping=next(m for m in config.mappings if m.target_id==target.id)
+    source=SourceValue(source=SourceRef(kind='inspection',field='store_number'),type='text',state='ready',value='Configured Company',fingerprint='a'*64)
+    with pytest.raises(MappingError):map_target(target,mapping,source,lambda _:source)
+    editable=target.model_copy(update={'flags':target.flags|(1<<18)})
+    assert map_target(editable,mapping,source,lambda _:source).text=='Configured Company'

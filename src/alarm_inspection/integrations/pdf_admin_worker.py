@@ -13,6 +13,21 @@ def main():
     from alarm_inspection.integrations.pdf_inventory import inspect_pdf
     inventory = inspect_pdf(source, pages=tuple(request['pages']))
     output = Path(request['output'])
+    if request['operation'] == 'words':
+        import subprocess
+        from xml.etree import ElementTree
+        xml=output.with_suffix('.xml')
+        subprocess.run(['pdftotext','-f',str(request['pages'][0]),'-l',str(request['pages'][-1]),'-bbox-layout',str(Path(request['source'])),str(xml)],
+                       check=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+        tree=ElementTree.parse(xml);pages={}
+        for number,page in zip(request['pages'],tree.findall('.//{*}page')):
+            height=float(page.attrib['height']);words=[]
+            for word in page.findall('.//{*}word'):
+                x=(float(word.attrib['xMin'])+float(word.attrib['xMax']))/2;y=height-(float(word.attrib['yMin'])+float(word.attrib['yMax']))/2
+                if any(t['page']==number and t['rect'][0]<=x<=t['rect'][2] and t['rect'][1]<=y<=t['rect'][3] for t in inventory['targets']):continue
+                words.append({'x':x,'y':y,'text':word.text or ''})
+            pages[number]=words
+        output.write_text(json.dumps(pages));return
     if request['operation'] == 'inventory':
         output.write_text(json.dumps(inventory))
         return

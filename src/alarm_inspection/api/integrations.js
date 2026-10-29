@@ -111,6 +111,9 @@
       const control = field(controls, label, select(options, draft.config[key]));
       control.disabled = draft.status !== 'draft'; control.addEventListener('change', () => { draft.config[key] = control.value || null; markDirty(); });
     }
+    const timezone = field(controls, 'Default timezone (IANA name, optional)', input(draft.config.default_timezone));
+    timezone.disabled=draft.status!=='draft';timezone.placeholder='Example: America/New_York';
+    timezone.addEventListener('input',()=>{draft.config.default_timezone=timezone.value||null;markDirty();});
     const reason = field(controls, 'Applicability reason', input(draft.config.applicability_reason));
     reason.disabled = draft.status !== 'draft'; reason.addEventListener('input', () => { draft.config.applicability_reason = reason.value; markDirty(); });
     jsonField(controls, 'Required panel categories (JSON)', draft.config.categories, 'integration-categories');

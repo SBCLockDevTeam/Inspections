@@ -194,3 +194,20 @@ def test_mapped_manual_question_can_change_without_adopting_old_answer(admin_api
     result=client.post(path+'/test',json={'inspection_id':inspection,'expected_revision':2})
     assert result.status_code==200,result.text
     assert result.json()['config_sha256']!=test['config_sha256']
+
+
+def test_compact_diagnostic_vectors_cover_all_choices_and_duplicate_occurrences(admin_api):
+    client,store,files,inspection=admin_api
+    draft=configured(client);config=draft['config'];path='/api/admin/integrations/versions/'+draft['id']
+    config['manual_inputs']=[dict(id='first',label='First independent cell',meaning='Actual first value',type='dropdown',options=['A','B']),
+                             dict(id='second',label='Second independent cell',meaning='Actual second value',type='dropdown',options=['0','1','2'])]
+    targets=[t for t in config['inventory']['targets'] if t['kind']=='text']
+    for index,target in enumerate(targets):
+        config['mappings']=[dict(m,disposition='source',source={'kind':'manual','id':'first' if index==0 else 'second'}) if m['target_id']==target['id'] else m for m in config['mappings']]
+    assert client.put(path,json={'config':config,'expected_revision':2}).status_code==200
+    result=client.post(path+'/test',json={'inspection_id':inspection,'expected_revision':3})
+    assert result.status_code==200,result.text
+    assert result.json()['scenario_count']==3
+    pages=PdfReader(BytesIO(client.get('/api/admin/integrations/tests/'+result.json()['test_artifact_id']).content)).pages
+    lines=[page.extract_text().splitlines() for page in pages]
+    assert all(first in line and second in line for line,first,second in zip(lines,['A','B','A'],['0','1','2']))

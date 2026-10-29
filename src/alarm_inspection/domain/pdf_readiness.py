@@ -69,6 +69,10 @@ def evaluate_snapshot(snapshot: SavedSnapshot) -> ReadinessResult:
     config = snapshot.config
     if config is None:
         return ReadinessResult(ready=False,source_fingerprint=snapshot.fingerprint,panel_ids=snapshot.panel_ids,blockers=blockers)
+    if config.default_timezone:
+        config=config.model_copy(update={'mappings':[mapping.model_copy(update={'transforms':[
+            transform.model_copy(update={'timezone':config.default_timezone}) if transform.kind in {'date','time'} and transform.timezone is None and mapping.source is not None and snapshot.resolve(mapping.source).type=='datetime' else transform
+            for transform in mapping.transforms]}) for mapping in config.mappings]})
     resolve = snapshot.resolve
 
     def error(exc, mapping=None):

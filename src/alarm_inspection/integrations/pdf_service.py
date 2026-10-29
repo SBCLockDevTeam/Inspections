@@ -26,7 +26,7 @@ def bounded_pdf(data, pages, operation, *, targets=None, page=1):
         _run_process([sys.executable,'-m','alarm_inspection.integrations.pdf_admin_worker',str(request)],wall_seconds=30)
         result=output.read_bytes()
         if len(result)>64*1024**2: raise ValueError('PDF operation output limit exceeded.')
-        return json.loads(result) if operation=='inventory' else result
+        return json.loads(result) if operation in {'inventory','words'} else result
 
 
 def intake(session, key, data, filename, *, files, actor_id):
@@ -89,12 +89,13 @@ def validate_configuration(config, catalog):
     for ref in refs:
         entry=entries.get(canonical_json(ref))
         if entry is None or entry['state']=='unavailable' or entry['state']=='changed' and ref.kind!='manual': errors.append('Source unavailable or incompatible: '+canonical_json(ref))
+        if entry and entry['type'] in {'points','times'}: errors.append('Collection sources require an approved scalar computation: '+canonical_json(ref))
     grouped={ident for g in config.answer_groups for ids in g.members.values() for ident in ids}
     for ident,mapping in mappings.items():
         target=targets[ident]
         if target.kind in {'unknown','pushbutton'} and mapping.disposition not in {'blank','excluded'}: errors.append('Unsupported target: '+ident)
         if target.kind in {'checkbox','radio'} and mapping.disposition not in {'blank','excluded'} and ident not in grouped: errors.append('Result marks require an explicit answer group: '+ident)
-        if mapping.disposition=='constant' and (target.kind!='text' or not mapping.reason.strip()): errors.append('Constants require a reviewed invariant reason and text destination: '+ident)
+        if mapping.disposition=='constant' and (not (target.kind=='text' or target.kind=='choice' and target.flags&(1<<18)) or not mapping.reason.strip()): errors.append('Constants require a reviewed invariant reason and text destination: '+ident)
         if mapping.required and mapping.disposition in {'blank','excluded','sign_later'}: errors.append('Required target cannot be blank: '+ident)
     if config.applicability=='no_panel' and (any(i.scope=='panel' for i in config.manual_inputs) or any(r.kind in {'panel','count'} for r in refs)):
         errors.append('A no-panel policy cannot require panel inputs or sources.')
@@ -112,19 +113,24 @@ def test_draft(store, version_id, inspection_id, panel_ids, *, files, actor_id, 
         entries={key:value for key,value in entries.items() if key in relevant}
         # Exhaust every declared source option independently; false/No/NA never
         # become passing marks. Each scenario is retained for visual review.
-        base={}; variants=[]
+        base={}; choices_by_source={}
         for key,entry in entries.items():
             typ=entry['type']; options=entry.get('options') or []
             definition=next((i for i in config.manual_inputs if canonical_json(SourceRef(kind='manual',id=i.id))==key),None)
-            value={'text':'TEST','number':0,'date':'2026-10-28','datetime':'2026-10-28T12:30:00+00:00','yes_no_na':'No'}.get(typ,'TEST')
+            value={'text':'T','number':0,'boolean':False,'points':[],'times':[],'date':'2026-10-28','datetime':'2026-10-28T12:30:00+00:00','yes_no_na':'No'}.get(typ,'TEST')
             if options: value=options[0]
             if definition and typ=='number': value=definition.minimum if definition.minimum is not None else min(0,definition.maximum or 0)
             base[key]=SourceValue(source=SourceRef.model_validate(entry['source']),type=typ,state='ready',value=value,fingerprint=payload_hash({'synthetic':key}))
             choices=['Yes','No','NA'] if typ=='yes_no_na' else options
-            for choice in choices: variants.append((key,choice))
-        scenarios=[base]
-        for key,value in variants: scenarios.append({**base,key:base[key].model_copy(update={'value':value})})
-        if len(variants)>255: raise ValueError('Diagnostic scenario limit exceeded; reduce independent choices.')
+            if choices:choices_by_source[key]=choices
+        # Cover every declared choice using bounded complete-form vectors, not
+        # hundreds of repeated copies of the same large page resources.
+        count=max([len(choices) for choices in choices_by_source.values()] or [1])
+        scenarios=[]
+        for index in range(count):
+            scenario=dict(base)
+            for key,choices in choices_by_source.items():scenario[key]=base[key].model_copy(update={'value':choices[index%len(choices)]})
+            scenarios.append(scenario)
         outputs=[]; plan_bytes=0
         for sources in scenarios:
             snapshot=SavedSnapshot(inspection_id=inspection_id,config=config,sources=sources,

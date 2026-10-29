@@ -313,3 +313,20 @@ def test_technician_preview_stale_confirmation_final_download_and_history(browse
                 assert not errors
             finally:await browser.close()
     asyncio.run(check())
+
+
+def test_missing_integration_asset_does_not_break_existing_inspection_entry(browser_app):
+    base,client,store,inspection,draft=browser_app
+    async def check():
+        async with playwright.async_playwright() as p:
+            browser=await p.chromium.launch(headless=True,args=['--no-sandbox']);page=await browser.new_page();errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
+            try:
+                await page.route('**/integrations.js',lambda route:route.abort())
+                await login(page,base);await page.select_option('#inspection-picker',inspection);await page.click('#open-inspection')
+                await playwright.expect(page.locator('#inspection-screen')).to_be_visible()
+                await page.fill('#inspection-address','Saved without the optional PDF asset');await page.locator('#inspection-name').click()
+                await playwright.expect(page.locator('#inspection-message')).to_contain_text('saved',timeout=12000)
+                assert client.get(f'/api/inspections/{inspection}').json()['address']=='Saved without the optional PDF asset'
+                assert not errors
+            finally:await browser.close()
+    asyncio.run(check())

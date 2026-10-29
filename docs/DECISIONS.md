@@ -58,3 +58,8 @@ The final PDF is not created until all results and mappings are complete. The fi
 ## October 29, 2026 — P7 and deferred production defaults
 
 The user explicitly requested adjustable scope/timezone/company settings and will establish defaults later. Prepare unpublished form candidates and keep both export integrations disabled until administrator review/publication. Do not copy presets into approved constants or manufacture business approvals. Confirmation acceptance is the consistent saved-data snapshot boundary; render only frozen values, with deterministic request IDs and recoverable pending-file/database separation. Historical final bytes remain immutable and hash-verified. See [P7 report](PDF_INTEGRATION_P7_REPORT.md).
+
+
+## October 29, 2026 — Adjustable form candidates
+
+Keep scope/categories, default IANA timezone, company/contact values and naming/signing policies configurable and initially unresolved. Scope installation to unpublished drafts. Use explicit identity bindings only at visually reconciled occurrences for the exact supplied hashes; derive no classifications/counts from device descriptions or timestamps. Use typed manual inputs for source gaps and preserve independent visual/functional and installed/tested-good fields. Date-only sources never inherit timezone/time semantics. Compact diagnostic vectors cover all declared choices without duplicating hundreds of large form pages. Business/physical-print approval remains the administrator’s deferred gate.

@@ -287,9 +287,13 @@ class IntegrationConfig(Versioned):
     supplemental_policy: Literal['unresolved', 'manual_declaration', 'not_applicable'] = 'unresolved'
     supplemental_source: SourceRef | None = None
     filename_policy: Literal['unresolved', 'completion_date_panel_id'] = 'unresolved'
+    default_timezone: str | None = None
 
     @model_validator(mode='after')
     def references(self):
+        if self.default_timezone:
+            try: ZoneInfo(self.default_timezone)
+            except (KeyError, ValueError) as exc: raise ValueError('Unknown default timezone.') from exc
         expected = [1, 2, 3, 4] if self.integration_key == 'nfpa72' else [1]
         if self.inventory.selected_pages != expected: raise ValueError('Initial integration page range is fixed.')
         prefix = f'_pdf_integrations/{self.integration_key}/{self.version_id}/'
