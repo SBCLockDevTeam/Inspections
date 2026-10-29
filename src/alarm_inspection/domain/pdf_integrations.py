@@ -340,8 +340,13 @@ class IntegrationConfig(Versioned):
                 raise ValueError('These forms map only Store Data and Check List fields.')
             for m in self.mappings:
                 target = targets[m.target_id]
-                if target.kind in {'checkbox','radio'} and m.default_value is not None:
-                    raise ValueError('Default values cannot create inspection result marks.')
+                if target.kind == 'checkbox':
+                    if m.default_value is not None and type(m.default_value) is not bool:
+                        raise ValueError('Checkbox defaults must be Checked or Not checked.')
+                    if m.disposition == 'constant' and type(m.constant) is not bool:
+                        raise ValueError('Fixed checkbox values must be Boolean.')
+                elif target.kind == 'radio' and m.default_value is not None:
+                    raise ValueError('Radio defaults require an explicit group policy.')
                 if m.default_value is not None and (isinstance(m.default_value,(list,dict)) or isinstance(m.default_value,str) and len(m.default_value)>2000):
                     raise ValueError('Use a scalar default of at most 2000 characters.')
         return self

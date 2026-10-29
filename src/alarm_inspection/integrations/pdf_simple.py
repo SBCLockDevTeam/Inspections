@@ -50,7 +50,7 @@ def _configuration(base, payload, entries, receipt, ident):
         if m.source:
             entry=entries.get(canonical_json(m.source))
             if entry is None: raise ValueError('Choose an active Store Data or Check List field.')
-            if m.default_value is not None:
+            if m.default_value is not None and target.kind != 'checkbox':
                 typ=entry['type']; value=m.default_value
                 if not answered(value): raise ValueError('Enter a default value or turn off Use default.')
                 if typ in {'text','date','datetime','choice','yes_no_na'} and not isinstance(value,str): raise ValueError('This source needs a text default.')
@@ -62,7 +62,7 @@ def _configuration(base, payload, entries, receipt, ident):
                 raise ValueError('Map result marks to a Yes/No/NA Check List field and choose when to mark it.')
             m=m.model_copy(update={'source_schema_sha256':entry.get('schema_sha256')})
         if m.default_value is not None and not m.source: raise ValueError('A fallback default requires a mapped source. Use a fixed value for an unmapped text field.')
-        if target.kind in {'checkbox','radio'} and m.disposition=='constant': raise ValueError('A fixed value cannot create a result mark.')
+        if target.kind=='radio' and m.disposition=='constant': raise ValueError('Radio defaults require an explicit group policy.')
         if target.kind in {'unknown','pushbutton'} and m.disposition not in {'blank','excluded'}: raise ValueError('This PDF field cannot be populated.')
         if m.required and m.disposition in {'blank','excluded','sign_later'}: raise ValueError('A required field needs a source or fixed value.')
         if target.kind in {'text','choice'}:

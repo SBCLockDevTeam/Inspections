@@ -404,9 +404,16 @@ def test_simple_picker_save_then_export_without_manual_details(browser_app,tmp_p
                 await source.click()
                 # A PDF-only fixed value needs no corresponding Inspection field.
                 await page.locator(f'[data-pdf-default="{other["id"]}"]').fill('SBC FIXED')
+                checkbox=next(t for t in draft['config']['inventory']['targets'] if t['kind']=='checkbox')
+                checkbox_default=page.locator(f'[data-pdf-default="{checkbox["id"]}"]')
+                await checkbox_default.select_option('false')
                 await page.locator(f'#simple-targets [data-target="{target["id"]}"]').click()
                 await page.click('#simple-save')
                 await playwright.expect(page.locator('#simple-message')).to_contain_text('Integration saved and ready',timeout=30000)
+                await playwright.expect(checkbox_default).to_have_value('false')
+                current=next(i for i in client.get('/api/admin/integrations').json()['integrations'] if i['key']=='compliance')
+                published=next(v for v in current['versions'] if v['id']==current['active_version_id'])
+                assert next(m for m in published['config']['mappings'] if m['target_id']==checkbox['id'])['constant'] is False
                 await page.locator('#integration-debug-mode > summary').click()
                 await playwright.expect(page.locator('#integration-cards section')).to_have_count(2)
                 await page.locator('#integration-debug-mode > summary').click()

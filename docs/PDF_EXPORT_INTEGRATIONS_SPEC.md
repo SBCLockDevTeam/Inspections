@@ -1,6 +1,8 @@
 # PDF Export Integrations Specification
 
 > **October 29 user-directed update:** The normal integration interface now opens each form directly, keeps PDF fields left/form center, and lists Store Data and Check List mapping choices on the right. JSON is restricted to Debug mode. Required/default controls are per PDF field; Save validates, retains a new version, publishes and enables the mapping across inspections. Points Lists, Events, panel scope, manual Form Details and the old separate verification/publication gates do not apply to versions saved in this mode. Missing compatible sources may use explicit defaults; changed sources require review; no signature or result mark is fabricated. Existing advanced versions and all legacy inspection/export behavior are preserved. See [current operating guide](PDF_INTEGRATIONS_OPERATIONS.md). Historical phase reports describe the earlier workflow.
+> **Checkbox-default clarification:** The user subsequently authorized explicit **Checked**/**Not checked** defaults on the left-side PDF checkbox fields in the normal interface. These affect PDF output only: a fixed state when unmapped, or a fallback for a missing compatible answer when mapped. Existing saved answers take precedence. This supersedes the earlier blanket static-checkbox restriction for this mode; radio groups and signatures are unchanged.
+
 
 Status: proposed implementation specification; no application behavior is changed by this document.
 Date: October 28, 2026.

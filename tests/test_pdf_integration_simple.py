@@ -150,3 +150,51 @@ def test_dense_date_field_uses_geometry_and_default_overflow_is_rejected(admin_a
     response=save(client,active,[too_long],revision=2)
     assert response.status_code==400 and 'Default value' in response.text and 'Inspection date' in response.text
     with store() as session:assert session.get(PdfIntegration,'compliance').active_version_id==active['id']
+
+
+def test_checkbox_fixed_defaults_render_checked_and_unchecked_without_changing_answers(admin_api):
+    import pymupdf as fitz
+    client,store,files,inspection=admin_api;draft=uploaded(client)
+    target=next(t for t in draft['config']['inventory']['targets'] if t['kind']=='checkbox')
+    ink={}
+    for revision,state in enumerate((False,True),start=1):
+        response=save(client,draft,[{'target_id':target['id'],'disposition':'constant','constant':state,'reason':'Explicit PDF checkbox default.'}],revision=revision)
+        assert response.status_code==200,response.text
+        draft=response.json()
+        assert next(m for m in draft['config']['mappings'] if m['target_id']==target['id'])['constant'] is state
+        context=exports.frozen_snapshot(store,inspection,'compliance',actor_id='tech')
+        assert context.resolved_values[target['id']]['checked'] is state
+        preview=exports.preview(store,inspection,'compliance',exports.PreviewRequest(expected_version_id=draft['id'],expected_source_fingerprint=context.source_fingerprint),files=files,actor_id='tech')
+        final=exports.confirm(store,inspection,'compliance',proof(preview),files=files,actor_id='tech')
+        data,_=exports.download(store,inspection,'compliance',final['id'],files=files,actor_id='tech')
+        with fitz.open(stream=data,filetype='pdf') as document:
+            x0,y0,x1,y1=target['rect'];height=document[0].rect.height
+            image=document[0].get_pixmap(clip=fitz.Rect(x0,height-y1,x1,height-y0),matrix=fitz.Matrix(3,3),colorspace=fitz.csGRAY,alpha=False)
+            ink[state]=sum(image.samples)
+    assert ink[True]<ink[False]  # Independent renderer sees the checked mark.
+    with store() as session:
+        assert session.query(InspectionChecklistDecision).filter_by(inspection_id=inspection).one().value=='No'
+
+
+@pytest.mark.parametrize('default',[True,False])
+def test_checkbox_fallback_preserves_saved_answers_and_blocks_changed_source(admin_api,default):
+    client,store,files,inspection=admin_api;draft=uploaded(client)
+    target=next(t for t in draft['config']['inventory']['targets'] if t['kind']=='checkbox')
+    response=save(client,draft,[{'target_id':target['id'],'disposition':'source','source':{'kind':'checklist','id':'task'},'check_on':'Yes','default_value':default,'required':True}])
+    assert response.status_code==200,response.text
+    def result():return evaluate_snapshot(capture_snapshot(store,inspection,'compliance',actor_id='tech'))
+    assert result().ready and result().targets[target['id']].checked is False  # saved No wins
+    for answer,expected in [('Yes',True),('NA',False),('',default)]:
+        with store.begin() as session:
+            session.add(InspectionChecklistDecision(id=str(uuid4()),inspection_id=inspection,task_id='task',task_text='Synthetic task',value=answer,completed=bool(answer),decided_by='tech',decided_at=datetime.now(timezone.utc)))
+        current=result();assert current.ready and current.targets[target['id']].checked is expected
+    with store.begin() as session:session.get(InspectionTask,'task').active=False
+    assert not result().ready and any(b.code=='SOURCE_CHANGED' for b in result().blockers)
+
+
+@pytest.mark.parametrize('invalid',[0,1,'true','false','Yes','No'])
+def test_checkbox_defaults_require_actual_booleans(admin_api,invalid):
+    client,store,files,inspection=admin_api;draft=uploaded(client)
+    target=next(t for t in draft['config']['inventory']['targets'] if t['kind']=='checkbox')
+    response=save(client,draft,[{'target_id':target['id'],'disposition':'constant','constant':invalid,'reason':'Invalid typed default.'}])
+    assert response.status_code==400

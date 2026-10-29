@@ -500,11 +500,14 @@
       const fieldButton = button(caption(m), () => choose(t.id), row, {
         'data-target': t.id, 'aria-pressed': String(selected === t.id)
       });
-      if (['text', 'choice'].includes(t.kind)) {
+      if (['text', 'choice', 'checkbox'].includes(t.kind)) {
         const current = sourceFor(m);
         const options = current?.options?.length ? current.options :
           t.kind === 'choice' && !(t.flags & (1 << 18)) ? t.options.map(o => Array.isArray(o) ? o[0] : o) : [];
-        const value = options.length ? select([{value: '', label: 'PDF default'}, ...options], pdfDefault(m)) :
+        const checkbox = t.kind === 'checkbox';
+        const value = checkbox ? select([
+          {value: '', label: 'No default'}, {value: 'true', label: 'Checked'}, {value: 'false', label: 'Not checked'}
+        ], pdfDefault(m)) : options.length ? select([{value: '', label: 'PDF default'}, ...options], pdfDefault(m)) :
           input(pdfDefault(m) ?? '', current?.type === 'date' ? 'date' : 'text');
         value.setAttribute('aria-label', 'PDF default for ' + label);
         value.setAttribute('placeholder', 'PDF default');
@@ -518,7 +521,7 @@
         });
         value.addEventListener('input', () => {
           const previous = mappings.get(t.id);
-          const fallback = value.value.trim() === '' ? null : value.value;
+          const fallback = value.value.trim() === '' ? null : checkbox ? value.value === 'true' : value.value;
           const next = previous.source ? {...previous, default_value: fallback} : fallback !== null ? {
             ...previous, disposition: 'constant', constant: fallback,
             reason: 'Administrator configured a PDF-only fixed value.'

@@ -116,17 +116,20 @@ def evaluate_snapshot(snapshot: SavedSnapshot) -> ReadinessResult:
                                                   pdf_state='/Off' if target.kind in {'checkbox','radio'} else None)
                 continue
             if mapping.disposition == 'constant':
-                if target.kind in {'checkbox','radio'}:
+                fixed_checkbox = config.mapping_mode == 'store_checklist' and target.kind == 'checkbox' and type(mapping.constant) is bool
+                if target.kind in {'checkbox','radio'} and not fixed_checkbox:
                     raise MappingError('Static selections cannot manufacture inspection results.','UNCONFIGURED')
-                source = SourceValue(source=SourceRef(kind='inspection',field='store_number'), type='text',state='ready',
+                source = SourceValue(source=SourceRef(kind='inspection',field='store_number'), type='boolean' if fixed_checkbox else 'text',state='ready',
                                      value=mapping.constant,fingerprint=payload_hash({'constant':mapping.constant}))
             else: source = resolve(mapping.source)
             if config.mapping_mode == 'store_checklist':
                 if mapping.source_schema_sha256 and snapshot.catalog_metadata.get(canonical_json(mapping.source),{}).get('schema_sha256') != mapping.source_schema_sha256:
                     raise MappingError('The mapped Check List field changed. Review its mapping in Administration.', 'SOURCE_CHANGED', mapping.source)
+                checkbox_default = target.kind == 'checkbox' and source.state == 'missing' and type(mapping.default_value) is bool
                 if source.state == 'missing' and mapping.default_value is not None:
-                    source = source.model_copy(update={'value':mapping.default_value,'state':'ready'})
-                if target.kind in {'checkbox','radio'} and mapping.source:
+                    source = source.model_copy(update={'value':mapping.default_value,'state':'ready',
+                        **({'type':'boolean'} if checkbox_default else {})})
+                if target.kind in {'checkbox','radio'} and mapping.source and not checkbox_default:
                     if source.state == 'missing' and not required:
                         source = source.model_copy(update={'value':False,'state':'ready','type':'boolean'})
                     else:
