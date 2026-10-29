@@ -75,6 +75,8 @@ def create_app():
     def health() -> dict[str, str]:
         return {"status": "ok"}
 
+    from alarm_inspection.api.routers.admin_integrations import create_router as create_integrations_router
+    app.include_router(create_integrations_router(store))
     app.include_router(create_ui_router())
     app.include_router(create_auth_router(store))
     app.include_router(create_admin_router(store))

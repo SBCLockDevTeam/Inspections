@@ -93,3 +93,31 @@ def render_feasibility_pdf(data: bytes, inventory: dict, values: dict[str, objec
     output = BytesIO()
     writer.write(output)
     return output.getvalue()
+
+
+def render_diagnostic_pdf(data, inventory, targets):
+    """Isolated per-occurrence mapping proof; always visibly nonfinal."""
+    # Reuse the proven page/annotation isolation with blank values, then draw
+    # already validated layouts. This entry point cannot remove the watermark.
+    base = render_feasibility_pdf(data, inventory, {})
+    from pypdf import PdfReader, PdfWriter
+    from reportlab.pdfgen.canvas import Canvas
+    reader = PdfReader(BytesIO(base)); writer = PdfWriter()
+    locations = {t['id']:t for t in inventory['targets']}
+    if set(targets) - locations.keys(): raise ValueError('Unknown diagnostic target.')
+    for index, page in enumerate(reader.pages):
+        geometry = inventory['pages'][index]
+        buffer = BytesIO(); canvas = Canvas(buffer, pagesize=geometry['media_box'][2:], invariant=1)
+        for ident, result in targets.items():
+            target = locations[ident]
+            if target['page'] != geometry['number']: continue
+            x0,y0,x1,y1 = target['rect']
+            if result.get('checked'):
+                canvas.setLineWidth(.7); canvas.line(x0+1,y0+1,x1-1,y1-1); canvas.line(x0+1,y1-1,x1-1,y0+1)
+            elif result.get('text'):
+                size = result['font_size']; canvas.setFont('Helvetica',size)
+                for line_index,line in enumerate(result['lines']):
+                    canvas.drawString(x0+1,y1-size*(line_index*1.2+1),line)
+        canvas.showPage(); canvas.save(); page.merge_page(PdfReader(BytesIO(buffer.getvalue())).pages[0]); page.pop('/Annots',None); writer.add_page(page)
+    writer.add_metadata({'/Title':'PDF integration TEST - NOT AN INSPECTION REPORT'})
+    output=BytesIO(); writer.write(output); return output.getvalue()
