@@ -4,12 +4,13 @@ from fastapi import APIRouter, Body, Request, UploadFile, File
 from fastapi.responses import JSONResponse, Response
 from pydantic import ValidationError
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import object_session
 from alarm_inspection.api.auth_support import require_admin
 from alarm_inspection.api.common import UPLOAD_ROOT
 from alarm_inspection.domain.pdf_integrations import IntegrationConfig
 from alarm_inspection.integrations.pdf_feature import require_available
 from alarm_inspection.integrations.pdf_files import PrivatePdfFiles
-from alarm_inspection.integrations.pdf_models import PdfIntegration, PdfIntegrationVersion
+from alarm_inspection.integrations.pdf_models import PdfIntegration, PdfIntegrationVersion, PdfIntegrationAuditEntry
 from alarm_inspection.integrations import pdf_repository as repo, pdf_service as service
 from alarm_inspection.integrations.pdf_sources import configuration_source_catalog
 
@@ -32,7 +33,14 @@ def create_router(store):
         except (RuntimeError,OSError,SQLAlchemyError): return JSONResponse({'error':'PDF integrations are disabled or processing is unavailable.'},status_code=503)
 
     def version(row):
-        return dict(id=row.id,key=row.integration_key,status=row.status,revision=row.revision,config_sha256=row.payload_sha256,
+        session=object_session(row)
+        audit=session.query(PdfIntegrationAuditEntry).filter(PdfIntegrationAuditEntry.version_id==row.id,
+            PdfIntegrationAuditEntry.action.in_(['draft_created','draft_updated','version_sealed','publication_confirmed'])).order_by(PdfIntegrationAuditEntry.decided_at.desc(),PdfIntegrationAuditEntry.id.desc()).first()
+        intake=session.query(PdfIntegrationAuditEntry).filter(PdfIntegrationAuditEntry.version_id==row.id,
+            PdfIntegrationAuditEntry.action.in_(['template_intake','template_copied'])).first()
+        return dict(template_filename=json.loads(intake.details_json).get('filename') if intake else 'Retained original template',
+                    last_edited_by=audit.decided_by if audit else row.created_by,
+                    id=row.id,key=row.integration_key,status=row.status,revision=row.revision,config_sha256=row.payload_sha256,
                     config=json.loads(row.payload_json),verification=json.loads(row.verification_json),
                     created_by=row.created_by,updated_at=row.updated_at.isoformat())
 
@@ -81,7 +89,10 @@ def create_router(store):
 
     @router.post('/versions/{ident}/test')
     def test(ident:str,request:Request,payload:dict=Body(...)):
-        return run(request,lambda s,a:service.test_draft(store,ident,payload.get('inspection_id'),payload.get('panel_ids',[]),files=files,actor_id=a,expected_revision=payload.get('expected_revision')))
+        def operation(session,actor):
+            if type(payload.get('expected_revision')) is not int: raise ValueError('Expected revision required.')
+            return service.test_draft(store,ident,payload.get('inspection_id'),payload.get('panel_ids',[]),files=files,actor_id=actor,expected_revision=payload['expected_revision'])
+        return run(request,operation)
 
     @router.get('/tests/{ident}')
     def download(ident:str,request:Request):
@@ -95,6 +106,7 @@ def create_router(store):
     def publish(ident:str,request:Request,payload:dict=Body(...)):
         def operation(session,actor):
             if payload.get('confirmed') is not True or not str(payload.get('change_summary','')).strip(): raise ValueError('Confirm publication and provide a change summary.')
+            if type(payload.get('expected_revision')) is not int or type(payload.get('integration_revision')) is not int: raise ValueError('Expected version and integration revisions are required.')
             catalog=configuration_source_catalog(store,payload.get('inspection_id'),ident,actor_id=actor,panel_ids=payload.get('panel_ids',[]))
             service.publish(session,ident,files=files,actor_id=actor,expected_revision=payload.get('expected_revision'),
                 test_artifact_id=payload.get('test_artifact_id'),verified_target_ids=payload.get('verified_target_ids',[]),catalog=catalog)

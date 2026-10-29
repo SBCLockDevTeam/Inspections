@@ -79,3 +79,10 @@ flowchart TD
 2. Event-date mappings are additive unless explicitly cleared.
 3. Mapping accepts only allowed accepted points for the selected points list.
 4. Review completion requires all rows accepted or deleted.
+
+
+## PDF integration administration and Form Details (P4–P6)
+
+No legacy tables or schema version change in these phases. `PdfIntegrationVersion` retains immutable published payloads and per-target verification tied to diagnostic `PdfExportArtifact` records. Test snapshots carry the configuration hash, included pages, scenario count and typed catalog schema fingerprint. `PdfIntegrationAuditEntry` records intake, mapping changes, publication/activation/enablement and `form_scope_decision` entries containing inspection ID, selected panel IDs and applicability policy hash. Latest scope decisions are explicit and never delete prior choices. Original uploads have a private immutable `intake.json` diagnostic alongside their bytes, including quarantine failures.
+
+`InspectionFormDecision` retains each additional answer, compatible input-schema hash, author/time and any reasoned override evidence. The new authorized API compares an expected saved fingerprint; it serializes competing writes per inspection and rejects stale versions/scope. Prior incompatible values remain visible for review and are not silently carried to a different question. The browser retains unsaved drafts in memory per inspection, archives them on explicit definition review, and clears cross-user private state. No new AI dependency or shared checklist-task creation is introduced. Container previews additionally require `poppler-utils`; the new JavaScript is package data.

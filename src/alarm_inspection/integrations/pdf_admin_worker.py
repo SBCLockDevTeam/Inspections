@@ -17,6 +17,17 @@ def main():
         output.write_text(json.dumps(inventory))
         return
     from alarm_inspection.integrations.pdf_renderer import render_diagnostic_pdf
+    if request['operation'] == 'render_batch':
+        from io import BytesIO
+        from pypdf import PdfReader, PdfWriter
+        writer = PdfWriter()
+        scenarios = request.get('targets', [])
+        if not isinstance(scenarios,list) or not 1 <= len(scenarios) <= 256: raise ValueError('Diagnostic scenario limit exceeded.')
+        for scenario in scenarios:
+            rendered = render_diagnostic_pdf(source, inventory, scenario)
+            for page in PdfReader(BytesIO(rendered)).pages: writer.add_page(page)
+        stream = BytesIO(); writer.write(stream); output.write_bytes(stream.getvalue())
+        return
     data = render_diagnostic_pdf(source, inventory, request.get('targets', {}))
     if request['operation'] == 'page':
         import subprocess

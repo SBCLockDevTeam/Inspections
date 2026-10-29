@@ -1,7 +1,7 @@
 # PDF Export Integrations Implementation Plan
 
-Status: P0–P5 backend foundations, administration lifecycle and visual workspace delivered; P6 and later phases remain pending.
-Date: October 28, 2026.
+Status: P0–P6 delivered: backend foundations, administration lifecycle, visual mapping workspace and technician Form Details/readiness. P7 and later phases remain pending.
+Updated: October 29, 2026.
 Requirements: [PDF Export Integrations Specification](PDF_EXPORT_INTEGRATIONS_SPEC.md).
 
 ## 1. Delivery contract
@@ -253,7 +253,7 @@ Keep each batch reviewable; split a batch further if it grows. Update checkboxes
 - [x] Saved source catalog, deterministic mapping and readiness rules (P3). See [P3 report](PDF_INTEGRATION_P3_REPORT.md).
 - [x] Admin draft/test/publication/version lifecycle APIs (P4). See [P4 report](PDF_INTEGRATION_P4_REPORT.md).
 - [x] Visual Admin → Integrations workspace and packaged assets (P5). See [P5 report](PDF_INTEGRATION_P5_REPORT.md).
-- [ ] Inspection-specific Form Details, scope and readiness UI/API (P6).
+- [x] Inspection-specific Form Details, scope and readiness UI/API (P6). See [P6 report](PDF_INTEGRATION_P6_REPORT.md).
 - [ ] Snapshot-bound previews, confirmed final renderer, artifact history/recovery (P7).
 - [ ] Both supplied forms configured and privately verified; policy decisions recorded (P8).
 - [ ] Full regression, viewer/print evidence and release documentation (P9).
@@ -262,3 +262,5 @@ Keep each batch reviewable; split a batch further if it grows. Update checkboxes
 For every code batch: add appropriate meaningful tests before changing deterministic rules, run targeted checks, run `python -m compileall -q src tests`, stage specific files, commit, and push. Leave unrelated working-tree changes untouched. Broaden tests at integration/release boundaries and after any failure or substantive new risk.
 
 Outstanding limits to communicate at handoff: NFPA pages 5–11 are excluded; supplemental reports remain separate; no automatic signature service or AI dependency is included; publication depends on administrator-approved mappings and business policies; original NFPA source pagination may reference eleven pages. Scheduling estimates should be made after P1 proves the rendering strategy and P8's field-review workload is understood.
+
+P4–P6 verification (October 29, 2026): the final full suite passed **274 tests**, with PostgreSQL and browser tests explicitly enabled, no skips, and one pre-existing test-client deprecation warning. Compile, JavaScript syntax, whitespace, documentation links and packaged-asset checks passed. Rendering and slow integration reads were separately exercised while existing inspection saves/synchronization continued. No production deployment or enablement occurred.

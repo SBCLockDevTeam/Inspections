@@ -20,3 +20,6 @@ src/alarm_inspection/
   api/          HTTP endpoints
 tests/          Unit and fixture tests
 ```
+
+
+PDF integrations P4–P6 add **Administration → Integrations** and an isolated **Export Form Details** section. Administrators upload private templates, select exact widget occurrences, configure typed mappings/policies, review watermarked tests and explicitly verify/publish versions. Technicians save additional answers and explicit panel scope and see saved-data readiness. Unsaved edits remain private; conflicting saves and changed source definitions require review. The feature remains disabled by default (`INSPECTIONS_PDF_INTEGRATIONS_ENABLED=true` opts in); both integrations require published configuration and explicit enablement. Linux resource limits and Poppler (`pdftoppm`) are required for admin previews. See the [P4](docs/PDF_INTEGRATION_P4_REPORT.md), [P5](docs/PDF_INTEGRATION_P5_REPORT.md) and [P6](docs/PDF_INTEGRATION_P6_REPORT.md) reports. Final completed PDF previews/downloads remain P7, and the new export buttons explain that limitation. Existing exports remain independent.

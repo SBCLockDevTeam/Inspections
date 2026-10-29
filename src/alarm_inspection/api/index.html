@@ -928,6 +928,12 @@ button.inspection-menu-option {
 #admin-panel-integrations textarea { width: 100%; max-width: 100%; font-family: monospace; }
 .pdf-warning { color: #873b00; }
 @media (max-width: 1000px) { .pdf-mapping-grid { grid-template-columns: 1fr; } #integration-targets { max-height: 220px; } }
+.pdf-form-card { border: 1px solid var(--border); padding: 12px; margin-bottom: 12px; }
+.pdf-form-input { border-bottom: 1px solid var(--border); padding: 10px 0; }
+.pdf-form-input input, .pdf-form-input select { max-width: 100%; }
+.pdf-form-scope label { display: block; }
+.pdf-form-scope input[type=checkbox] { width: auto; }
+.pdf-field-status { display: block; font-size: .9em; }
 </style></head>
 <body><div class="page-header"><h1>Inspections</h1><div id="user-bar" class="hidden"><span id="active-user-label"></span><span id="live-sync-status" role="status" style="font-size:0.8rem;color:var(--muted)">Live updates on</span><div id="avatar-wrap"><button type="button" id="avatar-button" class="secondary" title="Account menu">JP</button><div id="avatar-menu" class="hidden"><div id="avatar-menu-option-admin" class="avatar-menu-option hidden" role="menuitem" tabindex="0">Administration</div><div id="avatar-menu-option-logout" class="avatar-menu-option" role="menuitem" tabindex="0">Logout</div></div></div></div></div>
 
@@ -1052,6 +1058,7 @@ button.inspection-menu-option {
 </div>
 
 </div></details>
+<details id="export-form-details-section" class="inspection-section"><summary>Export Form Details</summary><div class="inspection-section-body"><p id="form-details-message" role="status"></p><div id="form-details-integrations"></div></div></details>
 <details id="checklist-section" class="inspection-section" open><summary>Check List <span id="checklist-progress"></span></summary><div class="inspection-section-body">
 <div id="inspection-checklist"></div><button type="button" id="refresh-checklist" class="secondary">Refresh Check List</button><div id="checklist-message" role="status" aria-live="polite"></div>
 </div></details>

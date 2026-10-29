@@ -1,5 +1,14 @@
 # Engineering Change Notes
 
+## October 29, 2026 — P4–P6 PDF integration administration and technician details
+
+- Delivered admin template intake, occurrence inventories/previews, conflict-safe drafts, watermarked diagnostic testing, exact-hash verified publication, activation and enable/disable APIs. Private quarantine retains originals and diagnostics.
+- Added the packaged Administration → Integrations workspace with independent target selection, zoom, source/policy/manual-input editing, local conflict recovery and explicit per-target verification/publication.
+- Added authorized Form Details, saved explicit scope, typed additional decisions, override evidence, readiness links and independent refresh behavior. Preserve private edits through navigation, failed/concurrent saves and definition changes; never rewrite legacy inspection/checklist/point/event data.
+- Diagnostic batches run in bounded workers outside database write transactions. Tests prove ordinary inspection writes and synchronization continue while rendering/integration reads are paused. Failed diagnostics cannot download.
+- Final verification: **274 tests passed**, PostgreSQL and browser tests enabled, no skips, one pre-existing test-client warning. Compile, JavaScript syntax, whitespace, documentation links and packaged UI asset checks passed.
+- No production deployment/enablement. Final preview/confirmation/downloads remain P7; production mapping/viewer/print/release gates remain P8–P10. See [P4](PDF_INTEGRATION_P4_REPORT.md), [P5](PDF_INTEGRATION_P5_REPORT.md) and [P6](PDF_INTEGRATION_P6_REPORT.md) reports.
+
 ## October 28, 2026 — P3 saved-source mapping and readiness
 
 - Added read-only typed catalogs/snapshots, deterministic conditions/transforms/group states, scope/completion gates, layout checks and structured blockers.

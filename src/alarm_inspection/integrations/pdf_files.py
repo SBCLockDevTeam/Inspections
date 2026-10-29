@@ -65,3 +65,15 @@ class PrivatePdfFiles:
         if len(data) > self.max_bytes or len(data) != receipt.size or sha256(data).hexdigest() != receipt.sha256:
             raise ValueError('Private blob integrity/hash mismatch.')
         return data
+
+
+    def record_intake(self, original: FileRef, metadata: dict):
+        """One private immutable intake diagnostic beside its original upload."""
+        from alarm_inspection.domain.pdf_integrations import canonical_json
+        if not original.key.endswith('/original.pdf'): raise ValueError('An original template is required.')
+        path = self._path(original.key).with_name('intake.json')
+        encoded = canonical_json(metadata).encode()
+        if len(encoded) > 4 * 1024**2: raise ValueError('Intake diagnostics limit exceeded.')
+        descriptor = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY | getattr(os, 'O_NOFOLLOW', 0), 0o600)
+        with os.fdopen(descriptor, 'wb') as stream:
+            stream.write(encoded); stream.flush(); os.fsync(stream.fileno())

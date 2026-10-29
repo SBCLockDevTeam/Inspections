@@ -62,7 +62,7 @@
       const active = integration.versions.find(v => v.id === integration.active_version_id);
       const latest = integration.versions[0];
       card.append(el('p', `${integration.enabled ? 'Enabled' : 'Disabled'} · ${active ? 'Published ' + active.id : latest ? 'Draft' : 'Unconfigured'} · pages ${integration.key === 'nfpa72' ? '1–4' : '1'}`));
-      if (latest) card.append(el('p', `Fingerprint ${latest.config.original.sha256} · ${latest.verification.fields?.length || 0}/${latest.config.inventory.targets.length} verified · editor ${latest.created_by} · ${latest.updated_at}`));
+      if (latest) card.append(el('p', `Template ${latest.template_filename || 'retained original'} · fingerprint ${latest.config.original.sha256} · ${latest.verification.fields?.length || 0}/${latest.config.inventory.targets.length} verified · editor ${latest.last_edited_by || latest.created_by} · ${latest.updated_at}`));
       const upload = el('input', null, {type: 'file', accept: '.pdf', 'aria-label': `Upload ${names[integration.key]} template`}); card.append(upload);
       button('Upload new template', async () => {
         if (dirty) throw new Error('Save or discard your mapping edits before opening another version.');
@@ -173,6 +173,7 @@
     captureEditor(); targetId = ident;
     page = draft.config.inventory.targets.find(t => t.id === ident).page;
     renderTargets(); renderPage(); renderEditor();
+    $(`[data-preview-target="${ident}"]`, $('#integration-sheet'))?.scrollIntoView({block:'nearest',inline:'nearest'});
     if (focus) $(`[data-target="${ident}"]`, $('#integration-targets'))?.focus({preventScroll: true});
     $(`[data-target="${ident}"]`, $('#integration-targets'))?.scrollIntoView({block: 'nearest'});
   }
@@ -195,7 +196,7 @@
     const image = el('img', null, {src: `${api}/versions/${draft.id}/pages/${page}`, alt: `${names[selected]} page ${page}, field values cleared`}); sheet.append(image);
     for (const target of draft.config.inventory.targets.filter(t => t.page === page)) {
       const [x0,y0,x1,y1] = target.preview_rect;
-      const node = button(`${target.occurrence}`, () => choose(target.id), sheet, {class: 'pdf-target', 'aria-label': `Page ${page} occurrence ${target.occurrence} ${target.qualified_name}`, 'aria-pressed': String(target.id === targetId)});
+      const node = button(`${target.occurrence}`, () => choose(target.id), sheet, {class: 'pdf-target', 'data-preview-target':target.id, 'aria-label': `Page ${page} occurrence ${target.occurrence} ${target.qualified_name}`, 'aria-pressed': String(target.id === targetId)});
       Object.assign(node.style, {left: `${100*x0/geometry.display_width}%`, top: `${100*y0/geometry.display_height}%`, width: `${100*(x1-x0)/geometry.display_width}%`, height: `${100*(y1-y0)/geometry.display_height}%`});
     }
     const control = $('#integration-page'); control.replaceChildren();
@@ -271,5 +272,246 @@
     action('#integration-reload', async () => { if (dirty && !window.confirm('Discard your unsaved mapping edits? Download a local copy first if needed.')) return; dirty = false; const id = draft.id; await refresh(true); await openVersion(integrations.flatMap(i => i.versions).find(v => v.id===id)); });
     window.addEventListener('beforeunload', event => { if (dirty) { event.preventDefault(); event.returnValue = ''; } });
   }
-  window.PdfIntegrations = {refreshAdmin: refresh};
+  window.PdfIntegrations = {refreshAdmin: refresh, resetAdmin: () => {draft=null;dirty=false;editorDirty=false;test=null;verified.clear();integrations=[];root?.querySelector('#integration-cards')?.replaceChildren();root?.querySelector('#integration-workspace')?.classList.add('hidden');}};
+})();
+
+/* Inspection-specific decisions have their own draft/sync lifecycle. */
+(() => {
+  'use strict';
+  const root = document.querySelector('#form-details-integrations');
+  if (!root) return;
+  const message = document.querySelector('#form-details-message');
+  const names = {nfpa72:'NFPA 72',compliance:'Compliance inspection'};
+  const records = new Map();
+  let active = null, epoch = 0, reading = false, controller = null;
+  const fieldKey = field => `${field.definition.id}:${field.panel_id || ''}`;
+  const localKey = (key,field) => `${key}:${fieldKey(field)}`;
+  const state = id => {
+    if (!records.has(id)) records.set(id,{forms:[],locals:new Map(),scopes:new Map(),archive:[]});
+    return records.get(id);
+  };
+  const node = (tag,text,attrs={}) => {
+    const result=document.createElement(tag); if (text != null) result.textContent=text;
+    for (const [key,value] of Object.entries(attrs)) result.setAttribute(key,value);
+    return result;
+  };
+  async function read(url,options={}) {
+    const response=await fetch(url,{cache:'no-store',signal:AbortSignal.timeout(10000),...options});
+    const value=await response.json();
+    if (!response.ok) throw new Error((response.status===409 ? 'Conflict: your answer is retained. ' : '')+(value.error || value.detail || 'Unable to save Form Details.'));
+    return value;
+  }
+  const url=(id,key='') => `/api/inspections/${encodeURIComponent(id)}/form-integrations${key ? '/'+key : ''}`;
+  const put=(path,value) => read(path,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(value)});
+  function act(parent,text,fn,attrs={}) {
+    const button=node('button',text,{type:'button',...attrs});
+    button.addEventListener('click',()=>Promise.resolve().then(fn).catch(error=>{message.textContent=error.message;})); parent.append(button); return button;
+  }
+  function local(record,key,field,version) {
+    const id=localKey(key,field);
+    if (!record.locals.has(id)) record.locals.set(id,{value:field.source.value,base:field.source.fingerprint,version,dirty:false,error:'',override:field.override,saving:null,serial:0});
+    return record.locals.get(id);
+  }
+  function replaceForm(record,form) {
+    const index=record.forms.findIndex(f=>f.key===form.key);
+    if (index<0) record.forms.push(form); else record.forms[index]=form;
+  }
+  function setInspection(id) {
+    if (active===id) return;
+    active=id;epoch++;controller?.abort();reading=false;root.replaceChildren();message.textContent='';
+    if (id) { render(); refresh(); }
+  }
+  async function refresh() {
+    const id=active,version=epoch;
+    if (!id || reading || document.hidden) return;
+    reading=true;controller=new AbortController(); const currentController=controller;
+    const timeout=setTimeout(()=>currentController.abort(),10000);
+    try {
+      const result=await read(url(id),{signal:currentController.signal});
+      if (active!==id || epoch!==version) return;
+      if(!state(id).forms.length)root.replaceChildren();state(id).forms=result.integrations;render();
+      if (message.textContent.startsWith('Form Details unavailable')) message.textContent='';
+    } catch (error) {
+      if (active===id && epoch===version) {
+        message.textContent='Form Details unavailable: '+error.message+' Existing inspection actions remain available. Retrying automatically.';
+        if(!state(id).forms.length){root.replaceChildren();for(const key of ['nfpa72','compliance']){const card=node('section',null,{class:'pdf-form-card'});card.append(node('h3',names[key]),node('p','Integration disabled or unavailable.'));card.append(node('button',key==='nfpa72'?'Export NFPA 72':'Export Compliance Form',{type:'button',disabled:'disabled'}));root.append(card);}}
+      }
+    } finally { clearTimeout(timeout);if (epoch===version) reading=false; }
+  }
+  function render() {
+    if (!active) return;
+    const record=state(active);
+    for (const form of record.forms) renderForm(record,form);
+  }
+  function renderForm(record,form) {
+    let card=root.querySelector(`[data-form="${form.key}"]`);
+    const schema=JSON.stringify([form.version_id,form.fields.map(f=>[fieldKey(f),f.definition]),form.panels]);
+    const previous=card?.dataset.schema;
+    const hasDirty=[...record.locals.entries()].some(([key,value])=>key.startsWith(form.key+':')&&(value.dirty||value.saving));
+    if (card && previous!==schema && hasDirty) {
+      card.querySelector('.pdf-form-summary').textContent='Published definitions or panel scope changed. Your local answers are retained. Download them, then review current definitions before saving.';
+      card.querySelectorAll('.pdf-export-action').forEach(b=>b.disabled=true);return;
+    }
+    if (!card || previous!==schema) {
+      if (card) { for (const [key,value] of record.locals) if (key.startsWith(form.key+':')) { record.archive.push({key,...value,saving:null});record.locals.delete(key); } card.remove(); }
+      card=node('section',null,{class:'pdf-form-card','data-form':form.key,'data-schema':schema});
+      card.append(node('h3',names[form.key]),node('p','',{class:'pdf-form-summary',role:'status'}));
+      const scope=node('div',null,{class:'pdf-form-scope'});card.append(scope);buildScope(record,form,scope);
+      for (const field of form.fields) buildField(record,form,field,card);
+      const controls=node('div',null,{class:'pdf-toolbar'});card.append(controls);
+      act(controls,'Save '+names[form.key]+' details',()=>saveForm(form.key));
+      act(controls,'Download local answers',()=>backup(record,form.key));
+      act(controls,'Review current saved answers and definitions',async()=>{
+        if (!window.confirm('Retain local answers in this session’s review archive and load current saved definitions? Download local answers first if you need a permanent copy.')) return;
+        for (const [key,value] of record.locals) if (key.startsWith(form.key+':')) {record.archive.push({key,...value,saving:null});record.locals.delete(key);}
+        record.scopes.delete(form.key);card.remove();await refresh();render();
+      });
+      act(controls,form.key==='nfpa72'?'Export NFPA 72':'Export Compliance Form',()=>{}, {class:'pdf-export-action',disabled:'disabled'});
+      card.append(node('p',form.export_reason,{class:'pdf-export-reason'}));
+      card.append(node('ul',null,{class:'pdf-readiness-blockers'}));root.append(card);
+    }
+    card.querySelector('.pdf-form-summary').textContent=form.version_id ? `Version ${form.version_id} · ${hasDirty ? 'Local changes unsaved · ' : ''}${form.readiness.ready ? 'Saved data ready' : 'Resolve the blockers below'} · Signatures: ${({later_signing:'reserved for later signing',signed_required:'a supported signature is required',unresolved:'policy needs review'})[form.signature_policy] || 'policy needs review'}. Supplemental sheets: ${form.supplemental_policy==='manual_declaration'?'a saved declaration is required; reports remain separate':form.supplemental_policy==='not_applicable'?'not applicable under the reviewed policy':'policy needs review'}.` : 'Integration disabled or unconfigured.';
+    card.querySelector('.pdf-export-reason').textContent=form.export_reason;
+    const scopeState=record.scopes.get(form.key);
+    if (!scopeState?.dirty && !scopeState?.saving) {
+      for (const control of card.querySelectorAll('[data-scope-panel]')) control.checked=form.panel_ids.includes(control.dataset.scopePanel);
+      if (scopeState) { scopeState.revision=form.scope_revision; scopeState.panels=[...form.panel_ids]; }
+    }
+    for (const field of form.fields) {
+      const row=[...card.querySelectorAll('[data-input-key]')].find(r=>r.dataset.inputKey===fieldKey(field));if (!row) continue;
+      const draft=local(record,form.key,field,form.version_id);
+      const control=row.querySelector('[data-answer]');
+      if (!draft.dirty && !draft.saving && !row.contains(document.activeElement)) {
+        draft.value=field.source.value;draft.base=field.source.fingerprint;draft.version=form.version_id;draft.override=field.override;
+        if(control.tagName==='SELECT' && field.source.value && ![...control.options].some(o=>o.value===field.source.value))control.add(new Option('Needs review: '+field.source.value,field.source.value));
+        control.value=field.source.value ?? '';
+      }
+      const originalSelector=row.querySelector('[data-override-source]');
+      if(originalSelector && !row.contains(document.activeElement) && !draft.dirty && !draft.saving){
+        const old=originalSelector.value; originalSelector.replaceChildren(new Option('Choose current original source…',''));
+        for(const entry of form.catalog.entries.filter(e=>e.state==='ready' && !(e.source.kind==='manual'&&e.source.id===field.definition.id)))originalSelector.add(new Option(`${entry.label} · ${JSON.stringify(entry.value)}`,JSON.stringify(entry)));
+        originalSelector.value=old;
+      }
+      row.querySelector('.pdf-field-status').textContent=draft.error || (draft.dirty?'Unsaved changes':field.source.message || field.source.state)+(field.override?' · Override: '+field.override.reason:'');
+      row.querySelector('.pdf-field-status').classList.toggle('pdf-warning',Boolean(draft.error)||draft.dirty||field.source.state==='changed');
+    }
+    const blockers=card.querySelector('.pdf-readiness-blockers');blockers.replaceChildren();
+    if (form.scope_changed) blockers.append(node('li','Scope policy changed. Review and explicitly save panel scope again.'));
+    for (const blocker of form.readiness.blockers) {
+      const item=node('li');const link=node('button',`${blocker.section ? blocker.section+': ' : ''}${blocker.message}`,{type:'button',class:'secondary'});
+      link.addEventListener('click',()=>{
+        const ids={store_data:'store-data-section',checklist:'checklist-section',points:'points-events-section',form_details:'export-form-details-section'};
+        const section=document.getElementById(ids[blocker.navigation] || 'export-form-details-section');if(section){section.open=true;section.scrollIntoView({block:'start'});}
+        if(blocker.navigation==='checklist'){const task=[...document.querySelectorAll('[data-task-id]')].find(control=>control.dataset.taskId===blocker.source_id);task?.focus();}
+        const fieldRow=[...card.querySelectorAll('[data-input-key]')].find(row=>row.dataset.inputKey.startsWith(blocker.source_id+':'));
+        fieldRow?.querySelector('[data-answer]')?.focus();
+      });item.append(link);blockers.append(item);
+    }
+  }
+  function buildScope(record,form,parent) {
+    parent.append(node('p',form.applicability==='no_panel'?'Reviewed policy: no panel data required.':`Explicit ${form.applicability || 'unconfigured'} scope. Required categories: ${form.categories.join(', ')}`));
+    if (!form.version_id || form.applicability==='no_panel') return;
+    if (!record.scopes.has(form.key)) record.scopes.set(form.key,{panels:[...form.panel_ids],revision:form.scope_revision,dirty:false,saving:false});
+    const scope=record.scopes.get(form.key);
+    for (const panel of form.panels) {
+      const label=node('label');const checkbox=node('input',null,{type:'checkbox','data-scope-panel':panel.id,'aria-label':`${names[form.key]} panel ${panel.category} ${panel.filename}`});
+      checkbox.checked=scope.panels.includes(panel.id);label.append(checkbox,document.createTextNode(` ${panel.category}: ${panel.filename} (${panel.id})`));parent.append(label);
+      checkbox.addEventListener('change',()=>{scope.panels=[...parent.querySelectorAll('input:checked')].map(i=>i.dataset.scopePanel);scope.dirty=true;message.textContent='Unsaved panel selection. Save scope before entering panel-specific details.';});
+    }
+    act(parent,'Save explicit panel scope',async()=>{
+      const inspectionId=active;
+      if ([...record.locals.entries()].some(([key,v])=>key.startsWith(form.key+':')&&(v.dirty||v.saving))) throw new Error('Save or archive your local answers before changing panel scope.');
+      scope.saving=true;
+      try {
+        const result=await put(url(inspectionId,form.key)+'/scope',{version_id:form.version_id,expected_revision:scope.revision,panel_ids:scope.panels});
+        scope.dirty=false;scope.revision=result.scope_revision;replaceForm(record,result);if(active===inspectionId){render();message.textContent='Panel scope saved.';}
+      } finally {scope.saving=false;}
+    });
+  }
+  function buildField(record,form,field,parent) {
+    const definition=field.definition;const draft=local(record,form.key,field,form.version_id);
+    const row=node('div',null,{class:'pdf-form-input','data-input-key':fieldKey(field)});parent.append(row);
+    const id=`form-detail-${form.key}-${definition.id}-${field.panel_id || 'inspection'}`;
+    row.append(node('label',`${definition.label}${field.panel_id?' · panel '+field.panel_id:''}${definition.unit?' ('+definition.unit+')':''} · ${definition.required?'required':definition.required_when?'conditionally required':'optional'}`,{for:id}));
+    let control;
+    if (['yes_no_na','dropdown'].includes(definition.type)) {
+      control=node('select');control.add(new Option('Unanswered',''));
+      for (const option of definition.type==='yes_no_na'?['Yes','No','NA']:definition.options) control.add(new Option(option,option));
+      if (draft.value && ![...control.options].some(o=>o.value===draft.value)) control.add(new Option('Needs review: '+draft.value,draft.value));
+    } else {
+      control=node('input',null,{type:definition.type==='number'?'number':definition.type==='date'?'date':'text'});
+      if (definition.type==='number') {control.step='any';if(definition.minimum!==null)control.min=definition.minimum;if(definition.maximum!==null)control.max=definition.maximum;}
+      if (definition.type==='datetime') control.placeholder='YYYY-MM-DDTHH:MM:SS+HH:MM';
+      if (definition.type==='text') control.maxLength=2000;
+    }
+    if(definition.required_when){
+      const dependency=definition.required_when.source;
+      act(row,`Required when ${dependency.kind} ${dependency.id || dependency.field} ${definition.required_when.operator}`,()=>{
+        const section=document.getElementById(dependency.kind==='checklist'?'checklist-section':dependency.kind==='inspection'?'store-data-section':'export-form-details-section');
+        if(section){section.open=true;section.scrollIntoView({block:'start'});}
+        const control=[...document.querySelectorAll('[data-task-id]')].find(c=>c.dataset.taskId===dependency.id);control?.focus();
+      });
+    }
+    control.id=id;control.dataset.answer='true';control.value=draft.value ?? '';row.append(control,node('p',definition.meaning),node('span','',{class:'pdf-field-status',role:'status'}));
+    const update=()=>{draft.serial++;draft.invalid=!control.checkValidity();draft.value=control.value===''?null:definition.type==='number'?Number(control.value):control.value;draft.dirty=true;draft.error='';row.querySelector('.pdf-field-status').textContent='Unsaved changes';};
+    control.addEventListener('input',update);
+    control.addEventListener(control.tagName==='SELECT'?'change':'blur',()=>{if(draft.dirty)saveField(record,form,field).catch(()=>{});});
+    control.addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();if(draft.dirty)saveField(record,form,field).catch(()=>{});}});
+    act(row,'Save / confirm '+definition.label,()=>saveField(record,form,field,true));
+    const override=node('details');override.open=Boolean(draft.overridePending);override.append(node('summary','Override a saved source (requires a reason)'));row.append(override);
+    const source=node('select',null,{'data-override-source':'true','aria-label':`Original source for ${definition.label}`});source.add(new Option('Choose current original source…',''));
+    for (const entry of form.catalog.entries.filter(e=>e.state==='ready' && !(e.source.kind==='manual'&&e.source.id===definition.id))) source.add(new Option(`${entry.label} · ${JSON.stringify(entry.value)}`,JSON.stringify(entry)));
+    const reason=node('input',null,{'aria-label':`Override reason for ${definition.label}`,maxlength:'1000',placeholder:'Reason for this override'});reason.value=draft.overrideReason ?? draft.override?.reason ?? '';source.value=draft.overrideSource ?? '';override.append(source,reason);
+    reason.addEventListener('input',()=>{draft.serial++;draft.overrideReason=reason.value;draft.dirty=true;draft.error='Override not saved: choose its source and use Save override.';draft.overridePending=true;});
+    source.addEventListener('change',()=>{draft.serial++;draft.overrideSource=source.value;draft.dirty=true;draft.overridePending=true;});
+    act(override,'Save override for '+definition.label,async()=>{
+      if (!reason.value.trim()||!source.value) throw new Error('Select the current source and enter an override reason.');
+      const original=JSON.parse(source.value);draft.serial++;draft.override={override:true,reason:reason.value,overridden_source:original.source,source_fingerprint:original.fingerprint,original_value:original.value};draft.overridePending=false;draft.dirty=true;
+      await saveField(record,form,field,true);
+    });
+    act(override,'Save as ordinary answer',async()=>{draft.serial++;draft.override=null;draft.overridePending=false;draft.dirty=true;await saveField(record,form,field,true);});
+  }
+  async function saveField(record,form,field,force=false) {
+    const draft=local(record,form.key,field,form.version_id);
+    if (draft.saving) {await draft.saving;if(draft.dirty)return saveField(record,form,field,force);return true;}
+    if (!draft.dirty&&!force) return true;
+    if(record.scopes.get(form.key)?.dirty){draft.error='Save explicit panel scope before saving this answer.';render();throw new Error(draft.error);}
+    if(draft.invalid){draft.error='Enter a valid value within the configured bounds.';render();throw new Error(draft.error);}
+    if(draft.overridePending){draft.error='Complete the source and reason, then use Save override.';render();throw new Error(draft.error);}
+    const id=[...records].find(([,v])=>v===record)[0];const value=draft.value;const serial=draft.serial;const proof=draft.override ? {...draft.override} : {};
+    delete proof.schema_version;delete proof.input_id;delete proof.value;
+    draft.saving=(async()=>{
+      try {
+        const result=await put(url(id,form.key)+'/answers',{version_id:draft.version,panel_id:field.panel_id,expected_fingerprint:draft.base,answer:{input_id:field.definition.id,value,...proof}});
+        const saved=result.fields.find(f=>fieldKey(f)===fieldKey(field));
+        draft.base=saved.source.fingerprint;
+        if(draft.serial===serial && !draft.overridePending && JSON.stringify(draft.value)===JSON.stringify(value))draft.dirty=false;
+        draft.error='';replaceForm(record,result);
+        if(active===id)message.textContent='Form Details saved.';
+        return true;
+      } catch(error) {draft.error=error.message;draft.dirty=true;if(active===id)message.textContent='Form Details not saved. Your local answer is retained. '+error.message;throw error;}
+      finally {draft.saving=null;if(active===id)render();}
+    })();
+    return draft.saving;
+  }
+  async function saveForm(key) {
+    const record=state(active);const form=record.forms.find(f=>f.key===key);
+    if(record.scopes.get(key)?.dirty)throw new Error('Save explicit panel scope first.');
+    for(const field of form.fields)await saveField(record,form,field);
+    await refresh();return true;
+  }
+  async function saveDetails() {
+    if(!active)return true;
+    try {for(const form of state(active).forms)await saveForm(form.key);return true;}catch(error){message.textContent=error.message;return false;}
+  }
+  function backup(record,key) {
+    const blob=new Blob([JSON.stringify({answers:[...record.locals].filter(([id])=>id.startsWith(key+':')).map(([id,v])=>({id,...v,saving:null})),archived:record.archive},null,2)],{type:'application/json'});
+    const link=node('a',null,{href:URL.createObjectURL(blob),download:`${key}-local-answers.json`});link.click();setTimeout(()=>URL.revokeObjectURL(link.href),1000);
+  }
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh();});
+  window.addEventListener('online',refresh);
+  window.addEventListener('beforeunload',event=>{if([...records.values()].some(r=>[...r.locals.values()].some(v=>v.dirty)||[...r.scopes.values()].some(s=>s.dirty))){event.preventDefault();event.returnValue='';}});
+  let owner=null;
+  const setActor=id=>{if(!id){setInspection(null);return;}if(owner && owner!==id){setInspection(null);records.clear();window.PdfIntegrations.resetAdmin();}owner=id;};
+  Object.assign(window.PdfIntegrations,{setInspection,refreshDetails:refresh,saveDetails,setActor});
 })();

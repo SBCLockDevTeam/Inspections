@@ -300,6 +300,7 @@
         } else if (!inspectionPoints.some((point) => point.highlightSaving) && liveSnapshots.get('accepted-points') !== JSON.stringify(points)) {
           renderAcceptedPoints(points);
         }
+        if (valid()) void window.PdfIntegrations?.refreshDetails?.();
         if (valid() && !checklistSaves.size && !hasDraft(checklistContainer)) await collection(`/api/inspections/${inspectionId}/checklist`, checklistContainer, (result) => loadInspectionChecklist(inspectionId, result), false);
       }
       if (valid() && nfpaDraftModal?.classList.contains('open')) {
@@ -328,6 +329,7 @@
 
   function showScreen(name) {
     currentScreen = name; viewVersion++;
+    window.PdfIntegrations?.setInspection?.(name === 'inspection' ? currentInspectionId : null);
     loginScreen?.classList.toggle('hidden', name !== 'login');
     homeScreen.classList.toggle('hidden', name !== 'home');
     createScreen.classList.toggle('hidden', name !== 'create');
@@ -354,6 +356,7 @@
   }
 
   function updateUserChrome() {
+    window.PdfIntegrations?.setActor?.(currentUser?.id || null);
     if (!currentUser) {
       userBar?.classList.add('hidden');
       if (activeUserLabel) {
@@ -1409,6 +1412,10 @@
       return;
     }
 
+    if (await window.PdfIntegrations?.saveDetails?.() === false) {
+      inspectionMessage.textContent = 'Inspection data saved. Some Export Form Details remain unsaved; review the field messages.';
+      return;
+    }
     await openInspection(currentInspectionId, currentPointListId);
     inspectionMessage.textContent = pendingResult.saved
       ? `All changes saved. Accepted ${pendingResult.saved} pending event matches.`

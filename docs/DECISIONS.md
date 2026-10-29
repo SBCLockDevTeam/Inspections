@@ -43,3 +43,13 @@ Event History uploads are cumulative. Successful point-to-time mappings are reta
 ## 2026 09 18 Gated PDF export
 
 The final PDF is not created until all results and mappings are complete. The filename includes store, city, state, category, and inspection date.
+
+
+## October 28, 2026 — P4–P6 PDF administration and technician details
+
+- Keep new administration and Form Details APIs separate from legacy template/draft/export routes. Final PDF preview/confirmation is P7; the new export actions remain disabled with this explanation.
+- Publication requires the exact saved configuration's retained all-page diagnostic evidence and explicit per-target administrator verification. Mapping edits and catalog type/choice changes invalidate that evidence. Diagnostic documents cannot become completed inspection exports.
+- Use resource-limited Linux workers for PDF parsing/raster/render operations and retain failed-intake originals privately with an immutable diagnostic. Resource limits do not constitute a filesystem/network sandbox. Unsupported normalized derivatives fail publication until verified support exists.
+- Store scope decisions in the existing append-only PDF integration audit stream, retaining applicability hashes and all prior choices. No legacy schema or inspection mutations are needed.
+- Compare saved fingerprints and serialize additional decisions per inspection. Return conflicts instead of silently replacing another device's answer. Overrides must identify and match the actual current source and include a reason.
+- Preserve unsaved browser answers through polling/navigation; explicitly archive local drafts before reviewing changed definitions. Do not adopt incompatible earlier answers merely because IDs/labels match. Feature failures do not block existing entry or export actions.
