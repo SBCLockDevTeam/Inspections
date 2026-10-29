@@ -1,5 +1,11 @@
 # Engineering Change Notes
 
+## October 28, 2026 — P3 saved-source mapping and readiness
+
+- Added read-only typed catalogs/snapshots, deterministic conditions/transforms/group states, scope/completion gates, layout checks and structured blockers.
+- Added stable provenance/fingerprints and stale override/definition handling; preserved old published JSON/hash integrity when adding optional mapping settings.
+- New SQLite/PostgreSQL tests include actual read-only enforcement/concurrent commits, legacy/negative/zero/missing values and scope/event gates. No UI/routes/schema/deployment changed. See [P3 report](PDF_INTEGRATION_P3_REPORT.md) for count/font and later-phase limits.
+
 ## October 28, 2026 — P2 backend foundations
 
 - Added strict versioned PDF configuration/decision/snapshot contracts and a separate optional six-table schema (five record families plus version marker).

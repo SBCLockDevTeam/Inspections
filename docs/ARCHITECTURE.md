@@ -1,5 +1,9 @@
 # Application Architecture
 
+## Saved PDF sources and readiness (P3)
+
+`integrations/pdf_sources.py` opens independent, database-enforced read transactions and resolves only saved, authorized configuration/inspection/decision data. `domain/pdf_mapping.py` evaluates typed transforms, conditions, group states and layout bounds; `domain/pdf_readiness.py` compiles blockers/target plans and stable snapshot fingerprints. Administrative draft catalogs are diagnostic and cannot approve exports. No new router is registered. See [P3 authority and compatibility boundaries](PDF_INTEGRATION_P3_REPORT.md).
+
 ## Optional PDF integration backend (P2)
 
 Strict version-one contracts live in `domain/pdf_integrations.py`. Separate models, transactional schema initialization, revisioned/append-only repository primitives and private blob storage live in `integrations/pdf_models.py`, `pdf_schema.py`, `pdf_repository.py` and `pdf_files.py`. `pdf_feature.py` provides a dependency-free, disabled-by-default switch. `storage.open_store()` lazily initializes this separate metadata only when opted in; optional failures leave legacy workflows available. No new router or frontend asset is registered. See [P2 report](PDF_INTEGRATION_P2_REPORT.md).

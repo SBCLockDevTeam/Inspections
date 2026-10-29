@@ -37,5 +37,6 @@ The initial work is planning and architecture. Implement the deterministic proce
 - [PDF integration part 1 evidence and tooling](PDF_INTEGRATION_PART1_REPORT.md)
 - [P1 PDF feasibility completion and execution bounds](PDF_INTEGRATION_P1_REPORT.md)
 - [P2 PDF contracts, storage and feature switch](PDF_INTEGRATION_P2_REPORT.md)
+- [P3 saved sources, mapping and readiness](PDF_INTEGRATION_P3_REPORT.md)
 - [PDF integration decision register](PDF_INTEGRATION_DECISIONS.md)
 

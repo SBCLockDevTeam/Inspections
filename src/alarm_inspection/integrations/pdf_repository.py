@@ -53,7 +53,9 @@ def _version(session, version_id):
     row = session.get(PdfIntegrationVersion, version_id, populate_existing=True)
     if row is None: raise ValueError('Unknown integration version.')
     config = IntegrationConfig.model_validate_json(row.payload_json)
-    if payload_hash(config) != row.payload_sha256: raise ValueError('Stored configuration integrity failure.')
+    # Hash the persisted payload, not newly introduced optional model defaults.
+    # Reading an older published version must never rewrite/invalidate its hash.
+    if payload_hash(json.loads(row.payload_json)) != row.payload_sha256: raise ValueError('Stored configuration integrity failure.')
     if row.status == 'published':
         evidence = VerificationEvidence.model_validate_json(row.verification_json)
         if evidence.payload_sha256 != row.payload_sha256 or {f.target_id for f in evidence.fields} != {t.id for t in config.inventory.targets}:

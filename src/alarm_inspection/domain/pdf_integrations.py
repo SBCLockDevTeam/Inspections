@@ -151,6 +151,7 @@ class Transform(Contract):
     decimals: int | None = Field(default=None, ge=0, le=6)
     separator: str = Field(default='', max_length=80)
     lookup: dict[str, JsonValue] = Field(default_factory=dict, max_length=50)
+    sources: list[SourceRef] = Field(default_factory=list, max_length=20)
 
     @model_validator(mode='after')
     def declarative(self):
@@ -165,6 +166,7 @@ class Transform(Contract):
         if self.kind != 'number' and self.decimals is not None: raise ValueError('Only numbers have decimal formatting.')
         if self.kind != 'concat' and self.separator: raise ValueError('Only concatenation has a separator.')
         if self.kind != 'lookup' and self.lookup: raise ValueError('Only lookups have a choice map.')
+        if self.kind != 'concat' and self.sources: raise ValueError('Only concatenation has additional sources.')
         return self
 
 
@@ -229,6 +231,9 @@ class TargetMapping(Contract):
     required_when: Condition | None = None
     reason: str = Field(default='', max_length=1000)
     overflow: Literal['block', 'wrap', 'shrink'] = 'block'
+    missing: Literal['block', 'blank'] = 'block'
+    font_size: float = Field(default=9, ge=4, le=72)
+    minimum_font_size: float = Field(default=6, ge=4, le=72)
 
     @model_validator(mode='after')
     def disposition_fields(self):
@@ -240,6 +245,9 @@ class TargetMapping(Contract):
             raise ValueError('Unexpected constant.')
         if self.disposition == 'constant' and self.constant is None: raise ValueError('A constant value is required.')
         if self.transforms and self.source is None: raise ValueError('Transforms require a source.')
+        if self.minimum_font_size > self.font_size: raise ValueError('Minimum font size exceeds configured size.')
+        if self.missing == 'blank' and (self.required or not self.reason.strip()):
+            raise ValueError('A blank missing-value policy requires an optional field and an explicit reason.')
         return self
 
 
@@ -277,6 +285,7 @@ class IntegrationConfig(Versioned):
     categories: list[str] = Field(default_factory=list, max_length=100)
     signature_policy: Literal['unresolved', 'later_signing', 'signed_required'] = 'unresolved'
     supplemental_policy: Literal['unresolved', 'manual_declaration', 'not_applicable'] = 'unresolved'
+    supplemental_source: SourceRef | None = None
 
     @model_validator(mode='after')
     def references(self):
@@ -313,6 +322,9 @@ class IntegrationConfig(Versioned):
         conditions = [item.required_when for item in [*self.mappings, *self.manual_inputs, *self.answer_groups]]
         if any(c and c.source.kind == 'manual' and c.source.id not in inputs for c in conditions):
             raise ValueError('Unknown manual condition source.')
+        extras = [s for mapping in self.mappings for transform in mapping.transforms for s in transform.sources]
+        if self.supplemental_source: extras.append(self.supplemental_source)
+        if any(s.kind == 'manual' and s.id not in inputs for s in extras): raise ValueError('Unknown additional manual source.')
         return self
 
 
@@ -323,6 +335,7 @@ class FormAnswer(Versioned):
     reason: str = Field(default='', max_length=1000)
     source_fingerprint: Digest | None = None
     original_value: JsonValue = None
+    overridden_source: SourceRef | None = None
 
     @model_validator(mode='after')
     def override_evidence(self):

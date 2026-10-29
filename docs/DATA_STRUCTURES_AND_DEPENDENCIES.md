@@ -20,6 +20,8 @@ These models are the persistence contract and should be treated as stable unless
 
 ## Optional PDF integration records (P2)
 
+P3 adds read-only snapshot/catalog and compiled readiness types, not database tables/columns. Published payload integrity is checked against persisted JSON, preserving historical hashes when optional contract fields are added. Source/override compatibility uses stable IDs and definition/source fingerprints. See [P3 data and transaction behavior](PDF_INTEGRATION_P3_REPORT.md).
+
 `integrations/pdf_models.py` defines separate `PdfBase` metadata: `PdfIntegration`, `PdfIntegrationVersion`, `InspectionFormDecision`, `PdfExportArtifact`, `PdfIntegrationAuditEntry`, plus the singleton `PdfSchemaState`. Existing model columns are unchanged. With `INSPECTIONS_PDF_INTEGRATIONS_ENABLED` absent/false, `open_store()` does not import these models or create their tables. Explicit initialization creates only additive records and seeds the two disabled integration identities.
 
 Schema version 1 uses new foreign keys/checks and SQLite/PostgreSQL triggers for append-only decisions/audit, immutable published versions and sealed artifacts, and valid published active-version references. Repository helpers validate legacy inspection/panel/actor references; actor IDs remain stored strings so physical user deletion retains audit identity and current deletion behavior. Private blobs are immutable and hash-checked. See [P2 schema, failure and migration policy](PDF_INTEGRATION_P2_REPORT.md).
