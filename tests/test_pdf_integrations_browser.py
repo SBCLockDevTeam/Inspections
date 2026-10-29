@@ -63,6 +63,7 @@ def test_admin_exact_targets_conflicts_and_publication(browser_app):
             browser=await p.chromium.launch(headless=True,args=['--no-sandbox'])
             page=await browser.new_page();errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
             try:
+                await page.add_init_script("Object.defineProperty(window.crypto,'randomUUID',{value:undefined})")
                 await login(page,base)
                 await page.locator('#avatar-button').click(button='right');await page.click('#avatar-menu-option-admin')
                 for tab in ('panel-types','inspection-tasks','users','integrations'):
@@ -287,6 +288,7 @@ def test_technician_preview_stale_confirmation_final_download_and_history(browse
         async with playwright.async_playwright() as p:
             browser=await p.chromium.launch(headless=True,args=['--no-sandbox']);page=await browser.new_page();errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
             try:
+                await page.add_init_script("Object.defineProperty(window.crypto,'randomUUID',{value:undefined})")
                 await login(page,base);await page.select_option('#inspection-picker',inspection);await page.click('#open-inspection')
                 await page.locator('#export-form-details-section summary').click()
                 await page.fill('#form-detail-compliance-remarks-inspection','Saved negative result: No')

@@ -1,10 +1,14 @@
 # Application Architecture
 
+## Completed-form exports and supplied-form setup (P7–P8)
+
+`integrations/pdf_exports.py` captures scope/configuration/saved facts in one database-enforced snapshot and binds previews, requester, renderer and file hash to explicit final confirmation. Deterministic request IDs enforce idempotency using existing artifact primary keys. Pending records commit before bounded rendering/private publication; sealing/recovery is separate. Public provenance redacts private paths. `pdf_renderer.py` builds fresh selected-page trees with validated overlays and output structural checks; previews are visibly marked. `pdf_setup.py` generates/provisions only unpublished candidates, with adjustable defaults and no automatic business approval. See the [operating guide](PDF_INTEGRATIONS_OPERATIONS.md) and [P7](PDF_INTEGRATION_P7_REPORT.md)/[P8](PDF_INTEGRATION_P8_REPORT.md) reports.
+
 ## PDF administration and technician details (P4–P6)
 
 `api/routers/admin_integrations.py` and `integrations/pdf_service.py` add an admin-only, revisioned template/draft/test/publication lifecycle. Resource-limited `pdf_admin_worker.py` performs intake, sanitized raster previews and watermarked diagnostic rendering. Published configuration and exact-hash verification remain immutable. `api/integrations.js` is the independently packaged mapping workspace and technician UI.
 
-`api/routers/inspection_form_integrations.py` and `integrations/pdf_details.py` expose saved additional inputs, explicit scope and readiness. Scope decisions use the existing append-only PDF integration audit table; input answers use `inspection_form_decisions`. Writes serialize per inspection (SQLite immediate transaction / PostgreSQL row locks), compare saved fingerprints and never modify existing inspection/checklist/point/event records. Polling preserves private local edits, reports conflicts and archives local answers when definitions change. Feature failures stay inside the new UI section. Final preview/confirmation/retained downloads remain P7, disabled in this delivery. See [P4](PDF_INTEGRATION_P4_REPORT.md), [P5](PDF_INTEGRATION_P5_REPORT.md), and [P6](PDF_INTEGRATION_P6_REPORT.md) reports.
+`api/routers/inspection_form_integrations.py` and `integrations/pdf_details.py` expose saved additional inputs, explicit scope and readiness. Scope decisions use the existing append-only PDF integration audit table; input answers use `inspection_form_decisions`. Writes serialize per inspection (SQLite immediate transaction / PostgreSQL row locks), compare saved fingerprints and never modify existing inspection/checklist/point/event records. Polling preserves private local edits, reports conflicts and archives local answers when definitions change. Feature failures stay inside the new UI section. P7 adds the preview/confirmation/download lifecycle described above; production candidates remain disabled pending administrator setup. See [P4](PDF_INTEGRATION_P4_REPORT.md), [P5](PDF_INTEGRATION_P5_REPORT.md), and [P6](PDF_INTEGRATION_P6_REPORT.md) reports.
 
 ## Saved PDF sources and readiness (P3)
 

@@ -1,6 +1,12 @@
 /* Additive PDF integration workspace. All authoritative rules remain in Python. */
 (() => {
   'use strict';
+  const randomId=()=>{
+    if(typeof crypto.randomUUID==='function')return crypto.randomUUID();
+    const bytes=crypto.getRandomValues(new Uint8Array(16));bytes[6]=(bytes[6]&15)|64;bytes[8]=(bytes[8]&63)|128;
+    const hex=[...bytes].map(value=>value.toString(16).padStart(2,'0')).join('');
+    return `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;
+  };
   const $ = (selector, root = document) => root.querySelector(selector);
   const root = $('#admin-panel-integrations');
   const api = '/api/admin/integrations';
@@ -28,7 +34,7 @@
   const send = (url, body, method = 'POST') => request(url, {method, headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
   function markDirty() { dirty = true; test = null; verified.clear(); message('Unsaved mapping changes. Save and retest before verification.'); }
   function field(parent, label, control) {
-    const wrapper = el('div', null, {class: 'form-field'}); const id = control.id || `pdf-control-${crypto.randomUUID()}`;
+    const wrapper = el('div', null, {class: 'form-field'}); const id = control.id || `pdf-control-${randomId()}`;
     control.id = id; wrapper.append(el('label', label + ':', {for: id}), control); parent.append(wrapper); return control;
   }
   function select(options, value) {
@@ -276,7 +282,7 @@
     action('#integration-reload', async () => { if (dirty && !window.confirm('Discard your unsaved mapping edits? Download a local copy first if needed.')) return; dirty = false; const id = draft.id; await refresh(true); await openVersion(integrations.flatMap(i => i.versions).find(v => v.id===id)); });
     window.addEventListener('beforeunload', event => { if (dirty) { event.preventDefault(); event.returnValue = ''; } });
   }
-  window.PdfIntegrations = {refreshAdmin: refresh, resetAdmin: () => {draft=null;dirty=false;editorDirty=false;test=null;verified.clear();integrations=[];root?.querySelector('#integration-cards')?.replaceChildren();root?.querySelector('#integration-workspace')?.classList.add('hidden');}};
+  window.PdfIntegrations = {randomId,refreshAdmin: refresh, resetAdmin: () => {draft=null;dirty=false;editorDirty=false;test=null;verified.clear();integrations=[];root?.querySelector('#integration-cards')?.replaceChildren();root?.querySelector('#integration-workspace')?.classList.add('hidden');}};
 })();
 
 /* Inspection-specific decisions have their own draft/sync lifecycle. */
@@ -531,7 +537,7 @@
     for(const blank of preview.deliberately_blank)blanks.append(node('p',`${blank.label||blank.target_id}: ${blank.reason}`));dialog.append(blanks);
     const frame=node('iframe',null,{title:'Watermarked form preview',src:url(inspectionId,key)+`/exports/${preview.id}/download`});dialog.append(frame);
     const status=node('p','Review every included page before confirming.',{role:'status'});dialog.append(status);
-    const requestId=crypto.randomUUID();
+    const requestId=window.PdfIntegrations.randomId();
     const confirmButton=act(dialog,'Confirm and download completed PDF',async()=>{
       if(active!==inspectionId || hasUnsaved(record,key) || window.PdfIntegrations.hasLegacyDrafts?.())throw new Error('Inspection changed or has unsaved edits. Close this preview and save first.');
       confirmButton.disabled=true;status.textContent='Confirming saved data and retaining the final PDF…';
