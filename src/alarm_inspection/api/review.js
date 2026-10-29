@@ -214,7 +214,9 @@
           if (valid()) await collection('/api/admin/settings', document.querySelector('.settings-row'), loadAdminSettings);
         } else if (tab === 'admin-tab-panel-types') {
           // Shared panel types were refreshed above.
-        } else await collection('/api/admin/inspection-tasks', inspectionTasksBody, loadAdminInspectionTasks);
+        } else if (tab === 'admin-tab-integrations') {
+          await window.PdfIntegrations?.refreshAdmin();
+        } else if (tab === 'admin-tab-inspection-tasks') await collection('/api/admin/inspection-tasks', inspectionTasksBody, loadAdminInspectionTasks);
       }
       if (currentScreen === 'inspection' && inspectionId && valid()) {
         const url = `/api/inspections/${inspectionId}${listId ? `?point_list_id=${encodeURIComponent(listId)}` : ''}`;
@@ -690,6 +692,7 @@
   for (const [index, tab] of adminTabs.entries()) {
     tab.addEventListener('click', async () => {
       showAdminTab(tab.id.replace('admin-tab-', ''));
+      if (tab.id === 'admin-tab-integrations') await window.PdfIntegrations?.refreshAdmin(true);
       if (tab.id === 'admin-tab-inspection-tasks') {
         inspectionTasksMessage.textContent = '';
         try { await loadAdminInspectionTasks(); }

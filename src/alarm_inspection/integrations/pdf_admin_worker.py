@@ -21,7 +21,7 @@ def main():
     if request['operation'] == 'page':
         import subprocess
         pdf = output.with_suffix('.pdf'); pdf.write_bytes(data)
-        subprocess.run(['pdftoppm', '-f', str(request['page']), '-singlefile', '-scale-to', '1600', '-png',
+        subprocess.run(['pdftoppm', '-cropbox', '-f', str(request['page']), '-singlefile', '-scale-to', '1600', '-png',
                         str(pdf), str(output.with_suffix(''))], check=True, stdout=subprocess.DEVNULL,
                        stderr=subprocess.DEVNULL)
     else:

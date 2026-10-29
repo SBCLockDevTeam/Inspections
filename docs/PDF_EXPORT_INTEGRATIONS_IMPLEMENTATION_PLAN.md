@@ -1,6 +1,6 @@
 # PDF Export Integrations Implementation Plan
 
-Status: P0–P4 backend foundations, saved-source rules and administration lifecycle delivered; P5 and later phases remain pending.
+Status: P0–P5 backend foundations, administration lifecycle and visual workspace delivered; P6 and later phases remain pending.
 Date: October 28, 2026.
 Requirements: [PDF Export Integrations Specification](PDF_EXPORT_INTEGRATIONS_SPEC.md).
 
@@ -252,7 +252,7 @@ Keep each batch reviewable; split a batch further if it grows. Update checkboxes
 - [x] Typed contracts, additive tables/private file lifecycle, disabled feature switch (P2). See [P2 report](PDF_INTEGRATION_P2_REPORT.md).
 - [x] Saved source catalog, deterministic mapping and readiness rules (P3). See [P3 report](PDF_INTEGRATION_P3_REPORT.md).
 - [x] Admin draft/test/publication/version lifecycle APIs (P4). See [P4 report](PDF_INTEGRATION_P4_REPORT.md).
-- [ ] Visual Admin → Integrations workspace and packaged assets (P5).
+- [x] Visual Admin → Integrations workspace and packaged assets (P5). See [P5 report](PDF_INTEGRATION_P5_REPORT.md).
 - [ ] Inspection-specific Form Details, scope and readiness UI/API (P6).
 - [ ] Snapshot-bound previews, confirmed final renderer, artifact history/recovery (P7).
 - [ ] Both supplied forms configured and privately verified; policy decisions recorded (P8).
