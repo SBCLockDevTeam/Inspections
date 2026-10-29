@@ -338,6 +338,15 @@ def test_missing_integration_asset_does_not_break_existing_inspection_entry(brow
 def test_simple_picker_save_then_export_without_manual_details(browser_app,tmp_path):
     from pypdf import PdfReader
     base,client,store,inspection,draft=browser_app
+    from alarm_inspection.storage import Inspection, InspectionTask, InspectionChecklistDecision
+    def saved_data():
+        with store() as session:
+            row=session.get(Inspection,inspection)
+            fields=('store_number','store_type','address','city','state','inspector_name','start_date','completion_date')
+            return (tuple(getattr(row,f) for f in fields),
+                [(t.id,t.text,t.input_type,t.options_json,t.active,t.position) for t in session.query(InspectionTask).order_by(InspectionTask.id)],
+                [(d.id,d.task_id,d.value,d.completed) for d in session.query(InspectionChecklistDecision).order_by(InspectionChecklistDecision.id)])
+    original_data=saved_data()
     async def check():
         async with playwright.async_playwright() as p:
             browser=await p.chromium.launch(headless=True,args=['--no-sandbox'])
@@ -358,16 +367,21 @@ def test_simple_picker_save_then_export_without_manual_details(browser_app,tmp_p
                 await playwright.expect(source).to_have_attribute('aria-pressed','true')
                 await playwright.expect(source).to_have_css('background-color','rgb(219, 234, 254)')
                 assert await page.locator('#simple-editor input[type="checkbox"], #simple-editor label, #simple-editor p').count()==0
-                await page.locator('#simple-editor').get_by_label('Default value',exact=True).fill('2025-01-01')
+                default=page.locator(f'[data-pdf-default="{target["id"]}"]')
+                assert await page.locator('#simple-editor input').count()==0
+                await default.fill('2025-01-01')
                 other=next(t for t in draft['config']['inventory']['targets'] if t['kind']=='text' and t['id']!=target['id'])
                 await page.locator(f'#simple-targets [data-target="{other["id"]}"]').click()
                 await playwright.expect(source).to_have_attribute('aria-pressed','false')
                 await page.locator(f'#simple-targets [data-target="{target["id"]}"]').click()
                 await playwright.expect(source).to_have_attribute('aria-pressed','true')
-                await playwright.expect(page.get_by_label('Default value',exact=True)).to_have_value('2025-01-01')
-                # Re-selecting an existing source retains its default and mapping.
+                await playwright.expect(default).to_have_value('2025-01-01')
+                # Removing/changing a source does not remove a PDF-owned default.
+                await page.get_by_role('button',name='Clear mapping',exact=True).click()
+                await playwright.expect(source).to_have_attribute('aria-pressed','false')
+                await playwright.expect(default).to_have_value('2025-01-01')
                 await source.click()
-                await playwright.expect(page.get_by_label('Default value',exact=True)).to_have_value('2025-01-01')
+                await playwright.expect(default).to_have_value('2025-01-01')
                 rect=page.locator(f'#simple-sheet [data-preview-target="{target["id"]}"]')
                 box=await rect.bounding_box();sheet=await page.locator('#simple-sheet').bounding_box()
                 assert abs((box['x']-sheet['x'])-target['preview_rect'][0])<2
@@ -375,8 +389,8 @@ def test_simple_picker_save_then_export_without_manual_details(browser_app,tmp_p
                 await playwright.expect(page.locator('#simple-message')).to_contain_text('Integration saved and ready',timeout=30000)
                 await page.locator(f'#simple-targets [data-target="{target["id"]}"]').click()
                 await playwright.expect(source).to_have_attribute('aria-pressed','true')
-                await playwright.expect(page.get_by_label('Default value',exact=True)).to_have_value('2025-01-01')
-                await page.get_by_label('Default value',exact=True).fill('')
+                await playwright.expect(default).to_have_value('2025-01-01')
+                await default.fill('')
                 await page.click('#simple-save')
                 await playwright.expect(page.locator('#simple-message')).to_contain_text('Integration saved and ready',timeout=30000)
                 integration=next(i for i in client.get('/api/admin/integrations').json()['integrations'] if i['key']=='compliance')
@@ -386,8 +400,11 @@ def test_simple_picker_save_then_export_without_manual_details(browser_app,tmp_p
                 await page.locator(f'#simple-targets [data-target="{target["id"]}"]').click()
                 await page.get_by_role('button',name='Clear mapping',exact=True).click()
                 await playwright.expect(source).to_have_attribute('aria-pressed','false')
-                await playwright.expect(page.get_by_label('Default value',exact=True)).to_have_value('')
+                await playwright.expect(default).to_have_value('')
                 await source.click()
+                # A PDF-only fixed value needs no corresponding Inspection field.
+                await page.locator(f'[data-pdf-default="{other["id"]}"]').fill('SBC FIXED')
+                await page.locator(f'#simple-targets [data-target="{target["id"]}"]').click()
                 await page.click('#simple-save')
                 await playwright.expect(page.locator('#simple-message')).to_contain_text('Integration saved and ready',timeout=30000)
                 await page.locator('#integration-debug-mode > summary').click()
@@ -407,6 +424,13 @@ def test_simple_picker_save_then_export_without_manual_details(browser_app,tmp_p
                     await page.get_by_role('button',name='Confirm and download completed PDF',exact=True).click()
                 download=await event.value;path=tmp_path/'simple-completed.pdf';await download.save_as(path)
                 assert '10/01/2026' in PdfReader(path).pages[0].extract_text()
+                assert 'SBC FIXED' in PdfReader(path).pages[0].extract_text()
+                assert saved_data()==original_data
+                from alarm_inspection.storage import Inspection
+                with store() as session:
+                    saved=session.get(Inspection,inspection)
+                    assert saved.store_number=='PDFTEST' and saved.address=='Test'
+                    assert saved.inspector_name!='SBC FIXED' and saved.start_date==date(2026,10,1)
                 assert not errors
             finally:await browser.close()
     asyncio.run(check())

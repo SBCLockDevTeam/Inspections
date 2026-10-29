@@ -370,13 +370,15 @@
   const sourceFor = m => m?.source ? sources.find(s => sourceKey(s.source) === sourceKey(m.source)) : null;
   const mapped = m => m && ['source', 'constant'].includes(m.disposition);
 
-  function change(m) {
-    mappings.set(selected, m);
+  function change(m, refreshTargets = true) {
+    mappings.set(m.target_id, m);
     dirty = true;
     message('Unsaved changes. Save integration to use this mapping on inspections.');
-    renderTargets();
+    if (refreshTargets) renderTargets();
     updateSummary();
   }
+
+  const pdfDefault = m => m.default_value ?? (m.disposition === 'constant' ? m.constant : null);
 
   function blank(t) {
     return {
@@ -388,8 +390,10 @@
   }
 
   function updateSummary() {
-    const count = [...mappings.values()].filter(mapped).length;
-    $('coverage').textContent = `${count} mapped · ${version.config.inventory.targets.length-count} left blank. Saved mappings apply to every inspection.`;
+    const values = [...mappings.values()];
+    const connected = values.filter(m => m.source).length;
+    const fixed = values.filter(m => m.disposition === 'constant').length;
+    $('coverage').textContent = `${connected} mapped · ${fixed} fixed · ${version.config.inventory.targets.length-connected-fixed} left blank. Defaults belong only to the PDF.`;
   }
   async function refresh(force = false) {
     if (host.classList.contains('hidden') || busy || (!force && (dirty || host.contains(document.activeElement)))) return;
@@ -491,10 +495,40 @@
       const m = mappings.get(t.id);
       const label = m.label || t.tooltip || t.qualified_name || 'PDF field';
       if (!`${label} ${t.qualified_name} page ${t.page}`.toLowerCase().includes(search)) continue;
-      button(`Page ${t.page} · ${label} — ${mapped(m)?'Mapped':'Blank'}`, () => choose(t.id), list, {
-        'data-target': t.id,
-        'aria-pressed': String(selected === t.id)
+      const row = node('div', null, {class: 'pdf-target-row', 'data-pdf-field': t.id});
+      const caption = value => `Page ${t.page} · ${label} — ${value.disposition === 'constant' ? 'Fixed' : mapped(value) ? 'Mapped' : 'Blank'}`;
+      const fieldButton = button(caption(m), () => choose(t.id), row, {
+        'data-target': t.id, 'aria-pressed': String(selected === t.id)
       });
+      if (['text', 'choice'].includes(t.kind)) {
+        const current = sourceFor(m);
+        const options = current?.options?.length ? current.options :
+          t.kind === 'choice' && !(t.flags & (1 << 18)) ? t.options.map(o => Array.isArray(o) ? o[0] : o) : [];
+        const value = options.length ? select([{value: '', label: 'PDF default'}, ...options], pdfDefault(m)) :
+          input(pdfDefault(m) ?? '', current?.type === 'date' ? 'date' : 'text');
+        value.setAttribute('aria-label', 'PDF default for ' + label);
+        value.setAttribute('placeholder', 'PDF default');
+        value.setAttribute('data-pdf-default', t.id);
+        value.title = 'PDF only: prints without a mapping, or when the mapped answer is empty. Never changes Inspection data.';
+        value.addEventListener('focus', () => {
+          if (selected === t.id) return;
+          selected = t.id; page = t.page; $('page').value = page;
+          for (const b of list.querySelectorAll('[data-target]')) b.setAttribute('aria-pressed', String(b.dataset.target === selected));
+          renderPage(); renderEditor();
+        });
+        value.addEventListener('input', () => {
+          const previous = mappings.get(t.id);
+          const fallback = value.value.trim() === '' ? null : value.value;
+          const next = previous.source ? {...previous, default_value: fallback} : fallback !== null ? {
+            ...previous, disposition: 'constant', constant: fallback,
+            reason: 'Administrator configured a PDF-only fixed value.'
+          } : {...blank(t), label: previous.label};
+          change(next, false);
+          fieldButton.textContent = caption(next);
+        });
+        row.append(value);
+      }
+      list.append(row);
     }
   }
 
@@ -533,42 +567,21 @@
     let m = mappings.get(selected);
     const current = sourceFor(m);
     const buttonTarget = ['checkbox', 'radio'].includes(t.kind);
-    const tools = node('div', null, {class: 'pdf-mapping-tools'});
     const clear = button('×', () => {
-      change({...blank(t), label: m.label || t.tooltip || t.qualified_name});
+      const fallback = pdfDefault(mappings.get(t.id));
+      change(fallback !== null ? {
+        ...blank(t), label: m.label, disposition: 'constant', constant: fallback,
+        reason: 'Administrator configured a PDF-only fixed value.'
+      } : {...blank(t), label: m.label || t.tooltip || t.qualified_name});
       renderEditor();
-    }, tools, {'aria-label': 'Clear mapping', title: 'Clear mapping', class: 'pdf-clear-mapping'});
-    clear.disabled = !mapped(m);
-    if (!buttonTarget) {
-      const defaultValue = m.default_value ?? (m.disposition === 'constant' ? m.constant : '') ?? '';
-      const value = current?.options?.length ? select([
-        {value: '', label: 'Default'}, ...current.options
-      ], defaultValue) : input(defaultValue, current?.type === 'date' ? 'date' : 'text');
-      value.setAttribute('aria-label', 'Default value');
-      value.setAttribute('placeholder', 'Default');
-      value.title = 'Used only when the mapped field is empty';
-      value.addEventListener('input', () => {
-        const fallback = value.value.trim() === '' ? null : value.value;
-        if (m.source) m = {...m, default_value: fallback};
-        else m = fallback !== null ? {
-          ...m, disposition: 'constant', constant: fallback,
-          reason: 'Administrator configured a fixed default value.'
-        } : {...blank(t), label: m.label};
-        change(m);
-        clear.disabled = !mapped(m);
-      });
-      tools.append(value);
-    } else {
-      const check = select(['Yes', 'No', 'NA'], m.check_on || 'Yes');
+    }, node('div'), {'aria-label': 'Clear mapping', title: 'Clear mapping; keep the PDF default', class: 'pdf-clear-mapping'});
+    let check = null;
+    if (buttonTarget) {
+      check = select(['Yes', 'No', 'NA'], m.check_on || 'Yes');
       check.setAttribute('aria-label', 'Mark when the saved answer is');
       check.title = 'Mark when the saved answer is';
-      check.addEventListener('change', () => {
-        m = {...m, check_on: check.value};
-        change(m);
-      });
-      tools.append(check);
+      check.addEventListener('change', () => {m = {...m, check_on: check.value}; change(m);});
     }
-    if (!current) editor.append(tools);
     const choices = node('div', null, {class: 'pdf-source-choices', 'aria-label': 'Inspection fields'});
     editor.append(choices);
     let selectedButton = null;
@@ -585,6 +598,7 @@
           change({
             target_id: t.id, label: m.label || t.tooltip || t.qualified_name,
             disposition: 'source', source: source.source, required: !!m.required,
+            default_value: pdfDefault(mappings.get(t.id)),
             missing: m.required ? 'block' : 'blank',
             reason: 'Optional fields may be left blank when no saved answer is available.',
             overflow: 'shrink', font_size: 9, minimum_font_size: 6,
@@ -598,7 +612,8 @@
         b.disabled = buttonTarget && source.type !== 'yes_no_na';
         if (b.disabled) b.title = 'Result marks need a Yes/No/NA Check List field.';
         if (active) {
-          row.append(clear, tools);
+          row.append(clear);
+          if (check) row.append(check);
           selectedButton = b;
         }
         section.append(row);
