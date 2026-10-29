@@ -111,3 +111,17 @@ def test_time_or_device_collections_cannot_be_converted_to_a_passing_result():
     data=[{'accepted_timestamp':'2026-10-28T10:00:00'}]
     with pytest.raises(MappingError):
         apply_transforms(value(data,'times'),[Transform(kind='lookup',lookup={canonical_json(data):'Yes'})],lambda _:None)
+
+
+def test_explicit_empty_group_choice_clears_single_na_marker():
+    from alarm_inspection.domain.pdf_integrations import AnswerGroup,IntegrationConfig,SourceRef
+    from alarm_inspection.domain.pdf_mapping import SourceValue,map_answer_group
+    from pdf_storage_fixtures import config_data
+    raw=config_data();target=next(t for t in raw['inventory']['targets'] if t['kind']=='checkbox')
+    raw['manual_inputs']=[dict(id='na',label='Not applicable?',meaning='Explicit applicability decision',type='dropdown',options=['Yes','No'])]
+    raw['mappings']=[dict(m,disposition='source',source={'kind':'manual','id':'na'}) if m['target_id']==target['id'] else m for m in raw['mappings']]
+    raw['answer_groups']=[dict(id='applicability',members={'Yes':[target['id']],'No':[]},required=True)]
+    config=IntegrationConfig.model_validate(raw)
+    for answer,checked in [('Yes',True),('No',False)]:
+        source=SourceValue(source=SourceRef(kind='manual',id='na'),type='choice',state='ready',value=answer,fingerprint='a'*64)
+        assert map_answer_group(config,config.answer_groups[0],lambda _:source)[target['id']].checked is checked

@@ -125,4 +125,9 @@ def create_router(store):
             else: raise ValueError('Choose a version or explicit enablement.')
             return {'status':'updated'}
         return run(request,operation)
+    @router.post('/maintenance/expired-previews')
+    def cleanup(request:Request):
+        from alarm_inspection.integrations.pdf_exports import cleanup_expired_previews
+        return run(request,lambda s,a:cleanup_expired_previews(store,files=files,actor_id=a))
+
     return router

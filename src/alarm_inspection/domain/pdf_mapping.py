@@ -141,7 +141,7 @@ def _fit(text, target, mapping):
                     lines.append(current); current = word
                 else: current = candidate
             lines.append(current)
-        if all(stringWidth(line, 'Helvetica', size) <= width for line in lines) and len(lines) * size * 1.1 <= height:
+        if all(stringWidth(line, 'Helvetica', size) <= width for line in lines) and len(lines) * size * 1.2 <= height:
             return size, lines
     raise MappingError('Text overflow requires correction; no value was truncated.', 'OVERFLOW')
 
@@ -163,7 +163,7 @@ def map_target(target, mapping, source, resolve, *, required=None):
     text = _scalar(resolved.value)
     if target.kind == 'choice':
         exports = [item[0] if isinstance(item, list) else item for item in target.options]
-        if text not in exports: raise MappingError('Saved value is not an allowed PDF choice.', 'AMBIGUOUS_TARGET')
+        if text not in exports and not target.flags & (1 << 18): raise MappingError('Saved value is not an allowed PDF choice.', 'AMBIGUOUS_TARGET')
     font, lines = _fit(text, target, mapping)
     return TargetValue(target_id=target.id, raw_value=raw, text=text, font_size=font, lines=lines, provenance=resolved.provenance)
 

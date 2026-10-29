@@ -53,3 +53,8 @@ The final PDF is not created until all results and mappings are complete. The fi
 - Store scope decisions in the existing append-only PDF integration audit stream, retaining applicability hashes and all prior choices. No legacy schema or inspection mutations are needed.
 - Compare saved fingerprints and serialize additional decisions per inspection. Return conflicts instead of silently replacing another device's answer. Overrides must identify and match the actual current source and include a reason.
 - Preserve unsaved browser answers through polling/navigation; explicitly archive local drafts before reviewing changed definitions. Do not adopt incompatible earlier answers merely because IDs/labels match. Feature failures do not block existing entry or export actions.
+
+
+## October 29, 2026 — P7 and deferred production defaults
+
+The user explicitly requested adjustable scope/timezone/company settings and will establish defaults later. Prepare unpublished form candidates and keep both export integrations disabled until administrator review/publication. Do not copy presets into approved constants or manufacture business approvals. Confirmation acceptance is the consistent saved-data snapshot boundary; render only frozen values, with deterministic request IDs and recoverable pending-file/database separation. Historical final bytes remain immutable and hash-verified. See [P7 report](PDF_INTEGRATION_P7_REPORT.md).

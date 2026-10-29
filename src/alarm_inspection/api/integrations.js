@@ -104,6 +104,7 @@
     const controls = $('#integration-policies'); controls.replaceChildren();
     for (const [key, label, options] of [
       ['applicability', 'Applicability', ['', 'panel', 'inspection', 'no_panel']],
+      ['filename_policy', 'Download naming policy', ['unresolved','completion_date_panel_id']],
       ['signature_policy', 'Signature policy', ['unresolved', 'later_signing', 'signed_required']],
       ['supplemental_policy', 'Supplemental policy', ['unresolved', 'manual_declaration', 'not_applicable']],
     ]) {
@@ -318,6 +319,7 @@
   }
   function setInspection(id) {
     if (active===id) return;
+    previewDialog?.close();previewDialog?.remove();previewDialog=null;
     active=id;epoch++;controller?.abort();reading=false;root.replaceChildren();message.textContent='';
     if (id) { render(); refresh(); }
   }
@@ -366,11 +368,14 @@
         for (const [key,value] of record.locals) if (key.startsWith(form.key+':')) {record.archive.push({key,...value,saving:null});record.locals.delete(key);}
         record.scopes.delete(form.key);card.remove();await refresh();render();
       });
-      act(controls,form.key==='nfpa72'?'Export NFPA 72':'Export Compliance Form',()=>{}, {class:'pdf-export-action',disabled:'disabled'});
+      act(controls,form.key==='nfpa72'?'Export NFPA 72':'Export Compliance Form',()=>openPreview(form.key), {class:'pdf-export-action',disabled:'disabled'});
+      act(controls,'Export history',()=>loadHistory(form.key));
+      card.append(node('div',null,{class:'pdf-export-history'}));
       card.append(node('p',form.export_reason,{class:'pdf-export-reason'}));
       card.append(node('ul',null,{class:'pdf-readiness-blockers'}));root.append(card);
     }
     card.querySelector('.pdf-form-summary').textContent=form.version_id ? `Version ${form.version_id} · ${hasDirty ? 'Local changes unsaved · ' : ''}${form.readiness.ready ? 'Saved data ready' : 'Resolve the blockers below'} · Signatures: ${({later_signing:'reserved for later signing',signed_required:'a supported signature is required',unresolved:'policy needs review'})[form.signature_policy] || 'policy needs review'}. Supplemental sheets: ${form.supplemental_policy==='manual_declaration'?'a saved declaration is required; reports remain separate':form.supplemental_policy==='not_applicable'?'not applicable under the reviewed policy':'policy needs review'}.` : 'Integration disabled or unconfigured.';
+    card.querySelector('.pdf-export-action').disabled=!form.export_available || hasDirty || Boolean(record.scopes.get(form.key)?.dirty);
     card.querySelector('.pdf-export-reason').textContent=form.export_reason;
     const scopeState=record.scopes.get(form.key);
     if (!scopeState?.dirty && !scopeState?.saving) {
@@ -503,6 +508,51 @@
   async function saveDetails() {
     if(!active)return true;
     try {for(const form of state(active).forms)await saveForm(form.key);return true;}catch(error){message.textContent=error.message;return false;}
+  }
+  let previewDialog=null;
+  const post=(path,value)=>read(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(value)});
+  function hasUnsaved(record,key){return [...record.locals].some(([id,v])=>id.startsWith(key+':')&&(v.dirty||v.saving))||record.scopes.get(key)?.dirty;}
+  async function openPreview(key){
+    const inspectionId=active;const record=state(inspectionId);
+    if(hasUnsaved(record,key))throw new Error('Save all Form Details before previewing.');
+    if(window.PdfIntegrations.hasLegacyDrafts?.())throw new Error('Save pending Store Data, checklist and point edits before previewing.');
+    const legacy=document.querySelector('#inspection-screen');
+    if([...legacy.querySelectorAll('[data-task-id]')].some(control=>control.dataset.saving==='true'))throw new Error('Wait for inspection saves to finish.');
+    const form=record.forms.find(f=>f.key===key);
+    message.textContent='Preparing saved-data preview…';
+    const preview=await post(url(inspectionId,key)+'/preview',{expected_version_id:form.version_id,expected_source_fingerprint:form.readiness.source_fingerprint});
+    if(active!==inspectionId)return;
+    previewDialog?.remove();const dialog=node('dialog',null,{class:'pdf-export-dialog','aria-label':'Review completed form preview'});previewDialog=dialog;
+    dialog.append(node('h3',names[key]+' — Draft preview'),node('p',`Version ${preview.version_id}. Scope: ${preview.panel_ids.join(', ')||'reviewed no-panel policy'}. Signatures remain blank for later signing.`));
+    const blanks=node('details');blanks.append(node('summary','Deliberately blank destinations'));
+    for(const blank of preview.deliberately_blank)blanks.append(node('p',`${blank.label||blank.target_id}: ${blank.reason}`));dialog.append(blanks);
+    const frame=node('iframe',null,{title:'Watermarked form preview',src:url(inspectionId,key)+`/exports/${preview.id}/download`});dialog.append(frame);
+    const status=node('p','Review every included page before confirming.',{role:'status'});dialog.append(status);
+    const requestId=crypto.randomUUID();
+    const confirmButton=act(dialog,'Confirm and download completed PDF',async()=>{
+      if(active!==inspectionId || hasUnsaved(record,key) || window.PdfIntegrations.hasLegacyDrafts?.())throw new Error('Inspection changed or has unsaved edits. Close this preview and save first.');
+      confirmButton.disabled=true;status.textContent='Confirming saved data and retaining the final PDF…';
+      try{
+        const artifact=await post(url(inspectionId,key)+'/exports',{preview_id:preview.id,confirmation_token:preview.confirmation_token,preview_sha256:preview.sha256,request_id:requestId,confirmed:true});
+        if(artifact.status!=='ready'){status.textContent=`Export ${artifact.status}. Check Export history; retries use the same confirmation.`;return;}
+        const link=node('a','Download completed PDF',{href:url(inspectionId,key)+`/exports/${artifact.id}/download`,download:artifact.filename});status.replaceChildren(link);link.click();
+        await loadHistory(key);
+      }catch(error){status.textContent=error.message+' Your inspection data is preserved.';}
+      finally{confirmButton.disabled=false;}
+    });
+    act(dialog,'Close preview',()=>{dialog.close();dialog.remove();});document.body.append(dialog);dialog.showModal();
+    dialog.addEventListener('cancel',()=>dialog.remove());message.textContent='Draft preview ready.';
+  }
+  async function loadHistory(key){
+    const inspectionId=active;const result=await read(url(inspectionId,key)+'/exports');if(active!==inspectionId)return;
+    const container=root.querySelector(`[data-form="${key}"] .pdf-export-history`);if(!container)return;container.replaceChildren(node('h4','Retained exports'));
+    for(const artifact of result.exports){
+      const row=node('p',`${artifact.created_at} · ${artifact.status} · ${artifact.filename} `);
+      if(artifact.status==='ready')row.append(node('a','Download',{href:url(inspectionId,key)+`/exports/${artifact.id}/download`,download:artifact.filename}));
+      else if(artifact.status==='pending')act(row,'Recover pending export',async()=>{await post(url(inspectionId,key)+`/exports/${artifact.id}/recover`,{});await loadHistory(key);});
+      row.append(document.createTextNode(' '),node('a','Provenance',{href:url(inspectionId,key)+`/exports/${artifact.id}/provenance`,target:'_blank',rel:'noopener'}));container.append(row);
+    }
+    if(!result.exports.length)container.append(node('p','No completed exports have been requested.'));
   }
   function backup(record,key) {
     const blob=new Blob([JSON.stringify({answers:[...record.locals].filter(([id])=>id.startsWith(key+':')).map(([id,v])=>({id,...v,saving:null})),archived:record.archive},null,2)],{type:'application/json'});

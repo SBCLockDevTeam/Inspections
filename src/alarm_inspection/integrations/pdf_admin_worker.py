@@ -16,6 +16,11 @@ def main():
     if request['operation'] == 'inventory':
         output.write_text(json.dumps(inventory))
         return
+    if request['operation'] in {'export_preview','export_final'}:
+        from alarm_inspection.integrations.pdf_renderer import render_completed_pdf
+        plan=request['targets']
+        output.write_bytes(render_completed_pdf(source,plan['config'],plan['values'],preview=request['operation']=='export_preview'))
+        return
     from alarm_inspection.integrations.pdf_renderer import render_diagnostic_pdf
     if request['operation'] == 'render_batch':
         from io import BytesIO

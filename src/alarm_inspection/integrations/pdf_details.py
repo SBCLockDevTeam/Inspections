@@ -52,7 +52,8 @@ def details(store, inspection_id, key, *, actor_id):
         'applicability':config.applicability if config else None,'categories':config.categories if config else [],
         'signature_policy':config.signature_policy if config else None,'supplemental_policy':config.supplemental_policy if config else None,
         'fields':fields,'catalog':_catalog(snapshot),'readiness':result.model_dump(mode='json'),
-        'export_available':False,'export_reason':'Completed PDF previews and downloads are not available yet. Form Details can be saved now.'}
+        'export_available':bool(result.ready and config and config.filename_policy=='completion_date_panel_id'),
+        'export_reason':('Save local edits, then preview and confirm the completed form.' if result.ready and config and config.filename_policy=='completion_date_panel_id' else 'Resolve readiness blockers and the approved filename policy before exporting.')}
 
 
 def lock(session, inspection_id, key, actor_id):

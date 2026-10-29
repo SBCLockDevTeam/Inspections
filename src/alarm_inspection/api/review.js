@@ -154,6 +154,7 @@
   const fieldBaselines = new WeakMap();
   const controlValue = (control) => control.type === 'checkbox' ? control.checked : control.value;
   const rememberControls = (root) => root?.querySelectorAll('input,select,textarea').forEach((control) => fieldBaselines.set(control, controlValue(control)));
+  window.PdfIntegrations.hasLegacyDrafts = () => checklistSaves.size > 0 || hasDraft(document.querySelector('#store-data-section')) || hasDraft(checklistContainer) || hasDraft(acceptedPointsBody);
   const hasDraft = (root) => Boolean(root?.querySelector('[data-checklist-dirty="true"]')) || [...(root?.querySelectorAll('input,select,textarea') || [])].some((control) => fieldBaselines.has(control) && fieldBaselines.get(control) !== controlValue(control));
   const rememberResponse = (url, value) => liveSnapshots.set(url, JSON.stringify(value));
   const fetch = async (url, options = {}) => {

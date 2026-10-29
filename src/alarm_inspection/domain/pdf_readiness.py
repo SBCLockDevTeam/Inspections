@@ -11,7 +11,7 @@ from alarm_inspection.domain.pdf_mapping import (
     map_target, usable,
 )
 
-RULESET_VERSION = 'pdf-p3-1'
+RULESET_VERSION = 'pdf-p7-1'
 
 
 class ReadinessIssue(ReadinessBlocker):
@@ -89,7 +89,7 @@ def evaluate_snapshot(snapshot: SavedSnapshot) -> ReadinessResult:
             if config.supplemental_policy != 'manual_declaration' or config.supplemental_source is None:
                 raise MappingError('Configure an explicit saved supplemental-sheet declaration source.','UNCONFIGURED')
             declaration = usable(resolve(config.supplemental_source))
-            if declaration.type != 'yes_no_na' or declaration.value not in ('Yes','No'):
+            if declaration.type not in {'yes_no_na','choice'} or declaration.value not in ('Yes','No'):
                 raise MappingError('Supplemental-sheet declaration must be an explicit Yes or No.','MISSING_ANSWER',declaration.source)
         except MappingError as exc: error(exc)
     mappings = {m.target_id:m for m in config.mappings}

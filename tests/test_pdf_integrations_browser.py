@@ -20,8 +20,9 @@ pytestmark=pytest.mark.skipif(os.getenv('INSPECTIONS_RUN_BROWSER_TESTS')!='1',re
 def browser_app(tmp_path,monkeypatch):
     monkeypatch.setenv('DATABASE_URL',f'sqlite:///{tmp_path / "browser.db"}')
     monkeypatch.setenv('INSPECTIONS_PDF_INTEGRATIONS_ENABLED','true')
-    from alarm_inspection.api.routers import admin_integrations
+    from alarm_inspection.api.routers import admin_integrations,inspection_form_integrations
     monkeypatch.setattr(admin_integrations,'UPLOAD_ROOT',tmp_path/'private')
+    monkeypatch.setattr(inspection_form_integrations,'UPLOAD_ROOT',tmp_path/'private')
     from alarm_inspection.api.app import create_app
     from alarm_inspection.storage import open_store,User,Inspection
     app=create_app();store=open_store();ident=str(uuid4())
@@ -270,4 +271,45 @@ def test_slow_integration_refresh_does_not_delay_existing_entry_sync(browser_app
                 release.set()
                 if started.is_set():await asyncio.wait_for(finished.wait(),timeout=3)
                 await browser.close()
+    asyncio.run(check())
+
+
+def test_technician_preview_stale_confirmation_final_download_and_history(browser_app,tmp_path):
+    from io import BytesIO
+    from pypdf import PdfReader
+    base,client,store,inspection,draft=browser_app
+    config=draft['config'];config['filename_policy']='completion_date_panel_id'
+    text_target=next(t for t in config['inventory']['targets'] if t['kind']=='text')
+    config['mappings']=[dict(m,disposition='source',source={'kind':'manual','id':'remarks'},required=True) if m['target_id']==text_target['id'] else m for m in config['mappings']]
+    draft=client.put('/api/admin/integrations/versions/'+draft['id'],json={'config':config,'expected_revision':2}).json()
+    publish_browser_form(client,inspection,draft)
+    async def check():
+        async with playwright.async_playwright() as p:
+            browser=await p.chromium.launch(headless=True,args=['--no-sandbox']);page=await browser.new_page();errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
+            try:
+                await login(page,base);await page.select_option('#inspection-picker',inspection);await page.click('#open-inspection')
+                await page.locator('#export-form-details-section summary').click()
+                await page.fill('#form-detail-compliance-remarks-inspection','Saved negative result: No')
+                await page.locator('[data-form="compliance"] h3').click()
+                export=page.get_by_role('button',name='Export Compliance Form',exact=True)
+                await playwright.expect(export).to_be_enabled(timeout=12000)
+                await export.click();await playwright.expect(page.locator('.pdf-export-dialog')).to_be_visible(timeout=12000)
+                iframe=page.locator('.pdf-export-dialog iframe')
+                response=await page.request.get(base+await iframe.get_attribute('src'))
+                assert 'DRAFT PREVIEW' in PdfReader(BytesIO(await response.body())).pages[0].extract_text()
+                assert client.patch(f'/api/inspections/{inspection}',json={'address':'Changed after preview'}).status_code==200
+                await page.get_by_role('button',name='Confirm and download completed PDF',exact=True).click()
+                await playwright.expect(page.locator('.pdf-export-dialog [role="status"]')).to_contain_text('changed',timeout=12000)
+                await page.get_by_role('button',name='Close preview',exact=True).click()
+                await page.wait_for_timeout(3300)
+                await export.click();await playwright.expect(page.locator('.pdf-export-dialog')).to_be_visible(timeout=12000)
+                async with page.expect_download(timeout=15000) as event:
+                    await page.get_by_role('button',name='Confirm and download completed PDF',exact=True).click()
+                download=await event.value;path=tmp_path/'completed.pdf';await download.save_as(path)
+                final=PdfReader(path);text=final.pages[0].extract_text()
+                assert 'Saved negative result: No' in text and 'DRAFT PREVIEW' not in text and 'OLD PRESET' not in text
+                await playwright.expect(page.locator('[data-form="compliance"] .pdf-export-history')).to_contain_text('ready')
+                assert download.suggested_filename=='PDFTEST-Norfolk,VA-Compliance Inspection-10-02-26.pdf'
+                assert not errors
+            finally:await browser.close()
     asyncio.run(check())

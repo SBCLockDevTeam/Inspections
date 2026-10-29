@@ -260,8 +260,8 @@ class AnswerGroup(Contract):
     @model_validator(mode='after')
     def disjoint(self):
         ids = [ident for values in self.members.values() for ident in values]
-        if not ids or len(ids) != len(set(ids)) or any(not ids for ids in self.members.values()):
-            raise ValueError('Answer group members must be nonempty and disjoint.')
+        if not ids or len(ids) != len(set(ids)):
+            raise ValueError('Answer group must contain targets with disjoint members; an explicit empty choice clears all marks.')
         return self
 
 
@@ -286,6 +286,7 @@ class IntegrationConfig(Versioned):
     signature_policy: Literal['unresolved', 'later_signing', 'signed_required'] = 'unresolved'
     supplemental_policy: Literal['unresolved', 'manual_declaration', 'not_applicable'] = 'unresolved'
     supplemental_source: SourceRef | None = None
+    filename_policy: Literal['unresolved', 'completion_date_panel_id'] = 'unresolved'
 
     @model_validator(mode='after')
     def references(self):
@@ -367,6 +368,7 @@ class VerificationEvidence(Versioned):
 
 
 class ArtifactContext(Versioned):
+    export_metadata: dict[str, JsonValue] = Field(default_factory=dict)
     source_fingerprint: Digest
     panel_ids: list[LegacyId] = Field(default_factory=list, max_length=1000)
     resolved_values: dict[str, JsonValue] = Field(default_factory=dict)

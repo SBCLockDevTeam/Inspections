@@ -1,6 +1,6 @@
 # PDF Export Integrations Implementation Plan
 
-Status: P0–P6 delivered: backend foundations, administration lifecycle, visual mapping workspace and technician Form Details/readiness. P7 and later phases remain pending.
+Status: P0–P7 delivered, including snapshot-bound previews, confirmed final retention and history. P8–P10 remain in progress.
 Updated: October 29, 2026.
 Requirements: [PDF Export Integrations Specification](PDF_EXPORT_INTEGRATIONS_SPEC.md).
 
@@ -254,7 +254,7 @@ Keep each batch reviewable; split a batch further if it grows. Update checkboxes
 - [x] Admin draft/test/publication/version lifecycle APIs (P4). See [P4 report](PDF_INTEGRATION_P4_REPORT.md).
 - [x] Visual Admin → Integrations workspace and packaged assets (P5). See [P5 report](PDF_INTEGRATION_P5_REPORT.md).
 - [x] Inspection-specific Form Details, scope and readiness UI/API (P6). See [P6 report](PDF_INTEGRATION_P6_REPORT.md).
-- [ ] Snapshot-bound previews, confirmed final renderer, artifact history/recovery (P7).
+- [x] Snapshot-bound previews, confirmed final renderer, artifact history/recovery (P7). See [P7 report](PDF_INTEGRATION_P7_REPORT.md).
 - [ ] Both supplied forms configured and privately verified; policy decisions recorded (P8).
 - [ ] Full regression, viewer/print evidence and release documentation (P9).
 - [ ] Controlled production enablement, live interaction verification and handoff (P10).
@@ -264,3 +264,5 @@ For every code batch: add appropriate meaningful tests before changing determini
 Outstanding limits to communicate at handoff: NFPA pages 5–11 are excluded; supplemental reports remain separate; no automatic signature service or AI dependency is included; publication depends on administrator-approved mappings and business policies; original NFPA source pagination may reference eleven pages. Scheduling estimates should be made after P1 proves the rendering strategy and P8's field-review workload is understood.
 
 P4–P6 verification (October 29, 2026): the final full suite passed **274 tests**, with PostgreSQL and browser tests explicitly enabled, no skips, and one pre-existing test-client deprecation warning. Compile, JavaScript syntax, whitespace, documentation links and packaged-asset checks passed. Rendering and slow integration reads were separately exercised while existing inspection saves/synchronization continued. No production deployment or enablement occurred.
+
+October 29 user direction: panel/category applicability, site timezones and company/contact defaults must be adjustable; the user will establish defaults later. P8–P10 may prepare/install unpublished drafts and deploy the configurable framework with exports disabled. Business mapping approval, publication, enablement and final supplied-form acceptance remain deferred gates; do not label those gates complete based on framework tests.
