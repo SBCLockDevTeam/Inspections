@@ -1,5 +1,9 @@
 # Application Architecture
 
+## Optional PDF integration backend (P2)
+
+Strict version-one contracts live in `domain/pdf_integrations.py`. Separate models, transactional schema initialization, revisioned/append-only repository primitives and private blob storage live in `integrations/pdf_models.py`, `pdf_schema.py`, `pdf_repository.py` and `pdf_files.py`. `pdf_feature.py` provides a dependency-free, disabled-by-default switch. `storage.open_store()` lazily initializes this separate metadata only when opted in; optional failures leave legacy workflows available. No new router or frontend asset is registered. See [P2 report](PDF_INTEGRATION_P2_REPORT.md).
+
 ## PDF integration feasibility tools (October 28, 2026)
 
 `integrations/pdf_inventory.py` inspects private PDF widget occurrences and geometry; `integrations/pdf_renderer.py` creates watermarked vector probe documents; `integrations/pdf_probe.py` is their private offline command. They are not imported or registered by the application and do not change existing PDF drafts/exports or storage. Original uploads and private proof artifacts remain outside Git. See [part 1 report](PDF_INTEGRATION_PART1_REPORT.md) for scope, tooling, and remaining production gates.

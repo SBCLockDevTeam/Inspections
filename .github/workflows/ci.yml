@@ -8,6 +8,20 @@ on:
 jobs:
   python:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: inspections_pdf_test
+          POSTGRES_USER: inspections_test
+          POSTGRES_HOST_AUTH_METHOD: trust # Disposable CI database only; never production.
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U inspections_test -d inspections_pdf_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      INSPECTIONS_PDF_TEST_POSTGRES_URL: postgresql+psycopg://inspections_test@127.0.0.1:5432/inspections_pdf_test
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

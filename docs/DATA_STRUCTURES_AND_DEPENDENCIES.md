@@ -18,6 +18,12 @@ Defined in `src/alarm_inspection/storage.py`.
 
 These models are the persistence contract and should be treated as stable unless a migration plan is included.
 
+## Optional PDF integration records (P2)
+
+`integrations/pdf_models.py` defines separate `PdfBase` metadata: `PdfIntegration`, `PdfIntegrationVersion`, `InspectionFormDecision`, `PdfExportArtifact`, `PdfIntegrationAuditEntry`, plus the singleton `PdfSchemaState`. Existing model columns are unchanged. With `INSPECTIONS_PDF_INTEGRATIONS_ENABLED` absent/false, `open_store()` does not import these models or create their tables. Explicit initialization creates only additive records and seeds the two disabled integration identities.
+
+Schema version 1 uses new foreign keys/checks and SQLite/PostgreSQL triggers for append-only decisions/audit, immutable published versions and sealed artifacts, and valid published active-version references. Repository helpers validate legacy inspection/panel/actor references; actor IDs remain stored strings so physical user deletion retains audit identity and current deletion behavior. Private blobs are immutable and hash-checked. See [P2 schema, failure and migration policy](PDF_INTEGRATION_P2_REPORT.md).
+
 `PointListDecision.device_highlighted` stores the optional Device Type cell highlight, independently of acceptance and event mappings. Startup adds this Boolean column with a false default for existing databases; existing decisions and uploads remain intact. A scoped PATCH endpoint updates only accepted, undeleted points.
 
 `PointListDecision.device_event_missing` records the warning assessed after a successful upload. Startup adds this Boolean column with a false default; the new `point_list_pending_event_dates` table uses inspection, Points List, and address as its key. Pending matches are cumulative shared evidence, separate from accepted mappings. No existing accepted mappings are changed. Event uploads retain unique storage paths even when filenames repeat.

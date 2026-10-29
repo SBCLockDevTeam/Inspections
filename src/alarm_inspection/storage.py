@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import logging
 import tempfile
 import time
 from datetime import date, datetime
@@ -211,7 +212,19 @@ def open_store():
             _ensure_point_list_decision_columns(engine)
             _ensure_checklist_columns(engine)
             _ensure_point_list_columns(engine)
-            return sessionmaker(bind=engine, expire_on_commit=False)
+            # Optional integration metadata is isolated from existing tables and
+            # imports. A failure here must not disable current inspection work.
+            from alarm_inspection.integrations.pdf_feature import enabled
+            pdf_available = False
+            if enabled():
+                try:
+                    from alarm_inspection.integrations.pdf_schema import initialize_pdf_store
+                    initialize_pdf_store(engine)
+                    pdf_available = True
+                except Exception:
+                    logging.getLogger(__name__).error('PDF integrations unavailable; existing inspection workflows remain enabled.')
+            return sessionmaker(bind=engine, expire_on_commit=False,
+                                info={'pdf_integrations_available': pdf_available})
         except SQLAlchemyError as exc:  # pragma: no cover - depends on external DB readiness
             last_error = exc
             if attempt == 5 or url.startswith("sqlite"):

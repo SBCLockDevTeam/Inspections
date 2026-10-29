@@ -1,5 +1,12 @@
 # Engineering Change Notes
 
+## October 28, 2026 — P2 backend foundations
+
+- Added strict versioned PDF configuration/decision/snapshot contracts and a separate optional six-table schema (five record families plus version marker).
+- Added revision guards, immutable published versions, append-only decisions/audit, preview token binding, retained artifact states and private immutable/hash-checked files.
+- Feature defaults to disabled; initialization failures preserve legacy startup. No UI/routes/deployment added. SQLite/PostgreSQL tests compare existing data and rehearse retention/recovery. CI now includes disposable PostgreSQL.
+- See [P2 report](PDF_INTEGRATION_P2_REPORT.md). Semantic source/readiness/publication services and completed PDF generation remain future phases.
+
 ## October 28, 2026 — Explicit P1 completion
 
 - Added enforced offline subprocess CPU/address-space/file/wall limits, staged publication, retained original bytes and target-to-output manifests.
