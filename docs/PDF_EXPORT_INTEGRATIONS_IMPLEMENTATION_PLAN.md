@@ -1,6 +1,6 @@
 # PDF Export Integrations Implementation Plan
 
-Status: P0–P7 delivered, including snapshot-bound previews, confirmed final retention and history. P8–P10 remain in progress.
+Status: P0–P7 delivered. P8 draft preparation, P9 technical verification and the disabled P10 framework rollout are delivered. User-owned defaults, complete business mapping/publication and physical print acceptance remain deferred.
 Updated: October 29, 2026.
 Requirements: [PDF Export Integrations Specification](PDF_EXPORT_INTEGRATIONS_SPEC.md).
 
@@ -255,9 +255,9 @@ Keep each batch reviewable; split a batch further if it grows. Update checkboxes
 - [x] Visual Admin → Integrations workspace and packaged assets (P5). See [P5 report](PDF_INTEGRATION_P5_REPORT.md).
 - [x] Inspection-specific Form Details, scope and readiness UI/API (P6). See [P6 report](PDF_INTEGRATION_P6_REPORT.md).
 - [x] Snapshot-bound previews, confirmed final renderer, artifact history/recovery (P7). See [P7 report](PDF_INTEGRATION_P7_REPORT.md).
-- [ ] Both supplied forms configured and privately verified; policy decisions recorded (P8).
-- [ ] Full regression, viewer/print evidence and release documentation (P9).
-- [ ] Controlled production enablement, live interaction verification and handoff (P10).
+- [ ] Both supplied forms configured and privately verified; policy decisions recorded (P8). Technical draft catalogs/proofs delivered; business defaults and per-target approval deferred. See [P8 report](PDF_INTEGRATION_P8_REPORT.md).
+- [ ] Full regression, viewer/print evidence and release documentation (P9). 308 tests and independent rendering/print-file checks passed; business/physical-printer acceptance deferred. See [P9 report](PDF_INTEGRATION_P9_REPORT.md).
+- [ ] Controlled production enablement, live interaction verification and handoff (P10). Framework deployed and live/persistence/recovery checks passed; both integrations remain unpublished/disabled pending user setup. See [P10 report](PDF_INTEGRATION_P10_REPORT.md).
 
 For every code batch: add appropriate meaningful tests before changing deterministic rules, run targeted checks, run `python -m compileall -q src tests`, stage specific files, commit, and push. Leave unrelated working-tree changes untouched. Broaden tests at integration/release boundaries and after any failure or substantive new risk.
 
@@ -268,3 +268,5 @@ P4–P6 verification (October 29, 2026): the final full suite passed **274 tests
 October 29 user direction: panel/category applicability, site timezones and company/contact defaults must be adjustable; the user will establish defaults later. P8–P10 may prepare/install unpublished drafts and deploy the configurable framework with exports disabled. Business mapping approval, publication, enablement and final supplied-form acceptance remain deferred gates; do not label those gates complete based on framework tests.
 
 P8 technical preparation: both exact supplied forms have private complete draft catalogs (196 + 283 targets), source-based synthetic No/Yes/NA proofs, independent Poppler/MuPDF checks and print-file generation. Per the user’s deferred-default direction, business approval/publication and physical print acceptance remain unchecked. See [P8 report](PDF_INTEGRATION_P8_REPORT.md).
+
+October 29 handoff: application code `940352e` is deployed at the existing inspection URL. Both reference drafts persist with 196/283 destinations and no approved business defaults. 308 automated cases, actual live review/event/legacy export interactions, image rendering, recreation, customer-data/file comparisons and isolated backup/prior-image recovery passed. The unchecked release items intentionally retain the user-owned defaults/mapping/publication/physical-print gates; see the [operating guide](PDF_INTEGRATIONS_OPERATIONS.md).

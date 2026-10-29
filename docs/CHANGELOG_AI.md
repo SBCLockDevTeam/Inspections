@@ -1,5 +1,13 @@
 # Engineering Change Notes
 
+## October 29, 2026 — P7 export lifecycle, P8 drafts, P9 verification and disabled P10 rollout
+
+- Implemented consistent saved-data previews, exact-proof confirmation, frozen final rendering, deterministic retry IDs, immutable history/provenance, hash-checked downloads and pending-file recovery/preview cleanup.
+- Prepared/provisioned complete private NFPA (196 targets, pages 1–4) and Compliance (283 targets, page 1) draft candidates. Keep independent fields/groups and all user-owned defaults adjustable and unresolved; no presets or passing answers adopted. No production mappings published/enabled.
+- Added default IANA timezone controls with date-only protection, editable-combo support, compact diagnostic vectors and secure UUID fallback for the temporary HTTP origin.
+- Verified 308 tests with PostgreSQL/browser coverage, plus focused HTTP fallback checks and private Poppler/MuPDF/print-file evidence. Deployed code 940352e; verified actual live review/event/legacy export behavior and recreation/persistence. Customer data hashes and 89 original/retained files matched; isolated database restore/new-and-prior-image checks passed.
+- New integrations remain disabled/unpublished while the user establishes defaults and reviews/publishes mappings; physical-printer/business acceptance remains open. See [P7](PDF_INTEGRATION_P7_REPORT.md), [P8](PDF_INTEGRATION_P8_REPORT.md), [P9](PDF_INTEGRATION_P9_REPORT.md), [P10](PDF_INTEGRATION_P10_REPORT.md) and the [operating guide](PDF_INTEGRATIONS_OPERATIONS.md).
+
 ## October 29, 2026 — P4–P6 PDF integration administration and technician details
 
 - Delivered admin template intake, occurrence inventories/previews, conflict-safe drafts, watermarked diagnostic testing, exact-hash verified publication, activation and enable/disable APIs. Private quarantine retains originals and diagnostics.
