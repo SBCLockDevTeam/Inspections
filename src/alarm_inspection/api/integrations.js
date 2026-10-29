@@ -164,6 +164,7 @@
     const disposition = $('#integration-disposition').value;
     const source = $('#integration-source').value;
     const value = {
+      ...(mapping() || {}),
       target_id: targetId, label: $('#integration-label').value, section: $('#integration-section').value,
       disposition, reason: $('#integration-reason').value, required: $('#integration-required').checked,
       overflow: $('#integration-overflow').value, missing: $('#integration-missing').value,
@@ -344,19 +345,6 @@
     const result = await response.json();
     if (!response.ok) throw new Error((response.status === 409 ? 'Your edits are retained. ' : '') + (result.error || result.detail || 'Unable to load integration.'));
     return result;
-  }
-
-  function control(parent, label, element) {
-    const id = 'simple-control-' + advanced.randomId();
-    element.id = id;
-    const wrap = node('div', null, {
-      class: 'form-field'
-    });
-    wrap.append(node('label', label + ':', {
-      for: id
-    }), element);
-    parent.append(wrap);
-    return element;
   }
 
   function input(value = '', type = 'text') {
@@ -541,157 +529,86 @@
     const editor = $('editor');
     editor.replaceChildren();
     const t = target();
-    if (!t) return;
+    if (!t || ['signature', 'unknown', 'pushbutton'].includes(t.kind)) return;
     let m = mappings.get(selected);
-    editor.append(node('h4', m.label || t.tooltip || t.qualified_name || 'Selected PDF field'), node('p', 'Page ' + t.page + ' · ' + (t.kind === 'checkbox' || t.kind === 'radio' ? 'Result mark' : t.kind === 'signature' ? 'Signature' : 'Form field')));
-    const label = control(editor, 'Field label', input(m.label || t.tooltip || t.qualified_name));
-    label.addEventListener('change', () => {
-      m = {
-        ...m,
-        label: label.value
-      };
-      change(m);
-    });
-    if (['signature', 'unknown', 'pushbutton'].includes(t.kind)) {
-      editor.append(node('p', t.kind === 'signature' ? 'Signatures remain blank for signing after export.' : 'This field remains blank.'));
-      return;
-    }
     const current = sourceFor(m);
-    editor.append(node('p', current ? `Mapped to ${current.section}: ${current.label}` : m.disposition === 'constant' ? 'Uses a fixed default value.' : 'No inspection field selected.', {
-      id: 'simple-selected-source'
-    }));
-    const required = control(editor, 'Required', input('', 'checkbox'));
-    required.checked = !!m.required;
-    required.addEventListener('change', () => {
-      m = {
-        ...m,
-        required: required.checked,
-        missing: required.checked ? 'block' : 'blank',
-        reason: 'Optional fields may be left blank when no saved answer is available.'
-      };
-      change(m);
-    });
     const buttonTarget = ['checkbox', 'radio'].includes(t.kind);
-    if (buttonTarget) {
-      const check = control(editor, 'Mark when the saved answer is', select(['Yes', 'No', 'NA'], m.check_on || 'Yes'));
-      check.addEventListener('change', () => {
-        m = {
-          ...m,
-          check_on: check.value
-        };
-        change(m);
-      });
-      editor.append(node('p', 'Result marks use saved Yes/No/NA answers. Unanswered optional results stay blank.'));
-    } else {
-      const useDefault = control(editor, 'Use default when the mapped field is empty', input('', 'checkbox'));
-      useDefault.checked = m.default_value != null || m.disposition === 'constant';
-      const makeDefault = () => {
-        const type = current?.type === 'date' ? 'date' : 'text';
-        return current?.options?.length ? select([{
-          value: '',
-          label: 'Choose default…'
-        }, ...current.options], m.default_value ?? m.constant ?? '') : input(m.default_value ?? m.constant ?? '', type);
-      };
-      const value = control(editor, 'Default value', makeDefault());
-      value.disabled = !useDefault.checked;
-
-      function updateDefault() {
-        const fallback = useDefault.checked ? value.value : null;
-        if (m.source) m = {
-          ...m,
-          default_value: fallback
-        };
-        else m = fallback !== null ? {
-          ...m,
-          disposition: 'constant',
-          constant: fallback,
-          reason: 'Administrator configured a fixed default value.'
-        } : {
-          ...blank(t),
-          label: m.label
-        };
-        change(m);
-      }
-      useDefault.addEventListener('change', () => {
-        value.disabled = !useDefault.checked;
-        updateDefault();
-      });
-      value.addEventListener('input', updateDefault);
-      if (current?.type === 'date') {
-        const formats = [{
-          value: '%m/%d/%Y',
-          label: 'MM/DD/YYYY'
-        }, {
-          value: '%m-%d-%y',
-          label: 'MM-DD-YY'
-        }, {
-          value: '%Y-%m-%d',
-          label: 'YYYY-MM-DD'
-        }];
-        const format = control(editor, 'Date format', select(formats, m.transforms?.find(x => x.kind === 'date')?.format || '%m/%d/%Y'));
-        format.addEventListener('change', () => {
-          m = {
-            ...m,
-            transforms: [{
-              kind: 'date',
-              format: format.value
-            }]
-          };
-          change(m);
-        });
-      }
-    }
-    button('Clear mapping', () => {
-      change(blank(t));
+    const tools = node('div', null, {class: 'pdf-mapping-tools'});
+    const clear = button('×', () => {
+      change({...blank(t), label: m.label || t.tooltip || t.qualified_name});
       renderEditor();
-    }, editor);
-    editor.append(node('h4', 'Choose an inspection field'));
-    const search = control(editor, 'Find inspection field', input('', 'search'));
-    const choices = node('div', null, {
-      class: 'pdf-source-choices'
-    });
+    }, tools, {'aria-label': 'Clear mapping', title: 'Clear mapping', class: 'pdf-clear-mapping'});
+    clear.disabled = !mapped(m);
+    if (!buttonTarget) {
+      const defaultValue = m.default_value ?? (m.disposition === 'constant' ? m.constant : '') ?? '';
+      const value = current?.options?.length ? select([
+        {value: '', label: 'Default'}, ...current.options
+      ], defaultValue) : input(defaultValue, current?.type === 'date' ? 'date' : 'text');
+      value.setAttribute('aria-label', 'Default value');
+      value.setAttribute('placeholder', 'Default');
+      value.title = 'Used only when the mapped field is empty';
+      value.addEventListener('input', () => {
+        const fallback = value.value.trim() === '' ? null : value.value;
+        if (m.source) m = {...m, default_value: fallback};
+        else m = fallback !== null ? {
+          ...m, disposition: 'constant', constant: fallback,
+          reason: 'Administrator configured a fixed default value.'
+        } : {...blank(t), label: m.label};
+        change(m);
+        clear.disabled = !mapped(m);
+      });
+      tools.append(value);
+    } else {
+      const check = select(['Yes', 'No', 'NA'], m.check_on || 'Yes');
+      check.setAttribute('aria-label', 'Mark when the saved answer is');
+      check.title = 'Mark when the saved answer is';
+      check.addEventListener('change', () => {
+        m = {...m, check_on: check.value};
+        change(m);
+      });
+      tools.append(check);
+    }
+    if (!current) editor.append(tools);
+    const choices = node('div', null, {class: 'pdf-source-choices', 'aria-label': 'Inspection fields'});
     editor.append(choices);
-    const renderChoices = () => {
-      choices.replaceChildren();
-      for (const group of ['Store Data', 'Check List']) {
-        choices.append(node('h5', group));
-        let count = 0;
-        for (const s of sources.filter(s => s.section === group)) {
-          if (!s.label.toLowerCase().includes(search.value.toLowerCase())) continue;
-          count++;
-          const compatible = !buttonTarget || s.type === 'yes_no_na';
-          const b = button(s.label, () => {
-            const next = {
-              target_id: t.id,
-              label: m.label || t.tooltip || t.qualified_name,
-              disposition: 'source',
-              source: s.source,
-              required: !!m.required,
-              missing: m.required ? 'block' : 'blank',
-              reason: 'Optional fields may be left blank when no saved answer is available.',
-              overflow: 'shrink',
-              font_size: 9,
-              minimum_font_size: 6,
-              transforms: s.type === 'date' ? [{
-                kind: 'date',
-                format: '%m/%d/%Y'
-              }] : [],
-              check_on: buttonTarget ? (m.check_on || 'Yes') : null
-            };
-            change(next);
-            renderEditor();
-          }, choices, {
-            'data-source-section': group,
-            'aria-pressed': String(!!current && sourceKey(current.source) === sourceKey(s.source))
+    let selectedButton = null;
+    for (const group of ['Store Data', 'Check List']) {
+      const section = node('section', null, {'data-source-group': group});
+      section.append(node('h4', group));
+      for (const source of sources.filter(s => s.section === group)) {
+        const active = !!current && sourceKey(current.source) === sourceKey(source.source);
+        const row = node('div', null, {class: 'pdf-source-row' + (active ? ' is-mapped' : '')});
+        const b = button(source.label, () => {
+          // Re-selecting the current source must retain its default, required
+          // setting and date/result formatting.
+          if (active) return;
+          change({
+            target_id: t.id, label: m.label || t.tooltip || t.qualified_name,
+            disposition: 'source', source: source.source, required: !!m.required,
+            missing: m.required ? 'block' : 'blank',
+            reason: 'Optional fields may be left blank when no saved answer is available.',
+            overflow: 'shrink', font_size: 9, minimum_font_size: 6,
+            transforms: source.type === 'date' ? [{kind: 'date', format: '%m/%d/%Y'}] : [],
+            check_on: buttonTarget ? (m.check_on || 'Yes') : null
           });
-          b.disabled = !compatible;
-          if (!compatible) b.title = 'Result marks need a Yes/No/NA Check List field.';
+          renderEditor();
+        }, row, {
+          'data-source-section': group, 'aria-pressed': String(active)
+        });
+        b.disabled = buttonTarget && source.type !== 'yes_no_na';
+        if (b.disabled) b.title = 'Result marks need a Yes/No/NA Check List field.';
+        if (active) {
+          row.append(clear, tools);
+          selectedButton = b;
         }
-        if (!count) choices.append(node('p', 'No matching fields.'));
+        section.append(row);
       }
-    };
-    search.addEventListener('input', renderChoices);
-    renderChoices();
+      choices.append(section);
+    }
+    // Keep the mapped source visible when returning to a PDF field, including
+    // a Check List source below a long Store Data list. Do not scroll the page.
+    if (selectedButton) choices.scrollTop = Math.max(0,
+      selectedButton.offsetTop - choices.clientHeight / 2);
   }
   async function save() {
     if (!version || busy) return;

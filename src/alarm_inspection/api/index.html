@@ -941,7 +941,17 @@ button.inspection-menu-option {
     #simple-targets button[aria-pressed="true"], .pdf-source-choices button[aria-pressed="true"] {background:#dbeafe;border-color:#2563eb;color:#123f65;}
     .pdf-simple-sheet {position:relative;flex:none;background:white;}
     .pdf-simple-sheet > img {width:100%;height:100%;display:block;}
-    .pdf-source-choices {max-height:450px;overflow:auto;display:flex;flex-direction:column;gap:6px;}
+    .pdf-source-choices {max-height:800px;overflow:auto;position:relative;}
+    .pdf-source-choices section {display:flex;flex-direction:column;gap:6px;}
+    .pdf-source-choices h4 {margin:12px 0 6px;}
+    .pdf-source-row {display:grid;grid-template-columns:minmax(0,1fr) 30px;gap:6px;}
+    .pdf-source-row > button:first-child {grid-column:1/-1;}
+    .pdf-source-row.is-mapped > button:first-child {grid-column:1;}
+    .pdf-source-row > .pdf-mapping-tools {grid-column:1/-1;}
+    .pdf-source-row > .pdf-clear-mapping {padding:5px;font-size:18px;}
+    .pdf-mapping-tools {display:flex;align-items:center;gap:6px;margin-bottom:6px;}
+    .pdf-mapping-tools input, .pdf-mapping-tools select {min-width:0;flex:1;}
+    .pdf-mapping-tools .pdf-clear-mapping {width:30px;min-width:30px;padding:5px;flex:none;font-size:18px;}
     .pdf-source-choices button {text-align:left;white-space:normal;}
     #simple-editor {min-width:0;}
     #simple-editor input:not([type="checkbox"]), #simple-editor select {max-width:100%;}
