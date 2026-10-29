@@ -406,6 +406,9 @@ def test_simple_picker_save_then_export_without_manual_details(browser_app,tmp_p
                 await page.locator(f'[data-pdf-default="{other["id"]}"]').fill('SBC FIXED')
                 checkbox=next(t for t in draft['config']['inventory']['targets'] if t['kind']=='checkbox')
                 checkbox_default=page.locator(f'[data-pdf-default="{checkbox["id"]}"]')
+                assert await checkbox_default.locator('option').all_text_contents()==['Checked','Not checked']
+                await playwright.expect(checkbox_default).to_have_value('false')
+                await checkbox_default.select_option('true')
                 await checkbox_default.select_option('false')
                 await page.locator(f'#simple-targets [data-target="{target["id"]}"]').click()
                 await page.click('#simple-save')

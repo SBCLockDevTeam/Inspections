@@ -380,6 +380,15 @@
 
   const pdfDefault = m => m.default_value ?? (m.disposition === 'constant' ? m.constant : null);
 
+  function checkboxDefault(mapping, target) {
+    if (target.kind !== 'checkbox' || pdfDefault(mapping) !== null) return mapping;
+    return mapping.source ? {...mapping, default_value: false} : {
+      ...mapping, disposition: 'constant', constant: false,
+      reason: 'PDF checkbox default: Not checked.'
+    };
+  }
+
+
   function blank(t) {
     return {
       target_id: t.id,
@@ -460,6 +469,7 @@
         label: existing?.label || t.tooltip || t.qualified_name
       });
     }
+    for (const t of v.config.inventory.targets) mappings.set(t.id, checkboxDefault(mappings.get(t.id), t));
     dirty = false;
     selected = v.config.inventory.targets[0]?.id;
     page = v.config.inventory.selected_pages[0];
@@ -506,8 +516,8 @@
           t.kind === 'choice' && !(t.flags & (1 << 18)) ? t.options.map(o => Array.isArray(o) ? o[0] : o) : [];
         const checkbox = t.kind === 'checkbox';
         const value = checkbox ? select([
-          {value: '', label: 'No default'}, {value: 'true', label: 'Checked'}, {value: 'false', label: 'Not checked'}
-        ], pdfDefault(m)) : options.length ? select([{value: '', label: 'PDF default'}, ...options], pdfDefault(m)) :
+          {value: 'true', label: 'Checked'}, {value: 'false', label: 'Not checked'}
+        ], pdfDefault(m) ?? false) : options.length ? select([{value: '', label: 'PDF default'}, ...options], pdfDefault(m)) :
           input(pdfDefault(m) ?? '', current?.type === 'date' ? 'date' : 'text');
         value.setAttribute('aria-label', 'PDF default for ' + label);
         value.setAttribute('placeholder', 'PDF default');
@@ -521,7 +531,7 @@
         });
         value.addEventListener('input', () => {
           const previous = mappings.get(t.id);
-          const fallback = value.value.trim() === '' ? null : checkbox ? value.value === 'true' : value.value;
+          const fallback = checkbox ? value.value === 'true' : value.value.trim() === '' ? null : value.value;
           const next = previous.source ? {...previous, default_value: fallback} : fallback !== null ? {
             ...previous, disposition: 'constant', constant: fallback,
             reason: 'Administrator configured a PDF-only fixed value.'
