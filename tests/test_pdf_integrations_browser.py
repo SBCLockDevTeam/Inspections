@@ -69,6 +69,7 @@ def test_admin_exact_targets_conflicts_and_publication(browser_app):
                 for tab in ('panel-types','inspection-tasks','users','integrations'):
                     await page.click('#admin-tab-'+tab)
                     await playwright.expect(page.locator('#admin-panel-'+tab)).to_be_visible()
+                await page.locator('#integration-debug-mode > summary').click()
                 await playwright.expect(page.locator('#integration-cards section')).to_have_count(2)
                 await page.select_option('select[aria-label="Compliance inspection versions"]',draft['id'])
                 await page.locator('#integration-cards section').filter(has=page.get_by_role('heading',name='Compliance inspection',exact=True)).get_by_role('button',name='Open version',exact=True).click()
@@ -329,6 +330,56 @@ def test_missing_integration_asset_does_not_break_existing_inspection_entry(brow
                 await page.fill('#inspection-address','Saved without the optional PDF asset');await page.locator('#inspection-name').click()
                 await playwright.expect(page.locator('#inspection-message')).to_contain_text('saved',timeout=12000)
                 assert client.get(f'/api/inspections/{inspection}').json()['address']=='Saved without the optional PDF asset'
+                assert not errors
+            finally:await browser.close()
+    asyncio.run(check())
+
+
+def test_simple_picker_save_then_export_without_manual_details(browser_app,tmp_path):
+    from pypdf import PdfReader
+    base,client,store,inspection,draft=browser_app
+    async def check():
+        async with playwright.async_playwright() as p:
+            browser=await p.chromium.launch(headless=True,args=['--no-sandbox'])
+            page=await browser.new_page();errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
+            try:
+                await login(page,base)
+                await page.locator('#avatar-button').click(button='right');await page.click('#avatar-menu-option-admin');await page.click('#admin-tab-integrations')
+                await page.get_by_role('button',name='Open Compliance Form',exact=True).click()
+                await playwright.expect(page.locator('#simple-editor')).to_be_visible()
+                assert await page.locator('#integration-debug-workspace').is_hidden()
+                assert await page.locator('#admin-panel-integrations pre:visible, #admin-panel-integrations textarea:visible').count()==0
+                target=next(t for t in draft['config']['inventory']['targets'] if t['kind']=='text')
+                await page.locator(f'#simple-targets [data-target="{target["id"]}"]').click()
+                assert await page.locator('#simple-editor').get_by_role('heading',name='Store Data',exact=True).is_visible()
+                assert await page.locator('#simple-editor').get_by_role('heading',name='Check List',exact=True).is_visible()
+                await page.locator('#simple-editor').get_by_role('button',name='Start Date',exact=True).click()
+                await playwright.expect(page.locator('#simple-selected-source')).to_contain_text('Store Data: Start Date')
+                await page.locator('#simple-editor').get_by_label('Required:',exact=True).check()
+                await page.locator('#simple-editor').get_by_label('Use default when the mapped field is empty:',exact=True).check()
+                await page.locator('#simple-editor').get_by_label('Default value:',exact=True).fill('2025-01-01')
+                rect=page.locator(f'#simple-sheet [data-preview-target="{target["id"]}"]')
+                box=await rect.bounding_box();sheet=await page.locator('#simple-sheet').bounding_box()
+                assert abs((box['x']-sheet['x'])-target['preview_rect'][0])<2
+                await page.click('#simple-save')
+                await playwright.expect(page.locator('#simple-message')).to_contain_text('Integration saved and ready',timeout=30000)
+                await page.locator('#integration-debug-mode > summary').click()
+                await playwright.expect(page.locator('#integration-cards section')).to_have_count(2)
+                await page.locator('#integration-debug-mode > summary').click()
+                await page.click('#back-home-from-admin')
+                await page.select_option('#inspection-picker',inspection)
+                await page.click('#open-inspection')
+                await playwright.expect(page.locator('#inspection-screen')).to_be_visible()
+                await page.locator('#export-form-details-section summary').click()
+                card=page.locator('[data-form="compliance"]')
+                await playwright.expect(card.locator('[data-answer]')).to_have_count(0)
+                await playwright.expect(card.get_by_role('button',name='Export Compliance Form',exact=True)).to_be_enabled()
+                await card.get_by_role('button',name='Export Compliance Form',exact=True).click()
+                await playwright.expect(page.get_by_role('button',name='Confirm and download completed PDF',exact=True)).to_be_visible(timeout=30000)
+                async with page.expect_download() as event:
+                    await page.get_by_role('button',name='Confirm and download completed PDF',exact=True).click()
+                download=await event.value;path=tmp_path/'simple-completed.pdf';await download.save_as(path)
+                assert '10/01/2026' in PdfReader(path).pages[0].extract_text()
                 assert not errors
             finally:await browser.close()
     asyncio.run(check())

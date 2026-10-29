@@ -1,31 +1,31 @@
 # PDF integrations operating guide
 
-## Current rollout scope
+## Current workflow (October 29 interface simplification)
 
-The user will establish production defaults later. Both supplied forms are installed as **unpublished, disabled drafts**. Technical preparation/testing is not business approval. Do not enable completed-form exports until the administrator establishes policies, reviews every included location, tests, verifies and publishes the version. Existing inspection entry, Points List/event review, legacy PDF drafts and Initiating Devices exports remain independent.
+This workflow supersedes the earlier draft/test/verify/publish setup instructions for the normal interface. Both supplied forms remain available. Existing drafts, published configurations, accepted answers and retained exports are preserved. No default mappings are inferred from template presets.
 
-## Configure and approve
+## Configure an integration
 
-1. Open Administration → Integrations. Select the NFPA 72 or Compliance draft and open its workspace. Original fingerprints and included pages are immutable; NFPA uses pages 1–4, Compliance uses page 1. Uploading another source requires a new version/inventory.
-2. Select a saved sample inspection, enter explicit sample panel IDs when needed, and load the typed source catalog. Map stable task IDs, not similar descriptions. Source gaps use typed Form Details inputs; changing their meaning or type requires reviewing older answers.
-3. Review **every** exact page/occurrence/rectangle. Search/select works in both directions; zoom and metadata distinguish repeated names. In particular, store and representative addresses and the duplicate relay quantity destinations have independent meanings. Review custom rows, control references, default/preset values and signatures too.
-4. Establish applicability/categories, optional/default IANA timezone and company/contact constants. A per-field timezone overrides the integration timezone. Date-only data never acquires an invented time; datetime values require actual recorded offsets. Shared constants are mapping decisions with an explicit invariant reason, never test outcomes, notification times or signatures. Editable PDF combo fields allow reviewed custom text; closed choices require their declared options.
-5. Review manual input types, numeric bounds/units, requiredness and conditional No/NA rules. Candidates are conservative placeholders, not approved policies. Installed/tested-good quantities remain independent; neither timestamps nor device descriptions establish counts or passing results. Single NA markers use explicit empty group choices to clear marks. If NA is unsupported, configure a reviewed policy or let it block.
-6. Choose the signing policy. The supported initial workflow leaves designated signatures blank for later signing. Already-signed requirements block until a separate signing workflow exists. NFPA requires an explicit saved Yes/No supplemental-sheet declaration; separate reports are not automatically merged.
-7. Approve download naming by selecting `completion_date_panel_id`. It uses saved completion dates, the specified Fire Alarm/Compliance titles and a panel-ID suffix for single-panel outputs. Existing Initiating Devices filenames do not change.
-8. Save using the expected revision. A conflict retains local work; download the local configuration or explicitly reload to compare. Published versions require a copied draft for edits. Never silently replace accepted mappings or verification.
-9. Run mapping tests. Review the retained, watermarked complete-form vectors and every included page. All declared choices are covered in compact vectors; tests are not completed inspections. Inspect long values, zero, No, NA, quantities, comments, dates/times, independent visual/functional states and negative-outcome explanations. Overflow/unsupported glyphs block, never truncate.
-10. Verify each target against the current exact-hash test, enter a change summary and explicitly publish. Publication activates the version reference; enablement is a separate explicit action. Re-testing/mapping changes reset verification. Prior published versions remain available for explicit activation.
+1. Open **Administration → Integrations → Open NFPA 72** or **Open Compliance Form**. No sample inspection or panel selection is needed.
+2. Choose a PDF field in the left list or directly on the form. The highlighted rectangle identifies its exact page and occurrence even when field names repeat. Search the PDF field list or change page/zoom as needed.
+3. On the right, choose a field under **Store Data** or **Check List**. The list includes all active checklist definitions, including fields whose answers have not been entered yet. Points Lists and Events are not mapping sources for these forms.
+4. Optionally edit the field label, check **Required**, and enable **Use default when the mapped field is empty**. Defaults apply only to missing compatible answers; they never replace saved No, NA or zero. With no source selected, the default is an explicit fixed text value. A date source offers readable date-format choices. Result marks require a Yes/No/NA checklist source and an explicit **Mark when** choice; defaults cannot manufacture result marks. Signature destinations remain blank for later signing.
+5. **Save integration** validates source compatibility, formatting and defaults, renders private watermarked proofs, retains a new immutable published version, and enables it for all inspections. Unmapped fields are deliberately blank. The displayed mapped/blank counts disclose that choice. Save does not certify business completeness or physical readability of the resulting form: review the form and choose Required deliberately.
+6. If another administrator saves or the available checklist definitions change, the save fails with a conflict and retains local edits. Reopen to compare current settings. Existing versions are never overwritten.
 
-Presets are not inspection evidence. Some original Compliance fields are dense and use small text; adjust font/overflow settings and verify readability. A larger normalized derivative requires separately verified renderer support and cannot be silently substituted. Physical-printer approval and finalized business mappings remain user-owned release gates.
+JSON, inventory metadata, prior versions and the earlier advanced draft/test/publication tools are behind **Debug mode**. Existing advanced configurations remain readable and usable. Saving through the normal interface explicitly creates a Store Data/Check List version: former manual/panel candidate fields become unmapped blanks, with the original configuration retained. Review the mapped/blank counts before saving. Disablement and explicit prior-version activation remain available in Debug mode.
+
+A changed/deactivated checklist type or choice set requires mapping review; a default cannot hide an incompatible source. Renaming or reordering a task retains its stable identity. Long or unsupported values block with a field-specific error rather than being truncated. Closed PDF choices accept only their declared options.
+
+NFPA exports exactly pages 1–4; Compliance exports page 1. Supplemental reports remain separate, and this partial NFPA form does not certify that supplemental reports are attached. Map any such declaration to an actual checklist answer when needed. No signatures, attachment declarations or passing outcomes are inferred.
 
 ## Technician export
 
-Save Store Data, checklist, points/events and Form Details. Explicitly save panel scope when configured. Readiness links identify missing/incompatible answers, stale overrides and unresolved mappings. No pending event is accepted merely by opening a preview.
+Save the inspection's **Store Data** and **Check List** answers. Open the completed-form export section and choose **Export NFPA 72** or **Export Compliance Form**. Required mapped answers must exist or have a configured default. Optional missing answers remain blank. No panel selection, Points List approval, Event History mapping or separate manual Form Details answers are required for integrations saved through the normal interface. Existing Initiating Devices export rules are unchanged.
 
-Choose Export NFPA 72 or Export Compliance Form. Review every page of the marked draft, the version/scope and deliberate blank/signature disclosure; then confirm. The server rechecks authorization, published/enabled state, saved data, scope and preview hash. Changes require a new preview. Changes after the accepted snapshot cannot rewrite that artifact. Network retries of the same confirmation reuse the same record; an intentional later export creates a separate artifact. History includes ready/failed/pending records and safe provenance links.
+Review the watermarked preview, then confirm and download. The PDF uses saved data from that specific inspection. The server rechecks authorization, current configuration and preview hash; a source/configuration change requires a new preview. Retries reuse the same confirmed record. Export history retains final PDFs and offers technical provenance under Debug provenance.
 
-Historical ready downloads verify file hashes and remain authorized even after an integration is disabled. Deleted/inaccessible inspections cannot download. Never edit retained final bytes or database snapshots to correct a report; correct saved data and create a new export.
+Historical downloads retain their original data and hashes even after an integration is disabled. Deleted/inaccessible inspections cannot download. Correct saved data and create a new export rather than editing retained files.
 
 ## Recovery and maintenance
 
@@ -39,7 +39,7 @@ Only use `/opt/inspections`, Compose project `inspections`, and port 18080 on `1
 
 Before replacing the image, privately record the deployed commit, image ID and container/project inventory; tag the old image for rollback. Build the pushed reviewed commit while the old API remains available. Briefly stop only the inspection API to take a consistent PostgreSQL dump and uploads archive, and save its private environment file. Keep backups root-only under `/opt/inspections-backups/`; verify gzip/archive integrity. Do not print credentials or copy them into Git.
 
-Start with new integrations disabled. `INSPECTIONS_PDF_INTEGRATIONS_ENABLED=true` makes the optional administrative framework available; it does not enable either integration. Source provisioning must use `pdf_setup.install_candidate`, which only creates disabled/unpublished drafts, and an authorized active admin. Never forge field verification/publication to bootstrap defaults.
+Keep the global feature switch available as before. Installing a template/candidate still creates an unpublished disabled draft. An administrator’s explicit **Save integration** now validates, publishes and enables the chosen Store Data/Check List configuration; deploying this interface never auto-saves or enables existing drafts. No source PDFs or private proof files belong in Git.
 
 Deploy using the established procedure:
 
@@ -57,8 +57,14 @@ curl http://127.0.0.1:18080/health
 
 Confirm the pushed commit on the server, the running image/Compose project, localhost and external health, packaged assets, authenticated admin draft selection/preview and the actual Points List review/edit/Accept–Review/bulk-delete/confirmation interaction. Test event retention and the legacy export on a clearly synthetic inspection. Verify both draft references and original hashes survive API recreation. Remove only temporary test sessions and soft-delete the synthetic inspection, preserving its evidence. Compare customer-data hashes/counts without treating legitimate concurrent user edits as corruption.
 
-Do not label full production-form rollout complete while mappings/defaults/physical-print acceptance are deferred. Keep both exports disabled and report the remaining gates.
+Report any unmapped business fields and pending physical-print acceptance. Deployment alone does not enable either integration; the administrator establishes mappings/defaults and explicitly saves when ready.
 
 ## Rollback
 
 Disable integrations first if they were enabled. Restore the saved inspection image tag/commit in `/opt/inspections` only, set the optional feature off if needed, and recreate the **inspections** project. Retain additive tables, original files, decisions and artifacts; do not drop tables or restore a database over newer accepted customer decisions as an ordinary code rollback. The separate Work_Order project is never a rollback target. Recheck health and actual review behavior after rollback. Backup restore is a separate, explicitly reviewed recovery operation, not the normal response to a mapping error. Mapping-only defects can use explicit prior-version activation after review.
+
+## Simplified-interface verification
+
+The implementation passed a full 325-test regression run with PostgreSQL and real Chromium enabled (no skips), plus a 25-case focused run covering the final mapper/export changes and two additional dense-field/default-overflow cases. Compilation, JavaScript syntax and whitespace checks passed. Both private supplied forms rendered a mapped inspection date with exact 4/1-page outputs; the dense Compliance date field uses a 5-point font determined from its geometry. An independent Poppler render was reviewed. An existing probe test's process-reaping race was corrected without changing application process limits. The only warning is the existing FastAPI/Starlette test-client deprecation.
+
+The production administrator still owns the actual business mappings and defaults. Installing this update does not publish or enable the retained reference drafts. Physical-printer acceptance, additional NFPA pages, automatic signatures and supplemental attachment merging remain outside this update.

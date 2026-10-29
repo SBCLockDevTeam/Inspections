@@ -922,12 +922,12 @@ button.inspection-menu-option {
 .pdf-page-scroll { overflow: auto; max-height: 850px; background: #ddd; }
 #integration-sheet { position: relative; }
 #integration-sheet img { display: block; width: 100%; height: 100%; }
-#integration-sheet .pdf-target { position: absolute; margin: 0; padding: 0; min-width: 0; min-height: 0; border: 1px solid #1558a0; border-radius: 0; background: #2288cc22; color: transparent; font-size: 1px; box-shadow: none; }
-#integration-sheet .pdf-target[aria-pressed="true"], #integration-sheet .pdf-target:focus { background: #ff990066; outline: 2px solid #bd6800; z-index: 2; }
+#integration-sheet .pdf-target, .pdf-simple-sheet .pdf-target { position: absolute; margin: 0; padding: 0; min-width: 0; min-height: 0; border: 1px solid #1558a0; border-radius: 0; background: #2288cc22; color: transparent; font-size: 1px; box-shadow: none; }
+#integration-sheet .pdf-target[aria-pressed="true"], #integration-sheet .pdf-target:focus, .pdf-simple-sheet .pdf-target[aria-pressed="true"], .pdf-simple-sheet .pdf-target:focus { background: #ff990066; outline: 2px solid #bd6800; z-index: 2; }
 #admin-panel-integrations pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; }
 #admin-panel-integrations textarea { width: 100%; max-width: 100%; font-family: monospace; }
 .pdf-warning { color: #873b00; }
-@media (max-width: 1000px) { .pdf-mapping-grid { grid-template-columns: 1fr; } #integration-targets { max-height: 220px; } }
+@media (max-width: 1000px) { .pdf-mapping-grid { grid-template-columns: 1fr; } #integration-targets, #simple-targets { max-height: 220px; } }
 .pdf-form-card { border: 1px solid var(--border); padding: 12px; margin-bottom: 12px; }
 .pdf-form-input { border-bottom: 1px solid var(--border); padding: 10px 0; }
 .pdf-form-input input, .pdf-form-input select { max-width: 100%; }
@@ -936,6 +936,18 @@ button.inspection-menu-option {
 .pdf-field-status { display: block; font-size: .9em; }
 .pdf-export-dialog { width: min(1100px, 95vw); max-height: 95vh; overflow: auto; }
 .pdf-export-dialog iframe { width: 100%; height: 65vh; border: 1px solid #888; }
+    #simple-targets {max-height:800px;overflow:auto;display:flex;flex-direction:column;gap:6px;}
+    #simple-targets button {text-align:left;white-space:normal;}
+    #simple-targets button[aria-pressed="true"], .pdf-source-choices button[aria-pressed="true"] {background:#dbeafe;border-color:#2563eb;}
+    .pdf-simple-sheet {position:relative;flex:none;background:white;}
+    .pdf-simple-sheet > img {width:100%;height:100%;display:block;}
+    .pdf-source-choices {max-height:450px;overflow:auto;display:flex;flex-direction:column;gap:6px;}
+    .pdf-source-choices button {text-align:left;white-space:normal;}
+    #simple-editor {min-width:0;}
+    #simple-editor input:not([type="checkbox"]), #simple-editor select {max-width:100%;}
+    #simple-cards {display:flex;flex-wrap:wrap;gap:12px;}
+    #simple-message {position:sticky;top:0;background:#fff;z-index:3;padding:8px;}
+    @media (max-width:1000px) {#simple-targets {max-height:220px;}}
 </style></head>
 <body><div class="page-header"><h1>Inspections</h1><div id="user-bar" class="hidden"><span id="active-user-label"></span><span id="live-sync-status" role="status" style="font-size:0.8rem;color:var(--muted)">Live updates on</span><div id="avatar-wrap"><button type="button" id="avatar-button" class="secondary" title="Account menu">JP</button><div id="avatar-menu" class="hidden"><div id="avatar-menu-option-admin" class="avatar-menu-option hidden" role="menuitem" tabindex="0">Administration</div><div id="avatar-menu-option-logout" class="avatar-menu-option" role="menuitem" tabindex="0">Logout</div></div></div></div></div>
 

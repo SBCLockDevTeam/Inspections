@@ -14,7 +14,7 @@ from uuid import uuid4
 from sqlalchemy import update
 
 from alarm_inspection.domain.pdf_integrations import (
-    ArtifactContext, FileRef, FormAnswer, IntegrationConfig, VerificationEvidence, canonical_json, payload_hash,
+    ArtifactContext, FileRef, FormAnswer, IntegrationConfig, VerificationEvidence, SimpleVerificationEvidence, canonical_json, payload_hash,
 )
 from alarm_inspection.integrations.pdf_feature import require_available
 from alarm_inspection.integrations.pdf_files import PrivatePdfFiles
@@ -57,8 +57,15 @@ def _version(session, version_id):
     # Reading an older published version must never rewrite/invalidate its hash.
     if payload_hash(json.loads(row.payload_json)) != row.payload_sha256: raise ValueError('Stored configuration integrity failure.')
     if row.status == 'published':
-        evidence = VerificationEvidence.model_validate_json(row.verification_json)
-        if evidence.payload_sha256 != row.payload_sha256 or {f.target_id for f in evidence.fields} != {t.id for t in config.inventory.targets}:
+        if json.loads(row.verification_json).get('method') == 'store_checklist_save':
+            evidence = SimpleVerificationEvidence.model_validate_json(row.verification_json)
+            verified = set(evidence.target_ids)
+            if config.mapping_mode != 'store_checklist' or evidence.test_file.key != f'_pdf_integrations/{config.integration_key}/{row.id}/mapping-test.pdf':
+                raise ValueError('Invalid simple mapping evidence.')
+        else:
+            evidence = VerificationEvidence.model_validate_json(row.verification_json)
+            verified = {f.target_id for f in evidence.fields}
+        if evidence.payload_sha256 != row.payload_sha256 or verified != {t.id for t in config.inventory.targets}:
             raise ValueError('Stored verification evidence does not match the configuration.')
     return row, config
 

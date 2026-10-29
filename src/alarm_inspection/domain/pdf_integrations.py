@@ -46,7 +46,7 @@ class Versioned(Contract):
 
 def valid_blob_key(key: str) -> bool:
     uuid = r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
-    return bool(re.fullmatch(r'_pdf_integrations/(nfpa72|compliance)/' + uuid + r'/(original|normalized)\.pdf', key)
+    return bool(re.fullmatch(r'_pdf_integrations/(nfpa72|compliance)/' + uuid + r'/(original|normalized|mapping-test)\.pdf', key)
                 or re.fullmatch(r'[A-Za-z0-9_-]{1,36}/form_exports/' + uuid + r'/document\.pdf', key))
 
 
@@ -226,6 +226,9 @@ class TargetMapping(Contract):
     disposition: Literal['source', 'computed', 'constant', 'blank', 'excluded', 'sign_later']
     source: SourceRef | None = None
     constant: JsonValue = None
+    default_value: JsonValue = None
+    check_on: Literal['Yes', 'No', 'NA'] | None = None
+    source_schema_sha256: Digest | None = None
     transforms: list[Transform] = Field(default_factory=list, max_length=10)
     required: bool = False
     required_when: Condition | None = None
@@ -271,6 +274,7 @@ class NormalizedTarget(Contract):
 
 
 class IntegrationConfig(Versioned):
+    mapping_mode: Literal['advanced', 'store_checklist'] = 'advanced'
     integration_key: Key
     version_id: RecordId
     original: FileRef
@@ -330,7 +334,27 @@ class IntegrationConfig(Versioned):
         extras = [s for mapping in self.mappings for transform in mapping.transforms for s in transform.sources]
         if self.supplemental_source: extras.append(self.supplemental_source)
         if any(s.kind == 'manual' and s.id not in inputs for s in extras): raise ValueError('Unknown additional manual source.')
+        if self.mapping_mode == 'store_checklist':
+            refs = [m.source for m in self.mappings if m.source] + extras + [c.source for c in conditions if c]
+            if self.manual_inputs or self.answer_groups or self.applicability != 'no_panel' or any(r.kind not in {'inspection','checklist'} for r in refs):
+                raise ValueError('These forms map only Store Data and Check List fields.')
+            for m in self.mappings:
+                target = targets[m.target_id]
+                if target.kind in {'checkbox','radio'} and m.default_value is not None:
+                    raise ValueError('Default values cannot create inspection result marks.')
+                if m.default_value is not None and (isinstance(m.default_value,(list,dict)) or isinstance(m.default_value,str) and len(m.default_value)>2000):
+                    raise ValueError('Use a scalar default of at most 2000 characters.')
         return self
+
+
+class SimpleVerificationEvidence(Versioned):
+    method: Literal['store_checklist_save'] = 'store_checklist_save'
+    payload_sha256: Digest
+    test_file: FileRef
+    target_ids: list[Digest] = Field(max_length=5000)
+    verified_by: LegacyId
+    verified_at: Timestamp
+    scenario_count: int = Field(ge=1, le=51)
 
 
 class FormAnswer(Versioned):

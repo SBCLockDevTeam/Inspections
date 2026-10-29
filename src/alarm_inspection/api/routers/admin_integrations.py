@@ -29,7 +29,8 @@ def create_router(store):
         except PermissionError as exc: return JSONResponse({'error':str(exc)},status_code=403)
         except repo.ConflictError as exc: return JSONResponse({'error':str(exc),'code':'CONFLICT'},status_code=409)
         except (KeyError,TypeError) : return JSONResponse({'error':'Invalid or incomplete request.'},status_code=400)
-        except (ValueError,ValidationError) as exc: return JSONResponse({'error':str(exc)},status_code=400)
+        except ValidationError as exc: return JSONResponse({'error':' '.join(e['msg'] for e in exc.errors(include_input=False))},status_code=400)
+        except ValueError as exc: return JSONResponse({'error':str(exc)},status_code=400)
         except (RuntimeError,OSError,SQLAlchemyError): return JSONResponse({'error':'PDF integrations are disabled or processing is unavailable.'},status_code=503)
 
     def version(row):
@@ -50,6 +51,19 @@ def create_router(store):
             return {'integrations':[dict(key=i.key,enabled=i.enabled,revision=i.revision,active_version_id=i.active_version_id,
                  versions=[version(v) for v in session.query(PdfIntegrationVersion).filter_by(integration_key=i.key).order_by(PdfIntegrationVersion.updated_at.desc())])
                  for i in session.query(PdfIntegration).order_by(PdfIntegration.key)]}
+        return run(request,operation)
+
+    @router.get('/sources')
+    def sources(request:Request):
+        from alarm_inspection.integrations.pdf_sources import definition_catalog
+        return run(request,lambda s,a:definition_catalog(s,actor_id=a))
+
+    @router.post('/versions/{ident}/save-integration')
+    def save_integration(ident:str,request:Request,payload:dict=Body(...)):
+        from alarm_inspection.integrations.pdf_simple import save_mapping
+        def operation(session,actor):
+            saved=save_mapping(store,ident,payload,files=files,actor_id=actor)
+            return version(repo._version(session,saved)[0])
         return run(request,operation)
 
     @router.post('/{key}/templates')

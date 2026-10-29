@@ -8,7 +8,9 @@
     return `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;
   };
   const $ = (selector, root = document) => root.querySelector(selector);
-  const root = $('#admin-panel-integrations');
+  const host = $('#admin-panel-integrations');
+  const root = host ? document.createElement('div') : null;
+  if (root) { root.id='integration-debug-workspace'; root.className='hidden'; host.append(root); }
   const api = '/api/admin/integrations';
   const names = {nfpa72: 'NFPA 72', compliance: 'Compliance inspection'};
   let integrations = [], selected = null, draft = null, targetId = null, page = 1, zoom = 1;
@@ -285,6 +287,499 @@
   window.PdfIntegrations = {randomId,refreshAdmin: refresh, resetAdmin: () => {draft=null;dirty=false;editorDirty=false;test=null;verified.clear();integrations=[];root?.querySelector('#integration-cards')?.replaceChildren();root?.querySelector('#integration-workspace')?.classList.add('hidden');}};
 })();
 
+/* The normal administration workflow uses only Store Data and Check List fields. */
+(() => {
+  'use strict';
+  const host = document.querySelector('#admin-panel-integrations');
+  if (!host) return;
+  const advanced = window.PdfIntegrations;
+  const root = document.createElement('div');
+  host.prepend(root);
+  const api = '/api/admin/integrations',
+    names = {
+      nfpa72: 'NFPA 72',
+      compliance: 'Compliance Form'
+    };
+  let integrations = [],
+    version = null,
+    sources = [],
+    mappings = new Map(),
+    selected = null,
+    page = 1,
+    zoom = 1,
+    dirty = false,
+    busy = false,
+    openedRevision = null,
+    sourceCatalogHash = null;
+  const $ = id => root.querySelector('#simple-' + id);
+  const node = (tag, text, attrs = {}) => {
+    const n = document.createElement(tag);
+    if (text != null) n.textContent = text;
+    for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
+    return n;
+  };
+  const message = text => {
+    $('message').textContent = text;
+  };
+  const button = (text, action, parent, attrs = {}) => {
+    const n = node('button', text, {
+      type: 'button',
+      ...attrs
+    });
+    n.addEventListener('click', () => Promise.resolve().then(action).catch(e => message(e.message)));
+    parent.append(n);
+    return n;
+  };
+  async function request(path, body) {
+    const response = await fetch(api + path, {
+      cache: 'no-store',
+      ...(body ? {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(body)
+      } : {})
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error((response.status === 409 ? 'Your edits are retained. ' : '') + (result.error || result.detail || 'Unable to load integration.'));
+    return result;
+  }
+
+  function control(parent, label, element) {
+    const id = 'simple-control-' + advanced.randomId();
+    element.id = id;
+    const wrap = node('div', null, {
+      class: 'form-field'
+    });
+    wrap.append(node('label', label + ':', {
+      for: id
+    }), element);
+    parent.append(wrap);
+    return element;
+  }
+
+  function input(value = '', type = 'text') {
+    const n = node('input', null, {
+      type
+    });
+    n.value = value ?? '';
+    return n;
+  }
+
+  function select(options, value) {
+    const n = node('select');
+    for (const o of options) n.add(new Option(o.label ?? o, o.value ?? o));
+    n.value = value ?? '';
+    return n;
+  }
+  const target = () => version?.config.inventory.targets.find(t => t.id === selected);
+  const sourceKey = source => JSON.stringify({
+    kind: source.kind,
+    field: source.field ?? null,
+    id: source.id ?? null
+  });
+  const sourceFor = m => m?.source ? sources.find(s => sourceKey(s.source) === sourceKey(m.source)) : null;
+  const mapped = m => m && ['source', 'constant'].includes(m.disposition);
+
+  function change(m) {
+    mappings.set(selected, m);
+    dirty = true;
+    message('Unsaved changes. Save integration to use this mapping on inspections.');
+    renderTargets();
+    updateSummary();
+  }
+
+  function blank(t) {
+    return {
+      target_id: t.id,
+      label: t.tooltip || t.qualified_name || 'PDF field',
+      disposition: t.kind === 'signature' ? 'sign_later' : 'blank',
+      reason: 'Left unmapped when saving the integration.'
+    };
+  }
+
+  function updateSummary() {
+    const count = [...mappings.values()].filter(mapped).length;
+    $('coverage').textContent = `${count} mapped · ${version.config.inventory.targets.length-count} left blank. Saved mappings apply to every inspection.`;
+  }
+  async function refresh(force = false) {
+    if (host.classList.contains('hidden') || busy || (!force && (dirty || host.contains(document.activeElement)))) return;
+    const result = await request('');
+    integrations = result.integrations;
+    renderCards();
+  }
+
+  function renderCards() {
+    const cards = $('cards');
+    cards.replaceChildren();
+    for (const integration of integrations) {
+      const card = node('section', null, {
+        class: 'pdf-integration-card'
+      });
+      card.append(node('h3', names[integration.key]), node('p', integration.enabled ? 'Ready to export after required mapped data is saved.' : 'Open to configure and save this integration.'));
+      const active = integration.versions.find(v => v.id === integration.active_version_id) || integration.versions[0];
+      button('Open ' + names[integration.key], async () => {
+        if (dirty && !window.confirm('Discard unsaved mapping changes?')) return;
+        if (!active) throw new Error('Upload this form template first.');
+        await refreshAfterSave();
+        const current = integrations.find(i => i.key === integration.key);
+        await open(current.versions.find(v => v.id === current.active_version_id) || current.versions[0], current.revision);
+      }, card, {
+        disabled: active ? 'false' : 'true'
+      }).disabled = !active;
+      const upload = node('details');
+      upload.append(node('summary', active ? 'Replace form template' : 'Upload form template'));
+      const file = node('input', null, {
+        type: 'file',
+        accept: '.pdf',
+        'aria-label': names[integration.key] + ' template'
+      });
+      upload.append(file);
+      button('Upload template', async () => {
+        if (dirty) throw new Error('Save or discard your edits before replacing the template.');
+        if (!file.files[0]) throw new Error('Choose a PDF file.');
+        const data = new FormData();
+        data.append('file', file.files[0]);
+        const response = await fetch(api + '/' + integration.key + '/templates', {
+          method: 'POST',
+          body: data
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Upload failed.');
+        await refresh(true);
+        await open(result);
+      }, upload);
+      card.append(upload);
+      cards.append(card);
+    }
+  }
+  async function open(v, integrationRevision = integrations.find(i => i.key === v.config.integration_key).revision) {
+    const result = await request('/sources');
+    sources = result.entries;
+    sourceCatalogHash = result.schema_sha256;
+    openedRevision = integrationRevision;
+    version = structuredClone(v);
+    mappings = new Map();
+    for (const t of v.config.inventory.targets) {
+      const existing = v.config.mappings.find(m => m.target_id === t.id);
+      mappings.set(t.id, existing && (!existing.source || ['inspection', 'checklist'].includes(existing.source.kind)) ? structuredClone(existing) : {
+        ...blank(t),
+        label: existing?.label || t.tooltip || t.qualified_name
+      });
+    }
+    dirty = false;
+    selected = v.config.inventory.targets[0]?.id;
+    page = v.config.inventory.selected_pages[0];
+    $('workspace').hidden = false;
+    $('title').textContent = names[v.key || v.config.integration_key] + ' field mapping';
+    $('page').replaceChildren(...v.config.inventory.selected_pages.map(p => new Option('Page ' + p, p)));
+    $('page').value = page;
+    renderTargets();
+    renderPage();
+    renderEditor();
+    updateSummary();
+    message('Select a PDF field on the left, then choose its inspection field on the right. Unmapped fields remain blank.');
+  }
+
+  function choose(id) {
+    selected = id;
+    page = target().page;
+    $('page').value = page;
+    renderTargets();
+    renderPage();
+    renderEditor();
+    root.querySelector(`[data-preview-target="${id}"]`)?.scrollIntoView({
+      block: 'nearest',
+      inline: 'nearest'
+    });
+  }
+
+  function renderTargets() {
+    const list = $('targets');
+    list.replaceChildren();
+    const search = $('search').value.toLowerCase();
+    for (const t of version.config.inventory.targets) {
+      const m = mappings.get(t.id);
+      const label = m.label || t.tooltip || t.qualified_name || 'PDF field';
+      if (!`${label} ${t.qualified_name} page ${t.page}`.toLowerCase().includes(search)) continue;
+      button(`Page ${t.page} · ${label} — ${mapped(m)?'Mapped':'Blank'}`, () => choose(t.id), list, {
+        'data-target': t.id,
+        'aria-pressed': String(selected === t.id)
+      });
+    }
+  }
+
+  function renderPage() {
+    const geometry = version.config.inventory.pages.find(p => p.number === page);
+    const sheet = $('sheet');
+    sheet.replaceChildren();
+    sheet.style.width = geometry.display_width * zoom + 'px';
+    sheet.style.height = geometry.display_height * zoom + 'px';
+    sheet.append(node('img', null, {
+      src: api + '/versions/' + version.id + '/pages/' + page,
+      alt: names[version.config.integration_key] + ' page ' + page
+    }));
+    for (const t of version.config.inventory.targets.filter(t => t.page === page)) {
+      const [x0, y0, x1, y1] = t.preview_rect;
+      const b = button('', () => choose(t.id), sheet, {
+        class: 'pdf-target',
+        'data-preview-target': t.id,
+        'aria-label': t.tooltip || t.qualified_name || 'PDF field',
+        'aria-pressed': String(t.id === selected)
+      });
+      Object.assign(b.style, {
+        left: 100 * x0 / geometry.display_width + '%',
+        top: 100 * y0 / geometry.display_height + '%',
+        width: 100 * (x1 - x0) / geometry.display_width + '%',
+        height: 100 * (y1 - y0) / geometry.display_height + '%'
+      });
+    }
+  }
+
+  function renderEditor() {
+    const editor = $('editor');
+    editor.replaceChildren();
+    const t = target();
+    if (!t) return;
+    let m = mappings.get(selected);
+    editor.append(node('h4', m.label || t.tooltip || t.qualified_name || 'Selected PDF field'), node('p', 'Page ' + t.page + ' · ' + (t.kind === 'checkbox' || t.kind === 'radio' ? 'Result mark' : t.kind === 'signature' ? 'Signature' : 'Form field')));
+    const label = control(editor, 'Field label', input(m.label || t.tooltip || t.qualified_name));
+    label.addEventListener('change', () => {
+      m = {
+        ...m,
+        label: label.value
+      };
+      change(m);
+    });
+    if (['signature', 'unknown', 'pushbutton'].includes(t.kind)) {
+      editor.append(node('p', t.kind === 'signature' ? 'Signatures remain blank for signing after export.' : 'This field remains blank.'));
+      return;
+    }
+    const current = sourceFor(m);
+    editor.append(node('p', current ? `Mapped to ${current.section}: ${current.label}` : m.disposition === 'constant' ? 'Uses a fixed default value.' : 'No inspection field selected.', {
+      id: 'simple-selected-source'
+    }));
+    const required = control(editor, 'Required', input('', 'checkbox'));
+    required.checked = !!m.required;
+    required.addEventListener('change', () => {
+      m = {
+        ...m,
+        required: required.checked,
+        missing: required.checked ? 'block' : 'blank',
+        reason: 'Optional fields may be left blank when no saved answer is available.'
+      };
+      change(m);
+    });
+    const buttonTarget = ['checkbox', 'radio'].includes(t.kind);
+    if (buttonTarget) {
+      const check = control(editor, 'Mark when the saved answer is', select(['Yes', 'No', 'NA'], m.check_on || 'Yes'));
+      check.addEventListener('change', () => {
+        m = {
+          ...m,
+          check_on: check.value
+        };
+        change(m);
+      });
+      editor.append(node('p', 'Result marks use saved Yes/No/NA answers. Unanswered optional results stay blank.'));
+    } else {
+      const useDefault = control(editor, 'Use default when the mapped field is empty', input('', 'checkbox'));
+      useDefault.checked = m.default_value != null || m.disposition === 'constant';
+      const makeDefault = () => {
+        const type = current?.type === 'date' ? 'date' : 'text';
+        return current?.options?.length ? select([{
+          value: '',
+          label: 'Choose default…'
+        }, ...current.options], m.default_value ?? m.constant ?? '') : input(m.default_value ?? m.constant ?? '', type);
+      };
+      const value = control(editor, 'Default value', makeDefault());
+      value.disabled = !useDefault.checked;
+
+      function updateDefault() {
+        const fallback = useDefault.checked ? value.value : null;
+        if (m.source) m = {
+          ...m,
+          default_value: fallback
+        };
+        else m = fallback !== null ? {
+          ...m,
+          disposition: 'constant',
+          constant: fallback,
+          reason: 'Administrator configured a fixed default value.'
+        } : {
+          ...blank(t),
+          label: m.label
+        };
+        change(m);
+      }
+      useDefault.addEventListener('change', () => {
+        value.disabled = !useDefault.checked;
+        updateDefault();
+      });
+      value.addEventListener('input', updateDefault);
+      if (current?.type === 'date') {
+        const formats = [{
+          value: '%m/%d/%Y',
+          label: 'MM/DD/YYYY'
+        }, {
+          value: '%m-%d-%y',
+          label: 'MM-DD-YY'
+        }, {
+          value: '%Y-%m-%d',
+          label: 'YYYY-MM-DD'
+        }];
+        const format = control(editor, 'Date format', select(formats, m.transforms?.find(x => x.kind === 'date')?.format || '%m/%d/%Y'));
+        format.addEventListener('change', () => {
+          m = {
+            ...m,
+            transforms: [{
+              kind: 'date',
+              format: format.value
+            }]
+          };
+          change(m);
+        });
+      }
+    }
+    button('Clear mapping', () => {
+      change(blank(t));
+      renderEditor();
+    }, editor);
+    editor.append(node('h4', 'Choose an inspection field'));
+    const search = control(editor, 'Find inspection field', input('', 'search'));
+    const choices = node('div', null, {
+      class: 'pdf-source-choices'
+    });
+    editor.append(choices);
+    const renderChoices = () => {
+      choices.replaceChildren();
+      for (const group of ['Store Data', 'Check List']) {
+        choices.append(node('h5', group));
+        let count = 0;
+        for (const s of sources.filter(s => s.section === group)) {
+          if (!s.label.toLowerCase().includes(search.value.toLowerCase())) continue;
+          count++;
+          const compatible = !buttonTarget || s.type === 'yes_no_na';
+          const b = button(s.label, () => {
+            const next = {
+              target_id: t.id,
+              label: m.label || t.tooltip || t.qualified_name,
+              disposition: 'source',
+              source: s.source,
+              required: !!m.required,
+              missing: m.required ? 'block' : 'blank',
+              reason: 'Optional fields may be left blank when no saved answer is available.',
+              overflow: 'shrink',
+              font_size: 9,
+              minimum_font_size: 6,
+              transforms: s.type === 'date' ? [{
+                kind: 'date',
+                format: '%m/%d/%Y'
+              }] : [],
+              check_on: buttonTarget ? (m.check_on || 'Yes') : null
+            };
+            change(next);
+            renderEditor();
+          }, choices, {
+            'data-source-section': group,
+            'aria-pressed': String(!!current && sourceKey(current.source) === sourceKey(s.source))
+          });
+          b.disabled = !compatible;
+          if (!compatible) b.title = 'Result marks need a Yes/No/NA Check List field.';
+        }
+        if (!count) choices.append(node('p', 'No matching fields.'));
+      }
+    };
+    search.addEventListener('input', renderChoices);
+    renderChoices();
+  }
+  async function save() {
+    if (!version || busy) return;
+    busy = true;
+    $('save').disabled = true;
+    message('Validating mappings and preparing the integration…');
+    try {
+      const revision = openedRevision;
+      const saved = await request('/versions/' + version.id + '/save-integration', {
+        expected_revision: version.revision,
+        integration_revision: revision,
+        source_catalog_sha256: sourceCatalogHash,
+        mappings: [...mappings.values()]
+      });
+      dirty = false;
+      await refreshAfterSave();
+      await open(saved);
+      message('Integration saved and ready. Open an inspection, save its Store Data and Check List answers, then export ' + names[saved.key] + '.');
+    } finally {
+      busy = false;
+      $('save').disabled = false;
+    }
+  }
+  async function refreshAfterSave() {
+    integrations = (await request('')).integrations;
+    renderCards();
+  }
+  root.innerHTML = `<div id="simple-message" role="status"></div><div id="simple-cards"></div><section id="simple-workspace" hidden><h3 id="simple-title"></h3><p id="simple-coverage"></p><p>Map Store Data and Check List fields. Points Lists and Events are not used. Unmapped PDF fields stay blank.</p><div class="pdf-toolbar"><button id="simple-save" type="button">Save integration</button><button id="simple-discard" type="button">Discard changes</button><label>Page: <select id="simple-page"></select></label><label>Zoom: <select id="simple-zoom"><option value="0.5">50%</option><option value="1" selected>100%</option><option value="1.5">150%</option></select></label><label>Find PDF field: <input id="simple-search" type="search"></label></div><div class="pdf-mapping-grid"><div id="simple-targets" aria-label="PDF fields"></div><div class="pdf-page-scroll"><div id="simple-sheet" class="pdf-simple-sheet"></div></div><div id="simple-editor"></div></div></section>`;
+  $('save').addEventListener('click', () => save().catch(e => message(e.message)));
+  $('discard').addEventListener('click', async () => {
+    if (dirty && !window.confirm('Discard your unsaved mapping edits and load current saved mappings?')) return;
+    try {
+      await refreshAfterSave();
+      const current = integrations.find(i => i.key === version.config.integration_key);
+      await open(current.versions.find(v => v.id === current.active_version_id) || current.versions[0], current.revision);
+    } catch (e) { message(e.message); }
+  });
+  $('search').addEventListener('input', () => version && renderTargets());
+  $('page').addEventListener('change', () => {
+    page = Number($('page').value);
+    renderPage();
+  });
+  $('zoom').addEventListener('change', () => {
+    zoom = Number($('zoom').value);
+    renderPage();
+  });
+  const debug = node('details', null, {
+    id: 'integration-debug-mode'
+  });
+  debug.append(node('summary', 'Debug mode — technical configuration and version history'));
+  const debugRoot = document.querySelector('#integration-debug-workspace');
+  debug.append(debugRoot);
+  host.append(debug);
+  debug.addEventListener('toggle', () => {
+    debugRoot.classList.toggle('hidden', !debug.open);
+    if (debug.open) advanced.refreshAdmin(true);
+  });
+  window.addEventListener('beforeunload', event => {
+    if (dirty) {
+      event.preventDefault();
+      event.returnValue = '';
+    }
+  });
+  window.PdfIntegrations = {
+    ...advanced,
+    refreshAdmin: async (force = false) => {
+      try {
+        await refresh(force);
+        if (debug.open) await advanced.refreshAdmin(force);
+      } catch (e) {
+        message(e.message);
+      }
+    },
+    resetAdmin: () => {
+      advanced.resetAdmin();
+      version = null;
+      dirty = false;
+      busy = false;
+      integrations = [];
+      sources = [];
+      mappings.clear();
+      $('cards').replaceChildren();
+      $('workspace').hidden = true;
+      debug.open = false;
+    }
+  };
+})();
+
 /* Inspection-specific decisions have their own draft/sync lifecycle. */
 (() => {
   'use strict';
@@ -370,6 +865,7 @@
       const scope=node('div',null,{class:'pdf-form-scope'});card.append(scope);buildScope(record,form,scope);
       for (const field of form.fields) buildField(record,form,field,card);
       const controls=node('div',null,{class:'pdf-toolbar'});card.append(controls);
+      if (form.mapping_mode!=='store_checklist') {
       act(controls,'Save '+names[form.key]+' details',()=>saveForm(form.key));
       act(controls,'Download local answers',()=>backup(record,form.key));
       act(controls,'Review current saved answers and definitions',async()=>{
@@ -377,13 +873,14 @@
         for (const [key,value] of record.locals) if (key.startsWith(form.key+':')) {record.archive.push({key,...value,saving:null});record.locals.delete(key);}
         record.scopes.delete(form.key);card.remove();await refresh();render();
       });
+      }
       act(controls,form.key==='nfpa72'?'Export NFPA 72':'Export Compliance Form',()=>openPreview(form.key), {class:'pdf-export-action',disabled:'disabled'});
       act(controls,'Export history',()=>loadHistory(form.key));
       card.append(node('div',null,{class:'pdf-export-history'}));
       card.append(node('p',form.export_reason,{class:'pdf-export-reason'}));
       card.append(node('ul',null,{class:'pdf-readiness-blockers'}));root.append(card);
     }
-    card.querySelector('.pdf-form-summary').textContent=form.version_id ? `Version ${form.version_id} · ${hasDirty ? 'Local changes unsaved · ' : ''}${form.readiness.ready ? 'Saved data ready' : 'Resolve the blockers below'} · Signatures: ${({later_signing:'reserved for later signing',signed_required:'a supported signature is required',unresolved:'policy needs review'})[form.signature_policy] || 'policy needs review'}. Supplemental sheets: ${form.supplemental_policy==='manual_declaration'?'a saved declaration is required; reports remain separate':form.supplemental_policy==='not_applicable'?'not applicable under the reviewed policy':'policy needs review'}.` : 'Integration disabled or unconfigured.';
+    card.querySelector('.pdf-form-summary').textContent=form.mapping_mode==='store_checklist' ? (form.readiness.ready?'Saved Store Data and Check List answers are ready to export.':'Complete the required mapped Store Data or Check List fields below.') : form.version_id ? `Version ${form.version_id} · ${hasDirty ? 'Local changes unsaved · ' : ''}${form.readiness.ready ? 'Saved data ready' : 'Resolve the blockers below'} · Signatures: ${({later_signing:'reserved for later signing',signed_required:'a supported signature is required',unresolved:'policy needs review'})[form.signature_policy] || 'policy needs review'}. Supplemental sheets: ${form.supplemental_policy==='manual_declaration'?'a saved declaration is required; reports remain separate':form.supplemental_policy==='not_applicable'?'not applicable under the reviewed policy':'policy needs review'}.` : 'Integration disabled or unconfigured.';
     card.querySelector('.pdf-export-action').disabled=!form.export_available || hasDirty || Boolean(record.scopes.get(form.key)?.dirty);
     card.querySelector('.pdf-export-reason').textContent=form.export_reason;
     const scopeState=record.scopes.get(form.key);
@@ -423,6 +920,7 @@
     }
   }
   function buildScope(record,form,parent) {
+    if(form.mapping_mode==='store_checklist')return;
     parent.append(node('p',form.applicability==='no_panel'?'Reviewed policy: no panel data required.':`Explicit ${form.applicability || 'unconfigured'} scope. Required categories: ${form.categories.join(', ')}`));
     if (!form.version_id || form.applicability==='no_panel') return;
     if (!record.scopes.has(form.key)) record.scopes.set(form.key,{panels:[...form.panel_ids],revision:form.scope_revision,dirty:false,saving:false});
@@ -559,7 +1057,7 @@
       const row=node('p',`${artifact.created_at} · ${artifact.status} · ${artifact.filename} `);
       if(artifact.status==='ready')row.append(node('a','Download',{href:url(inspectionId,key)+`/exports/${artifact.id}/download`,download:artifact.filename}));
       else if(artifact.status==='pending')act(row,'Recover pending export',async()=>{await post(url(inspectionId,key)+`/exports/${artifact.id}/recover`,{});await loadHistory(key);});
-      row.append(document.createTextNode(' '),node('a','Provenance',{href:url(inspectionId,key)+`/exports/${artifact.id}/provenance`,target:'_blank',rel:'noopener'}));container.append(row);
+      const debug=node('details');debug.append(node('summary','Debug provenance'),node('a','View technical provenance',{href:url(inspectionId,key)+`/exports/${artifact.id}/provenance`,target:'_blank',rel:'noopener'}));row.append(debug);container.append(row);
     }
     if(!result.exports.length)container.append(node('p','No completed exports have been requested.'));
   }

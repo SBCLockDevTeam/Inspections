@@ -70,7 +70,11 @@ def test_timeout_also_terminates_descendants(tmp_path):
         _run_process([sys.executable, '-c', code, str(pidfile)], wall_seconds=.5)
     proc = Path('/proc') / pidfile.read_text() / 'stat'
     # A killed orphan may remain a zombie until the host's init reaps it.
-    assert not proc.exists() or proc.read_text().split()[2] == 'Z'
+    try:
+        state = proc.read_text().split()[2]
+    except FileNotFoundError:
+        state = None  # init may reap it between process termination and this read.
+    assert state in (None, 'Z')
 
 
 def test_worker_failure_does_not_publish_output_or_alter_source(tmp_path):

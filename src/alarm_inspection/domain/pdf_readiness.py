@@ -88,7 +88,7 @@ def evaluate_snapshot(snapshot: SavedSnapshot) -> ReadinessResult:
         except MappingError as exc: error(exc)
     if config.signature_policy != 'later_signing' and any(t.kind == 'signature' for t in config.inventory.targets):
         blockers.append(issue('A supported, explicit signature policy is required; no signature will be fabricated.', 'SIGNATURE_POLICY_UNRESOLVED'))
-    if config.integration_key == 'nfpa72':
+    if config.integration_key == 'nfpa72' and config.mapping_mode != 'store_checklist':
         try:
             if config.supplemental_policy != 'manual_declaration' or config.supplemental_source is None:
                 raise MappingError('Configure an explicit saved supplemental-sheet declaration source.','UNCONFIGURED')
@@ -121,6 +121,19 @@ def evaluate_snapshot(snapshot: SavedSnapshot) -> ReadinessResult:
                 source = SourceValue(source=SourceRef(kind='inspection',field='store_number'), type='text',state='ready',
                                      value=mapping.constant,fingerprint=payload_hash({'constant':mapping.constant}))
             else: source = resolve(mapping.source)
+            if config.mapping_mode == 'store_checklist':
+                if mapping.source_schema_sha256 and snapshot.catalog_metadata.get(canonical_json(mapping.source),{}).get('schema_sha256') != mapping.source_schema_sha256:
+                    raise MappingError('The mapped Check List field changed. Review its mapping in Administration.', 'SOURCE_CHANGED', mapping.source)
+                if source.state == 'missing' and mapping.default_value is not None:
+                    source = source.model_copy(update={'value':mapping.default_value,'state':'ready'})
+                if target.kind in {'checkbox','radio'} and mapping.source:
+                    if source.state == 'missing' and not required:
+                        source = source.model_copy(update={'value':False,'state':'ready','type':'boolean'})
+                    else:
+                        usable(source)
+                        if source.value not in ('Yes','No','NA') or mapping.check_on is None:
+                            raise MappingError('Choose which Check List answer marks this PDF field.', 'UNCONFIGURED', mapping.source)
+                        source = source.model_copy(update={'value':source.value == mapping.check_on,'type':'boolean'})
             outputs[target.id] = map_target(target,mapping,source,resolve,required=required)
         except MappingError as exc: error(exc,mapping)
     # Stable order/deduplication; wording changes do not alter the saved-data fingerprint.

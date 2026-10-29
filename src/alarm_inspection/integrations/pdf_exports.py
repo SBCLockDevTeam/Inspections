@@ -58,6 +58,8 @@ def frozen_snapshot(store,inspection_id,key,*,actor_id):
         panels=selection['panel_ids'] if selection else []
         snapshot=capture_snapshot_session(session,inspection_id,key,actor_id=actor_id,panel_ids=panels)
         config=snapshot.config
+        if config and config.mapping_mode == 'store_checklist':
+            scope_revision,selection = '',None
         if selection and config and selection['policy_hash']!=policy_hash(config):
             snapshot=snapshot.model_copy(update={'blockers':[*snapshot.blockers,issue('Panel scope policy changed; review and save scope again.','INVALID_SCOPE',navigation='form_details')]})
         result=evaluate_snapshot(snapshot)

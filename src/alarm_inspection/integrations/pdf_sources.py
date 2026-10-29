@@ -108,10 +108,12 @@ def capture_snapshot_session(session, inspection_id, integration_key, *, actor_i
         blockers.append(issue('Configuration samples are diagnostic and cannot approve an inspection export.','UNCONFIGURED'))
     if version.status != 'published' or version.integration_key != integration_key:
         blockers.append(issue('A published matching configuration is required.','UNCONFIGURED'))
+    simple = config.mapping_mode == 'store_checklist'
+    if simple: panel_ids = []
     valid_ids = isinstance(panel_ids,(list,tuple)) and all(isinstance(p,str) and re.fullmatch(r'[A-Za-z0-9_-]{1,36}',p) for p in panel_ids)
     requested = sorted(set(panel_ids)) if valid_ids else []
     if not valid_ids or len(requested) != len(panel_ids): blockers.append(issue('Explicit panel scope contains invalid/duplicate IDs.','INVALID_SCOPE',navigation='points'))
-    panels = list(session.scalars(select(PointList).where(PointList.inspection_id==inspection_id,PointList.deleted_at.is_(None)).order_by(PointList.id)))
+    panels = [] if simple else list(session.scalars(select(PointList).where(PointList.inspection_id==inspection_id,PointList.deleted_at.is_(None)).order_by(PointList.id)))
     owned = {p.id:p for p in panels}
     selected = [owned[p] for p in requested if p in owned]
     if set(requested) - owned.keys(): blockers.append(issue('A selected panel is unavailable for this inspection.','INVALID_SCOPE',navigation='points'))
@@ -132,9 +134,9 @@ def capture_snapshot_session(session, inspection_id, integration_key, *, actor_i
     facts['integration'] = {'key':integration.key,'enabled':integration.enabled,'active_version_id':integration.active_version_id,'revision':integration.revision}
     facts['mode'] = 'configuration_sample' if version_id is not None else 'inspection'
     facts['required_scope'] = eligible if config.applicability=='inspection' else requested
-    if not (inspection.store_number.strip() and inspection.address.strip() and normalize_city(inspection.city or '') and normalize_state(inspection.state or '')):
+    if not simple and not (inspection.store_number.strip() and inspection.address.strip() and normalize_city(inspection.city or '') and normalize_state(inspection.state or '')):
         blockers.append(issue('Store number, address, city and valid state are required.','MISSING_ANSWER',navigation='store_data'))
-    if inspection.completion_date < inspection.start_date:
+    if not simple and inspection.completion_date < inspection.start_date:
         blockers.append(issue('Completion date cannot precede start date.','MISSING_ANSWER',navigation='store_data'))
     for field in ('store_number','store_type','address','city','state','inspector_name','start_date','completion_date'):
         ref = SourceRef(kind='inspection',field=field)
@@ -168,7 +170,12 @@ def capture_snapshot_session(session, inspection_id, integration_key, *, actor_i
         provenance = [SourceProvenance(source=ref,decision_id=decision.id,decided_by=decision.decided_by,
                         decided_at=decision.decided_at.replace(tzinfo=timezone.utc) if decision.decided_at.tzinfo is None else decision.decided_at)] if decision else []
         sources[canonical_json(ref)] = _source(ref,kind,value,raw,state=state,message=message,provenance=provenance)
-        catalog[canonical_json(ref)] = {'label':task.text,'options':list(CHECKBOX_CHOICES) if task.input_type=='checkbox' else options,'unit':None}
+        catalog[canonical_json(ref)] = {'label':task.text,'options':list(CHECKBOX_CHOICES) if task.input_type=='checkbox' else options,'unit':None,'schema_sha256':checklist_schema(task)}
+    if simple:
+        refs = _refs(config)
+        facts['dependencies'] = {canonical_json(ref):sources[canonical_json(ref)].fingerprint if canonical_json(ref) in sources else None for ref in refs}
+        return SavedSnapshot(inspection_id=inspection_id,config=config,stored_config_sha256=version.payload_sha256,
+            panel_ids=[],facts=facts,sources=sources,catalog_metadata=catalog,blockers=blockers)
     panel_facts, point_values, time_values = [], [], []
     # No-panel policy intentionally has no point dependencies. Forged scopes
     # still produce a blocker and can never qualify for final generation.
@@ -316,3 +323,27 @@ def _catalog(snapshot):
 
 def assess_readiness(store, inspection_id, integration_key, *, actor_id, panel_ids=()):
     return evaluate_snapshot(capture_snapshot(store,inspection_id,integration_key,actor_id=actor_id,panel_ids=panel_ids))
+
+
+def definition_catalog(session, *, actor_id):
+    """Admin picker definitions; no inspection, Points List or Event reads."""
+    from alarm_inspection.integrations.pdf_repository import _actor
+    _actor(session,actor_id,admin=True)
+    entries=[]
+    for field in ('store_number','store_type','address','city','state','inspector_name','start_date','completion_date'):
+        entries.append({'source':SourceRef(kind='inspection',field=field).model_dump(mode='json'),
+            'label':field.replace('_',' ').title(),'section':'Store Data',
+            'type':'date' if field.endswith('_date') else 'text','options':[]})
+    for task in session.scalars(select(InspectionTask).where(InspectionTask.active.is_(True)).order_by(InspectionTask.position,InspectionTask.id)):
+        options=json.loads(task.options_json or '[]');validate_options(task.input_type,options)
+        entry={'source':SourceRef(kind='checklist',id=task.id).model_dump(mode='json'),'label':task.text,
+            'section':'Check List','type':{'checkbox':'yes_no_na','textbox':'text','dropdown':'choice'}[task.input_type],
+            'options':list(CHECKBOX_CHOICES) if task.input_type=='checkbox' else options}
+        entry['schema_sha256']=checklist_schema(task)
+        entries.append(entry)
+    return {'entries':entries,'schema_sha256':payload_hash(entries)}
+
+
+def checklist_schema(task):
+    # Reordering/renaming a task does not invalidate its meaning or saved answers.
+    return payload_hash({'type':task.input_type,'options_json':task.options_json or '[]','active':task.active})

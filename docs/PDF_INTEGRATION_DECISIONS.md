@@ -41,3 +41,7 @@ Owner for each item: application administrator/business owner. Status is **unres
 | B10 | Explicit classifications/count definitions and manual measured values | Installed/tested-good counts, power readings, CCTV and related fields | Do not infer from point text, highlights, accepted times, or checklist completion flags |
 
 Record each future resolution with date, administrator identity, rationale, integration/version, and affected target IDs. A business decision cannot retroactively rewrite original uploads, accepted data, audit decisions, or retained artifacts.
+
+## October 29 — User-directed simpler mapping workflow
+
+The user explicitly requested form-first opening, a left PDF field list and right inspection source picker, no JSON outside Debug, required/default controls, Save-to-export across inspections, and Store Data/Check List sources exclusively. This supersedes prior panel/category/manual-input setup and separate publication gates for the normal mapping workflow. Saving explicitly activates a new immutable configuration after deterministic validation and retained bounded render proofs. Unmapped destinations stay blank; previous drafts/accepted versions remain retained. Defaults cannot hide changed sources or manufacture result marks; signatures stay blank and supplemental reports remain separate. Existing advanced configurations and legacy inspection functionality continue to work.

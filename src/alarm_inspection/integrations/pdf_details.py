@@ -28,6 +28,7 @@ def scope(store, inspection_id, key, actor_id):
         revision,decision=saved_scope(session,inspection_id,key)
         integration=session.get(PdfIntegration,key)
         config=repo._version(session,integration.active_version_id)[1] if integration and integration.active_version_id else None
+        if config and config.mapping_mode == 'store_checklist': return '',[],False
         compatible=decision is None or config is not None and decision['policy_hash']==policy_hash(config)
         return revision,(decision['panel_ids'] if decision and compatible else []),not compatible
 
@@ -47,7 +48,7 @@ def details(store, inspection_id, key, *, actor_id):
                     answer=FormAnswer.model_validate_json(decision.answer_json) if decision else None
                     fields.append({'definition':definition.model_dump(mode='json'),'panel_id':panel,'source':value.model_dump(mode='json'),
                                    'override':answer.model_dump(mode='json') if answer and answer.override else None})
-    return {'key':key,'version_id':config.version_id if config else None,'config_sha256':snapshot.stored_config_sha256,
+    return {'mapping_mode':config.mapping_mode if config else None,'key':key,'version_id':config.version_id if config else None,'config_sha256':snapshot.stored_config_sha256,
         'scope_revision':revision,'panel_ids':panels,'scope_changed':scope_changed,'panels':snapshot.panel_choices,
         'applicability':config.applicability if config else None,'categories':config.categories if config else [],
         'signature_policy':config.signature_policy if config else None,'supplemental_policy':config.supplemental_policy if config else None,

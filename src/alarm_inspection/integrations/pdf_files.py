@@ -17,7 +17,7 @@ class PrivatePdfFiles:
     @staticmethod
     def template_key(integration_key, version_id, filename):
         TypeAdapter(RecordId).validate_python(version_id)
-        if integration_key not in {'nfpa72', 'compliance'} or filename not in {'original.pdf', 'normalized.pdf'}:
+        if integration_key not in {'nfpa72', 'compliance'} or filename not in {'original.pdf', 'normalized.pdf', 'mapping-test.pdf'}:
             raise ValueError('Invalid template key.')
         return f'_pdf_integrations/{integration_key}/{version_id}/{filename}'
 
