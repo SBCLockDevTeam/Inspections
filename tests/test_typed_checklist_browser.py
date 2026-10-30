@@ -72,6 +72,13 @@ def test_admin_choices_and_typed_checklist_values_sync(tmp_path, monkeypatch):
                 await b.fill(store_contact,'Store contact value');await b.locator(store_contact).press('Tab')
                 await playwright.expect(c.locator(store_contact)).to_have_value('Store contact value',timeout=12000)
                 assert await b.locator('#inspection-store-number').input_value()=='TYPED'
+                await b.locator('#inspection-address').fill('Private native address')
+                assert (await b.request.post(base+'/api/admin/inspection-tasks',data={'text':'New shared field','input_type':'textbox','section':'nfpa72'})).status==201
+                await b.locator('#refresh-nfpa72').click()
+                await playwright.expect(b.locator('#checklist-message')).to_contain_text('Save the edited')
+                await playwright.expect(b.locator('#inspection-address')).to_have_value('Private native address')
+                await b.locator('#inspection-address').fill('Test')
+
                 text = f'#checklist-task-{ids["Panel serial"]}'; dropdown = f'#checklist-task-{ids["Condition"]}'; checkbox = f'#checklist-task-{ids["Restore system"]}-yes'
                 await b.locator(checkbox).check(); await b.fill(text,'SN-0042'); await b.locator(text).press('Tab')
                 await b.select_option(dropdown,'Ready'); await b.locator('#inspection-name').click()
@@ -179,6 +186,20 @@ def test_data_sections_defaults_drag_delete_and_private_edits(tmp_path, monkeypa
                 inspection = (await (await page.request.post(base+'/api/inspections/blank', data={'store_number':'DEFAULTS','address':'Test','city':'Norfolk','state':'VA','start_date':'2026-10-01','completion_date':'2026-10-02'})).json())['id']
                 await page.locator('#avatar-button').click(button='right'); await page.click('#avatar-menu-option-admin'); await page.click('#admin-tab-inspection-tasks')
                 assert await page.locator('.admin-data-section > summary > span').all_text_contents() == ['Store Data','NFPA 72','Compliance']
+                native = page.locator('.admin-data-section[data-section="store_data"]')
+                await playwright.expect(native.locator('tbody tr[data-task-id]')).to_have_count(8)
+                inspector = native.locator('tr[data-task-id="builtin:inspector_name"]')
+                await inspector.locator('.admin-task-text').fill('Lead Inspector')
+                await inspector.locator('.admin-task-default').fill('Office technician')
+                await playwright.expect(inspector.locator('.admin-task-type')).to_be_disabled()
+                await playwright.expect(inspector.locator('.delete-data-task')).to_be_disabled()
+                await inspector.locator('.save-data-task').click()
+                await playwright.expect(page.locator('#inspection-tasks-message')).to_have_text('Task updated.')
+                await playwright.expect(inspector.locator('.delete-data-task')).to_be_disabled()
+                await inspector.locator('.task-drag-handle').drag_to(native.locator('tr[data-task-id="builtin:store_number"] .task-drag-handle'))
+                await playwright.expect(native.locator('tbody tr').first).to_have_attribute('data-task-id','builtin:inspector_name')
+                await playwright.expect(native.locator('tr[data-task-id="builtin:start_date"] .admin-task-default')).to_have_attribute('type','date')
+
                 assert await page.locator('#inspection-task-section,.admin-task-order').count() == 0
                 group = page.locator('.admin-data-section[data-section="nfpa72"]')
                 await group.locator('summary').click(); assert not await group.get_attribute('open')
@@ -240,7 +261,26 @@ def test_data_sections_defaults_drag_delete_and_private_edits(tmp_path, monkeypa
                 await store_draft.locator('.admin-task-text').fill('Store contact'); await store_draft.locator('.admin-task-type').select_option('textbox')
                 await store_draft.locator('.admin-task-default').fill('Office'); await store_draft.locator('.save-data-task').click()
                 await playwright.expect(page.locator('#inspection-tasks-message')).to_have_text('Task added.')
-                await page.click('#back-home-from-admin'); await page.click('#refresh-inspections'); await page.select_option('#inspection-picker', inspection); await page.click('#open-inspection')
+                for index in range(3):
+                    response = await page.request.post(base+'/api/admin/inspection-tasks',data={'text':f'Compliance field {index}','section':'compliance','input_type':'textbox'})
+                    assert response.status==201
+                await page.click('#back-home-from-admin')
+                await page.click('#start-create')
+                await playwright.expect(page.locator('#new-inspector')).to_have_value('Office technician')
+                await playwright.expect(page.locator('label[for="new-inspector"]')).to_have_text('Lead Inspector:')
+                await page.click('#cancel-new-inspection')
+                await page.click('#refresh-inspections'); await page.select_option('#inspection-picker', inspection); await page.click('#open-inspection')
+                await playwright.expect(page.locator('#inspection-inspector')).to_have_value('')
+                await playwright.expect(page.locator('#inspection-city')).to_have_value('Norfolk')
+                await playwright.expect(page.locator('label[for="inspection-inspector"]')).to_have_text('Lead Inspector:')
+                await playwright.expect(page.locator('#store-data-fields > .compact-field').first).to_have_attribute('data-inspection-field','inspector_name')
+                for selector in ('#store-data-fields','#nfpa72-fields','#compliance-fields'):
+                    geometry=await page.locator(selector+' > .compact-field').evaluate_all('(fields)=>fields.slice(0,3).map(el=>{const r=el.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width}})')
+                    assert len(geometry)==3 and len({round(r['x']) for r in geometry})==3
+                    assert max(r['y'] for r in geometry)-min(r['y'] for r in geometry)<2
+                    assert await page.locator(selector).evaluate('el=>getComputedStyle(el).backgroundColor')=='rgb(248, 251, 255)'
+                await page.screenshot(path=str(tmp_path/'inspection-three-columns.png'),full_page=True)
+
                 await playwright.expect(page.locator(f'#checklist-task-{ids["Panel condition"]}')).to_have_value('Ready')
                 await playwright.expect(page.locator(f'#checklist-task-{ids["First check"]}-na')).to_be_checked()
                 await playwright.expect(page.locator(f'#checklist-task-{ids["Second check"]}-no')).to_be_checked()

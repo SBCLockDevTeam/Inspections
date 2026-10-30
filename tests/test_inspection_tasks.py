@@ -33,7 +33,8 @@ def add_task(client, text="Notify monitoring station", **extra):
 
 def test_task_management_order_and_duplicates(task_app):
     client, store = task_app
-    assert client.get("/api/admin/inspection-tasks").json() == {"tasks": []}
+    assert client.get("/api/admin/inspection-tasks").json()["tasks"] == []
+    assert len(client.get("/api/admin/inspection-tasks").json()["builtin_fields"]) == 8
     task = add_task(client, "  Notify   monitoring station  ", position=4)
     assert task["text"] == "Notify monitoring station"
     second = add_task(client, "Restore system", position=2)
@@ -384,3 +385,51 @@ def test_default_column_migration_is_additive_and_repeatable(tmp_path, monkeypat
         with store() as session:
             task = session.get(InspectionTask, 'original')
             assert task.default_value == '' and task.section == 'store_data' and task.position == 8
+
+
+def test_native_store_fields_link_to_actual_properties_and_keep_values(task_app):
+    client, store = task_app
+    inspection = make_inspection(client)
+    fields = client.get('/api/admin/inspection-tasks').json()['builtin_fields']
+    assert [f['native_field'] for f in fields] == ['store_number','store_type','address','city','state','inspector_name','start_date','completion_date']
+    assert len({f['id'] for f in fields}) == 8
+    with store() as session: assert session.query(InspectionTask).count() == 0
+    path = '/api/admin/inspection-tasks/builtin/city'
+    assert client.patch(path, json={'text':'Municipality','default_value':'Richmond'}).status_code == 200
+    assert client.get('/api/inspections/field-definitions').json()['fields'][3]['text'] == 'Municipality'
+    assert client.get(f'/api/inspections/{inspection}').json()['city'] == 'Norfolk'
+    assert client.get(f'/api/inspections/{inspection}/checklist').json()['builtin_fields'][3]['default_value'] == 'Richmond'
+    assert client.get(f'/api/inspections/{inspection}/checklist').json()['tasks'] == []
+    for extra in ({'active':False},{'section':'nfpa72'},{'input_type':'checkbox'},{'options':['Invalid']}):
+        assert client.patch(path, json={'text':'Municipality','default_value':'Richmond',**extra}).status_code == 422
+    with store() as session: assert session.query(InspectionChecklistDecision).count() == 0
+
+
+@pytest.mark.parametrize('field,value', [('state','Virginia'),('state','??'),('start_date','2026-02-30'),('start_date','20261001'),('store_type','Invalid'),('store_number','x'*101),('address','x'*501),('inspector_name','x'*121)])
+def test_native_default_validation_preserves_inspection_rules(task_app, field, value):
+    client, _ = task_app
+    result = client.patch('/api/admin/inspection-tasks/builtin/'+field, json={'text':'Label','default_value':value})
+    assert result.status_code == 422
+
+
+def test_native_dates_and_mixed_store_order_are_atomic(task_app):
+    client, store = task_app
+    for field,value in [('start_date','2026-10-10'),('completion_date','2026-10-11')]:
+        assert client.patch('/api/admin/inspection-tasks/builtin/'+field, json={'text':field,'default_value':value}).status_code == 200
+    assert client.patch('/api/admin/inspection-tasks/builtin/completion_date', json={'text':'End Date','default_value':'2026-10-09'}).status_code == 422
+    custom = add_task(client, 'Contact', section='store_data', input_type='textbox')
+    fields = client.get('/api/admin/inspection-tasks').json()['builtin_fields']
+    expected = [f['id'] for f in fields] + [custom['id']]
+    reordered = [custom['id'], *reversed(expected[:-1])]
+    request = {'section':'store_data','expected_order':expected,'task_ids':reordered}
+    assert client.put('/api/admin/inspection-tasks/order', json=request).status_code == 200
+    assert client.put('/api/admin/inspection-tasks/order', json=request).status_code == 409
+    result = client.get('/api/admin/inspection-tasks').json()
+    assert [f['id'] for f in sorted(result['builtin_fields']+result['tasks'],key=lambda f:f['position'])] == reordered
+    newer = add_task(client, 'Second contact', section='store_data')
+    assert newer['position'] == 10
+    forged = {**request,'expected_order':reordered,'task_ids':reordered[:-1]}
+    assert client.put('/api/admin/inspection-tasks/order', json=forged).status_code == 409
+    with store() as session:
+        assert session.query(InspectionTask).count() == 2
+        assert session.query(InspectionChecklistDecision).count() == 0

@@ -275,7 +275,7 @@ button:active {
 .task-checkbox-choices { display: flex; flex: 0 0 auto; gap: 16px; }
 .task-checkbox-choices label { display: inline-flex; align-items: center; gap: 6px; margin: 0; font-weight: 400; cursor: pointer; }
 .inspection-task-row input[type=checkbox] { width: auto; margin: 0; flex: 0 0 auto; }
-#refresh-checklist { width: auto; }
+#refresh-checklist, #refresh-nfpa72 { width: auto; }
 #checklist-message { margin-top: 10px; }
 .inspection-task-value { margin: 10px 0; }
 .inspection-task-value label { overflow-wrap: anywhere; }
@@ -915,6 +915,16 @@ button.inspection-menu-option {
 @media (max-width: 400px) {
   .form-field { grid-template-columns: minmax(0, 6.5rem) minmax(0, 1fr); }
 }
+.inspection-data-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 16px; align-items: start; }
+.inspection-data-grid > .details-row { display: contents; }
+.inspection-data-grid .compact-field { min-width: 0; }
+.inspection-data-grid .form-field { margin: 0; grid-template-columns: minmax(0, 6.5rem) minmax(0, 1fr); }
+.inspection-data-grid .inspection-task-row { display: grid; grid-template-columns: minmax(0, 6.5rem) minmax(0, 1fr); min-height: 36px; padding: 0; gap: 8px; }
+.inspection-data-grid .inspection-task-description { margin: 0; font-size: .82rem; font-weight: 600; color: var(--muted); }
+.inspection-data-grid .task-checkbox-choices { flex-wrap: wrap; gap: 6px 10px; min-width: 0; }
+.inspection-data-grid .task-checkbox-choices label { font-size: .82rem; color: var(--text); }
+@media (max-width: 1000px) { .inspection-data-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 700px) { .inspection-data-grid { grid-template-columns: minmax(0, 1fr); } }
 .table td.device-type-cell { background-color: #fff; cursor: pointer; }
 .table td.device-type-cell.device-highlighted { background-color: #eaf7e9; }
 .table td.device-type-cell.device-event-missing { background-color: #fff3bf; }
@@ -1059,44 +1069,20 @@ button.inspection-menu-option {
 <h2 id="inspection-name"></h2>
 <div id="inspection-checklist">
 <details id="store-data-section" class="inspection-section" open><summary>Store Data <span id="store-data-progress"></span></summary><div class="inspection-section-body">
-<div class="inspection-details">
-  <div class="details-row">
-    <div class="compact-field">
-      <div class="form-field"><label for="inspection-store-number">Store Number:</label><input id="inspection-store-number" type="text"></div>
-    </div>
-    <div class="compact-field">
-      <div class="form-field"><label for="inspection-store-type">Store Type:</label><select id="inspection-store-type">
-         <option>Walmart - Supercenter</option>
-        <option>Walmart - Neighborhood Market</option>
-        <option>Sam's Club</option>
-      </select></div>
-    </div>
-    <div class="compact-field">
-      <div class="form-field"><label for="inspection-address">Address:</label><input id="inspection-address" type="text" placeholder="Enter address"></div>
-    </div>
-  </div>
-  <div class="details-row">
-    <div class="compact-field"><div class="form-field"><label for="inspection-city">City:</label><input id="inspection-city" type="text" maxlength="120" required></div></div>
-    <div class="compact-field"><div class="form-field"><label for="inspection-state">State:</label><input id="inspection-state" type="text" minlength="2" maxlength="2" required></div></div>
-  </div>
-  <div class="details-row">
-    <div class="compact-field">
-      <div class="form-field"><label for="inspection-inspector">Inspector:</label><input id="inspection-inspector" type="text" placeholder="Enter inspector name"></div>
-    </div>
-    <div class="compact-field">
-      <div class="form-field"><label for="inspection-start-date">Start Date:</label><input id="inspection-start-date" type="date"></div>
-    </div>
-    <div class="compact-field">
-      <div class="form-field"><label for="inspection-end-date">End Date:</label><input id="inspection-end-date" type="date"></div>
-    </div>
-  </div>
+<div id="store-data-fields" class="inspection-details inspection-data-grid">
+<div class="compact-field" data-inspection-field="store_number"><div class="form-field"><label for="inspection-store-number">Store Number:</label><input id="inspection-store-number" type="text" ></div></div>
+<div class="compact-field" data-inspection-field="store_type"><div class="form-field"><label for="inspection-store-type">Store Type:</label><select id="inspection-store-type"><option>Walmart - Supercenter</option><option>Walmart - Neighborhood Market</option><option>Sam's Club</option></select></div></div>
+<div class="compact-field" data-inspection-field="address"><div class="form-field"><label for="inspection-address">Address:</label><input id="inspection-address" type="text" placeholder="Enter address"></div></div>
+<div class="compact-field" data-inspection-field="city"><div class="form-field"><label for="inspection-city">City:</label><input id="inspection-city" type="text" maxlength="120" required></div></div>
+<div class="compact-field" data-inspection-field="state"><div class="form-field"><label for="inspection-state">State:</label><input id="inspection-state" type="text" minlength="2" maxlength="2" required></div></div>
+<div class="compact-field" data-inspection-field="inspector_name"><div class="form-field"><label for="inspection-inspector">Inspector:</label><input id="inspection-inspector" type="text" placeholder="Enter inspector name"></div></div>
+<div class="compact-field" data-inspection-field="start_date"><div class="form-field"><label for="inspection-start-date">Start Date:</label><input id="inspection-start-date" type="date" ></div></div>
+<div class="compact-field" data-inspection-field="completion_date"><div class="form-field"><label for="inspection-end-date">End Date:</label><input id="inspection-end-date" type="date" ></div></div>
 </div>
-
-<div id="store-data-fields"></div>
 </div></details>
-<details id="export-form-details-section" class="inspection-section" open><summary>NFPA 72 <span id="nfpa72-progress"></span></summary><div class="inspection-section-body"><div id="nfpa72-fields"></div><button type="button" id="refresh-nfpa72" class="secondary">Refresh NFPA 72</button></div></details>
+<details id="export-form-details-section" class="inspection-section" open><summary>NFPA 72 <span id="nfpa72-progress"></span></summary><div class="inspection-section-body"><div id="nfpa72-fields" class="inspection-details inspection-data-grid"></div><button type="button" id="refresh-nfpa72" class="secondary">Refresh NFPA 72</button></div></details>
 <details id="checklist-section" class="inspection-section" open><summary>Compliance <span id="checklist-progress"></span></summary><div class="inspection-section-body">
-<div id="compliance-fields"></div><button type="button" id="refresh-checklist" class="secondary">Refresh Compliance</button>
+<div id="compliance-fields" class="inspection-details inspection-data-grid"></div><button type="button" id="refresh-checklist" class="secondary">Refresh Compliance</button>
 </div></details><div id="checklist-message" role="status" aria-live="polite"></div></div>
 <details id="points-events-section" class="inspection-section" open><summary>Points Lists &amp; Events</summary><div class="inspection-section-body">
 <div class="inspection-actions-row">

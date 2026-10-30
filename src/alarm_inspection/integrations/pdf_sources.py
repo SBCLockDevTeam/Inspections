@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool, SingletonThreadPool
 
 from alarm_inspection.domain.inspection_sections import SECTION_LABELS
+from alarm_inspection.inspection_fields import native_fields
 from alarm_inspection.domain.checklist import CHECKBOX_CHOICES, effective_answer, validate_default, validate_options
 from alarm_inspection.domain.export import validate_export_rows
 from alarm_inspection.domain.inspection_names import normalize_city, normalize_state
@@ -334,9 +335,10 @@ def definition_catalog(session, *, actor_id):
     from alarm_inspection.integrations.pdf_repository import _actor
     _actor(session,actor_id,admin=True)
     entries=[]
-    for field in ('store_number','store_type','address','city','state','inspector_name','start_date','completion_date'):
+    for definition in sorted(native_fields(session), key=lambda item: item['position']):
+        field = definition['native_field']
         entries.append({'source':SourceRef(kind='inspection',field=field).model_dump(mode='json'),
-            'label':field.replace('_',' ').title(),'section':'Store Data',
+            'label':definition['text'],'section':'Store Data',
             'type':'date' if field.endswith('_date') else 'text','options':[]})
     for task in session.scalars(select(InspectionTask).where(InspectionTask.active.is_(True)).order_by(InspectionTask.position,InspectionTask.created_at,InspectionTask.id)):
         options=json.loads(task.options_json or '[]');validate_options(task.input_type,options)

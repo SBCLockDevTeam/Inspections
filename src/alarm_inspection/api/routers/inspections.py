@@ -72,6 +72,12 @@ class NewInspection(BaseModel):
 def create_router(store) -> APIRouter:
     router = APIRouter(prefix="/api/inspections", tags=["inspections"])
 
+    @router.get('/field-definitions')
+    def field_definitions():
+        from alarm_inspection.inspection_fields import native_fields
+        with store() as session:
+            return {'fields': native_fields(session)}
+
     @router.post("/blank")
     def create_blank_inspection(payload: NewInspection) -> dict:
         inspection_id = str(uuid4())

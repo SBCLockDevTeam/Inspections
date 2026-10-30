@@ -306,7 +306,8 @@ def test_task_default_additive_migration_preserves_definitions_and_decisions(dat
         finally: reopened.kw['bind'].dispose()
 
 
-def test_section_reorders_reject_concurrent_stale_order(database):
+@pytest.mark.parametrize('section', ['nfpa72', 'store_data'])
+def test_section_reorders_reject_concurrent_stale_order(database, section):
     from concurrent.futures import ThreadPoolExecutor
     from threading import Barrier
     from fastapi.testclient import TestClient
@@ -316,7 +317,7 @@ def test_section_reorders_reject_concurrent_stale_order(database):
     now = datetime.now(timezone.utc)
     with store.begin() as session:
         for ident in ('order-a', 'order-b'):
-            session.add(InspectionTask(id=ident, text=ident, text_key=ident, section='nfpa72', position=1 if ident=='order-a' else 2, created_at=now))
+            session.add(InspectionTask(id=ident, text=ident, text_key=ident, section=section, position=1 if ident=='order-a' else 2, created_at=now))
     app = FastAPI()
     @app.middleware('http')
     async def auth(request: Request, call_next):
@@ -324,7 +325,10 @@ def test_section_reorders_reject_concurrent_stale_order(database):
         return await call_next(request)
     app.include_router(create_admin_router(store))
     client = TestClient(app)
-    payload = {'section':'nfpa72','expected_order':['order-a','order-b'],'task_ids':['order-b','order-a']}
+    from alarm_inspection.inspection_fields import native_fields
+    with store() as session: builtins = [field['id'] for field in native_fields(session)] if section=='store_data' else []
+    expected = builtins + ['order-a','order-b']
+    payload = {'section':section,'expected_order':expected,'task_ids':list(reversed(expected))}
     if store.kw['bind'].dialect.name == 'postgresql':
         barrier = Barrier(2)
         def reorder(_):

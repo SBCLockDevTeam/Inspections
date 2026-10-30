@@ -134,7 +134,7 @@ def test_shared_changes_reach_other_sessions_without_reloading(tmp_path, monkeyp
                 await playwright.expect(b.locator('#panel-types-body')).to_contain_text('Shared panel', timeout=12000)
                 await b.click('#admin-tab-inspection-tasks')
                 await a.request.post(base + '/api/admin/inspection-tasks', data={'text': 'Shared new task'})
-                await playwright.expect(b.locator('#inspection-tasks-body input[type=text]')).to_have_count(2, timeout=12000)
+                await playwright.expect(b.locator('#inspection-tasks-body tr[data-task-id]:not([data-task-id^="builtin:"]) .admin-task-text')).to_have_count(2, timeout=12000)
                 assert errors == []
             finally: await browser.close()
     try: asyncio.run(check())

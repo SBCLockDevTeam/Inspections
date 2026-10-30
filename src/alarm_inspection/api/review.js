@@ -464,14 +464,14 @@
     const refresh = () => {
       const options = [...optionsRoot.querySelectorAll('.task-option-input')].map(input => input.value);
       const value = root.firstElementChild?.value ?? current;
-      const control = document.createElement(type.value === 'textbox' ? 'input' : 'select');
+      const control = document.createElement(['textbox', 'date'].includes(type.value) ? 'input' : 'select');
       control.className = 'admin-task-default'; control.setAttribute('aria-label', 'Default value');
-      if (type.value === 'textbox') { control.type = 'text'; control.maxLength = 2000; }
+      if (['textbox', 'date'].includes(type.value)) { control.type = type.value === 'date' ? 'date' : 'text'; control.maxLength = 2000; }
       else {
         control.add(new Option(type.value === 'checkbox' ? 'None' : 'No default', ''));
         for (const option of type.value === 'checkbox' ? ['Yes', 'No', 'NA'] : options.filter(Boolean)) control.add(new Option(option, option));
       }
-      control.value = type.value === 'textbox' || [...control.options].some(option => option.value === value) ? value : '';
+      control.value = ['textbox', 'date'].includes(type.value) || [...control.options].some(option => option.value === value) ? value : '';
       current = control.value; root.replaceChildren(control);
     };
     type.addEventListener('change', () => { current = ''; root.replaceChildren(); refresh(); });
@@ -553,28 +553,42 @@
     textCell.append(text);
     const typeCell = document.createElement('td');
     const type = makeTaskTypeSelect(task.input_type);
+    if (task.native_field) {
+      if (task.input_type === 'date') type.add(new Option('Date', 'date'));
+      type.value = task.input_type; type.disabled = true;
+      type.title = 'Built-in field type preserves existing inspection validation.';
+    }
     const optionsRoot = document.createElement('div');
-    const editor = createTaskOptionsEditor(optionsRoot, type, task.options || []);
+    const editor = task.native_field ? {values: () => task.options || [], valid: () => true} : createTaskOptionsEditor(optionsRoot, type, task.options || []);
     typeCell.append(type, optionsRoot);
     const defaultCell = document.createElement('td');
     const defaultValue = taskDefaultEditor(defaultCell, type, optionsRoot, task.default_value || '');
+    if (task.native_field) {
+      const control = defaultCell.firstElementChild;
+      control.maxLength = task.max_length;
+      if (task.input_type === 'dropdown') for (const choice of task.options) control.add(new Option(choice, choice));
+      control.value = task.default_value || '';
+    }
     const activeCell = document.createElement('td');
     const active = document.createElement('input');
     active.type = 'checkbox'; active.checked = task.active ?? true; active.className = 'admin-task-active'; active.setAttribute('aria-label', 'Task active');
-    active.disabled = !task.id;
+    active.disabled = !task.id || Boolean(task.native_field);
     activeCell.append(active);
     const actions = document.createElement('td'); actions.className = 'task-row-actions';
     const save = document.createElement('button');
     save.type = 'button'; save.className = 'save-data-task'; save.textContent = '💾'; save.setAttribute('aria-label', 'Save task'); save.title = 'Save task';
     const remove = document.createElement('button');
     remove.type = 'button'; remove.className = 'secondary delete-data-task'; remove.textContent = '×'; remove.setAttribute('aria-label', 'Delete task'); remove.title = 'Delete task';
+    if (task.native_field) { remove.disabled = true; remove.title = 'Built-in Store Data fields are retained for inspection validation and existing mappings.'; }
     save.addEventListener('click', async () => {
       if (!text.reportValidity() || !editor.valid()) return;
       save.disabled = true; remove.disabled = true;
       try {
-        const response = await fetch('/api/admin/inspection-tasks' + (task.id ? `/${task.id}` : ''), {
+        const url = task.native_field ? `/api/admin/inspection-tasks/builtin/${task.native_field}` : '/api/admin/inspection-tasks' + (task.id ? `/${task.id}` : '');
+        const payload = task.native_field ? {text: text.value, default_value: defaultValue()} : {text: text.value, section, input_type: type.value, options: editor.values(), default_value: defaultValue(), ...(task.id ? {active: active.checked} : {})};
+        const response = await fetch(url, {
           method: task.id ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({text: text.value, section, input_type: type.value, options: editor.values(), default_value: defaultValue(), ...(task.id ? {active: active.checked} : {})}),
+          body: JSON.stringify(payload),
         });
         const result = await response.json();
         if (!response.ok) throw new Error(taskError(result, 'Saving task failed.'));
@@ -583,7 +597,7 @@
         await loadAdminInspectionTasks(null, true);
         inspectionTasksMessage.textContent = task.id ? 'Task updated.' : 'Task added.';
       } catch (error) { inspectionTasksMessage.textContent = error.message; }
-      finally { save.disabled = false; remove.disabled = false; }
+      finally { save.disabled = false; remove.disabled = Boolean(task.native_field); }
     });
     remove.addEventListener('click', async () => {
       if (!task.id) { row.remove(); mutationVersion++; return; }
@@ -634,9 +648,10 @@
     const response = supplied ? {ok: true} : await fetch('/api/admin/inspection-tasks');
     const result = supplied || await response.json();
     if (!response.ok) throw new Error(taskError(result, 'Unable to load inspection tasks.'));
-    rememberResponse('/api/admin/inspection-tasks', result); adminTaskSnapshot = result.tasks;
+    rememberResponse('/api/admin/inspection-tasks', result);
+    adminTaskSnapshot = [...(result.builtin_fields || []), ...result.tasks].sort((a, b) => a.position - b.position);
     const existing = new Map([...inspectionTasksBody.querySelectorAll('tr[data-task-id]')].map(row => [row.dataset.taskId, row]));
-    for (const task of result.tasks) {
+    for (const task of adminTaskSnapshot) {
       const old = existing.get(task.id); existing.delete(task.id);
       // Refresh clean definitions without discarding another row's private edits.
       const row = old && (hasDraft(old) || old.contains(document.activeElement)) ? old : makeAdminTaskRow(task, task.section);
@@ -659,6 +674,16 @@
     }
   }
 
+  function applyNativeFieldDefinitions(fields) {
+    for (const field of fields || []) {
+      const control = detailFields()[field.native_field];
+      if (!control) continue;
+      document.querySelector(`label[for="${control.id}"]`).textContent = `${field.text}:`;
+      const createControl = newInspectionForm.elements[field.native_field];
+      if (createControl) newInspectionForm.querySelector(`label[for="${createControl.id}"]`).textContent = `${field.text}:`;
+    }
+  }
+
   async function loadInspectionChecklist(inspectionId, supplied = null) {
     await Promise.all([...checklistSaves]);
     if (currentInspectionId !== inspectionId) return;
@@ -673,7 +698,8 @@
       const selectionStart = focused?.selectionStart;
       const selectionEnd = focused?.selectionEnd;
       const fieldContainers = {store_data: document.getElementById('store-data-fields'), compliance: document.getElementById('compliance-fields'), nfpa72: document.getElementById('nfpa72-fields')};
-      for (const container of Object.values(fieldContainers)) container.replaceChildren();
+      for (const container of Object.values(fieldContainers)) container.querySelectorAll(':scope > [data-custom-field]').forEach(row => row.remove());
+      applyNativeFieldDefinitions(result.builtin_fields);
       for (const task of result.tasks) {
         const checkbox = task.input_type === 'checkbox';
         const row = document.createElement('div'); row.className = checkbox ? 'inspection-task-row' : 'form-field inspection-task-value';
@@ -683,7 +709,7 @@
         const label = document.createElement(checkbox ? 'span' : 'label');
         if (!checkbox) label.htmlFor = control.id;
         label.textContent = task.text + (checkbox ? '' : ':');
-        label.style.margin = '0'; label.style.fontWeight = '400';
+        label.style.margin = '0';
         const choices = [];
         const syncChoices = () => {
           for (const choice of choices) {
@@ -725,7 +751,8 @@
           note.textContent = task.removed_choice ? 'Saved choice retained. Select a current choice to change it.' : 'The previous answer is retained in history. Enter a value for the new type.';
           row.append(note);
         }
-        fieldContainers[task.section || 'compliance'].append(row);
+        const compact = document.createElement('div'); compact.className = 'compact-field'; compact.dataset.customField = task.id; compact.append(row);
+        fieldContainers[task.section || 'compliance'].append(compact);
         control.addEventListener('input', updateChecklistProgress);
         if (!checkbox) control.addEventListener('keydown', (event) => {
           if (event.key === 'Enter' && control.tagName === 'INPUT') { event.preventDefault(); control.dispatchEvent(new Event('change', { bubbles: true })); }
@@ -761,7 +788,10 @@
           checklistSaves.add(save); save.finally(() => checklistSaves.delete(save));
         });
       }
-      for (const container of Object.values(fieldContainers)) rememberControls(container);
+      for (const container of Object.values(fieldContainers)) for (const row of container.querySelectorAll(':scope > [data-custom-field]')) rememberControls(row);
+      const positions = new Map([...(result.builtin_fields || []), ...result.tasks].map(field => [field.native_field || field.id, field.position]));
+      const storeFields = fieldContainers.store_data;
+      storeFields.append(...[...storeFields.children].sort((a, b) => positions.get(a.dataset.inspectionField || a.dataset.customField) - positions.get(b.dataset.inspectionField || b.dataset.customField)));
       if (focusedId) {
         const replacement = document.getElementById(focusedId);
         replacement?.focus({ preventScroll: true });
@@ -2010,12 +2040,24 @@
     }
   });
 
-  startCreateButton?.addEventListener('click', () => {
+  startCreateButton?.addEventListener('click', async () => {
+    if (startCreateButton.disabled) return;
+    startCreateButton.disabled = true;
+    let fields;
+    try {
+      const response = await fetch('/api/inspections/field-definitions');
+      const result = await response.json();
+      if (!response.ok) throw new Error(taskError(result, 'Unable to load Store Data fields.'));
+      fields = result.fields;
+    } catch (error) { homeMessage.textContent = error.message; return; }
+    finally { startCreateButton.disabled = false; }
     newInspectionForm.reset();
     const today = new Date();
     const localDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
     newInspectionForm.elements.start_date.value = localDate;
     newInspectionForm.elements.completion_date.value = localDate;
+    applyNativeFieldDefinitions(fields);
+    for (const field of fields) if (field.default_value) newInspectionForm.elements[field.native_field].value = field.default_value;
     newInspectionMessage.textContent = '';
     newInspectionModal.classList.add('open');
     newInspectionForm.elements.store_number.focus();

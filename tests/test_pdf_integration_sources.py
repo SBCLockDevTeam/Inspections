@@ -285,3 +285,26 @@ def test_task_defaults_match_inspection_values_and_preserve_explicit_clear(datab
         session.get(InspectionTask,'task').default_value = 'Cannot hide changed type'
     changed = capture_snapshot(store,ident,'compliance',actor_id='tech',panel_ids=[])
     assert changed.resolve(SourceRef(kind='checklist',id='task')).state == 'changed'
+
+
+def test_native_labels_keep_source_identity_and_defaults_never_replace_saved_properties(database):
+    from alarm_inspection.inspection_fields import native_fields, save_native_field
+    from alarm_inspection.integrations.pdf_sources import definition_catalog
+    store, config, ident = setup_config(database)
+    before = capture_snapshot(store,ident,'compliance',actor_id='tech',panel_ids=[])
+    with store() as session:
+        catalog_before = definition_catalog(session, actor_id='admin')
+        fields = native_fields(session)
+    field = next(field for field in fields if field['native_field']=='inspector_name')
+    field.update(text='Lead Inspector',default_value='Office contact')
+    with store.begin() as session: save_native_field(session,field)
+    with store() as session: catalog_after = definition_catalog(session,actor_id='admin')
+    entry = next(entry for entry in catalog_after['entries'] if entry['source'].get('field')=='inspector_name')
+    assert entry['label']=='Lead Inspector' and entry['source']['kind']=='inspection'
+    assert catalog_before['schema_sha256'] != catalog_after['schema_sha256']
+    after = capture_snapshot(store,ident,'compliance',actor_id='tech',panel_ids=[])
+    assert after.resolve(SourceRef(kind='inspection',field='inspector_name')).state=='missing'
+    assert before.fingerprint == after.fingerprint
+    with store() as session:
+        assert session.get(Inspection,ident).inspector_name == ''
+        assert session.query(InspectionTask).count()==1
