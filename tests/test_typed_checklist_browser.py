@@ -43,6 +43,7 @@ def test_admin_choices_and_typed_checklist_values_sync(tmp_path, monkeypatch):
                 await a.locator('#avatar-button').click(button='right'); await a.click('#avatar-menu-option-admin'); await a.click('#admin-tab-inspection-tasks')
                 for label, kind in [('Restore system','checkbox'),('Panel serial','textbox'),('Condition','dropdown')]:
                     await a.fill('#inspection-task-text',label); await a.select_option('#inspection-task-type',kind)
+                    await a.select_option('#inspection-task-section','nfpa72' if label=='Panel serial' else 'compliance')
                     if kind == 'dropdown':
                         choices = a.locator('#inspection-task-options .task-option-input')
                         await choices.nth(0).fill('Ready'); await a.locator('#inspection-task-options .add-task-choice').click(); await choices.nth(1).fill('Remove me')
@@ -60,6 +61,8 @@ def test_admin_choices_and_typed_checklist_values_sync(tmp_path, monkeypatch):
                 for page in (b,c):
                     await page.click('#refresh-inspections'); await page.select_option('#inspection-picker',inspection_id); await page.click('#open-inspection')
                     await playwright.expect(page.locator('#inspection-screen')).to_be_visible()
+                assert await b.locator(f'#export-form-details-section #checklist-task-{ids["Panel serial"]}').count()==1
+                assert await b.locator(f'#checklist-section #checklist-task-{ids["Panel serial"]}').count()==0
                 text = f'#checklist-task-{ids["Panel serial"]}'; dropdown = f'#checklist-task-{ids["Condition"]}'; checkbox = f'#checklist-task-{ids["Restore system"]}-yes'
                 await b.locator(checkbox).check(); await b.fill(text,'SN-0042'); await b.locator(text).press('Tab')
                 await b.select_option(dropdown,'Ready'); await b.locator('#inspection-name').click()
@@ -76,10 +79,10 @@ def test_admin_choices_and_typed_checklist_values_sync(tmp_path, monkeypatch):
                 await c.locator(choices+'-na').focus(); await c.locator(choices+'-na').press('Space')
                 await playwright.expect(b.locator(choices+'-na')).to_be_checked(timeout=12000)
                 await playwright.expect(b.locator(choices+'-no')).not_to_be_checked()
-                await playwright.expect(b.locator('#checklist-progress')).to_have_text('3 of 3 complete')
+                await playwright.expect(b.locator('#checklist-progress')).to_have_text('2 of 2 complete')
                 await c.locator(choices+'-na').uncheck()
                 await playwright.expect(b.locator('.task-checkbox-choices input:checked')).to_have_count(0,timeout=12000)
-                await playwright.expect(b.locator('#checklist-progress')).to_have_text('2 of 3 complete')
+                await playwright.expect(b.locator('#checklist-progress')).to_have_text('1 of 2 complete')
                 await b.locator(checkbox).check()
                 await playwright.expect(c.locator(checkbox)).to_be_checked(timeout=12000)
                 # Failed saves restore the last saved selection and keep the boxes usable.

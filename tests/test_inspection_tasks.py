@@ -240,3 +240,50 @@ def test_existing_checkbox_answers_use_new_format_without_rewriting_history(task
     assert client.patch(f'/api/inspections/{one}/checklist/{task["id"]}', json={'value': 'NA'}).status_code == 200
     with store() as session:
         assert session.query(InspectionChecklistDecision).count() == 3
+
+
+def test_sections_move_fields_without_changing_answers(task_app):
+    client,store=task_app;inspection=make_inspection(client)
+    field=add_task(client,'NFPA panel notes',section='nfpa72',input_type='textbox')
+    assert field['section']=='nfpa72'
+    response=client.patch(f'/api/inspections/{inspection}/checklist/{field["id"]}',json={'value':'Existing panel notes'})
+    assert response.status_code==200
+    response=client.patch('/api/admin/inspection-tasks/'+field['id'],json={'section':'compliance'})
+    assert response.status_code==200 and response.json()['task']['section']=='compliance'
+    rows=client.get(f'/api/inspections/{inspection}/checklist').json()['tasks']
+    assert next(row for row in rows if row['id']==field['id'])['value']=='Existing panel notes'
+    with store() as session:
+        decision=session.query(InspectionChecklistDecision).filter_by(task_id=field['id']).one()
+        assert decision.value=='Existing panel notes'
+    assert client.post('/api/admin/inspection-tasks',json={'text':'Invalid section','section':'points'}).status_code==422
+    assert client.patch('/api/admin/inspection-tasks/'+field['id'],json={'section':None}).status_code==422
+
+
+def test_legacy_section_migration_moves_only_panel_fields_once(tmp_path,monkeypatch):
+    from sqlalchemy import create_engine,text
+    from alarm_inspection.storage import open_store,InspectionTask
+    url=f'sqlite:///{tmp_path / "legacy-section.db"}'
+    engine=create_engine(url)
+    with engine.begin() as connection:
+        connection.execute(text('CREATE TABLE inspection_tasks (id VARCHAR(36) PRIMARY KEY, text VARCHAR(200), text_key VARCHAR(600) UNIQUE, input_type VARCHAR(20), options_json TEXT, position INTEGER, active BOOLEAN, created_at DATETIME)'))
+        for ident,label in [('panel','Panel Model'),('firmware','Firmware version'),('other','Check doors')]:
+            connection.execute(text("INSERT INTO inspection_tasks VALUES (:id,:label,:key,'textbox','[]',1,1,'2026-10-29 00:00:00')"),dict(id=ident,label=label,key=label.casefold()))
+    engine.dispose();monkeypatch.setenv('DATABASE_URL',url)
+    store=open_store()
+    with store.begin() as session:
+        assert session.get(InspectionTask,'panel').section=='nfpa72'
+        assert session.get(InspectionTask,'firmware').section=='nfpa72'
+        assert session.get(InspectionTask,'other').section=='compliance'
+        session.get(InspectionTask,'panel').section='compliance'
+    another=open_store()
+    with another() as session:assert session.get(InspectionTask,'panel').section=='compliance'
+    store.kw['bind'].dispose();another.kw['bind'].dispose()
+
+
+def test_section_move_preserves_dropdown_definition_bytes(task_app):
+    client,store=task_app
+    field=add_task(client,'Panel Model choices',input_type='dropdown',options=['A','B'])
+    with store.begin() as session:session.get(InspectionTask,field['id']).options_json='["A","B"]'
+    response=client.patch('/api/admin/inspection-tasks/'+field['id'],json={'section':'nfpa72','input_type':'dropdown','options':['A','B']})
+    assert response.status_code==200
+    with store() as session:assert session.get(InspectionTask,field['id']).options_json=='["A","B"]'

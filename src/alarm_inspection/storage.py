@@ -112,6 +112,7 @@ class InspectionTask(Base):
     text_key: Mapped[str] = mapped_column(String(600), unique=True)
     input_type: Mapped[str] = mapped_column(String(20), default="checkbox")
     options_json: Mapped[str] = mapped_column(Text, default="[]")
+    section: Mapped[str] = mapped_column(String(20), default="compliance", server_default="compliance", nullable=False)
     position: Mapped[int] = mapped_column(default=1)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
@@ -292,15 +293,23 @@ def _ensure_point_list_decision_columns(engine) -> None:
 
 def _ensure_checklist_columns(engine) -> None:
     additions = {
-        "inspection_tasks": {"input_type": "VARCHAR(20) DEFAULT 'checkbox'", "options_json": "TEXT DEFAULT '[]'"},
+        "inspection_tasks": {"section": "VARCHAR(20) NOT NULL DEFAULT 'compliance'", "input_type": "VARCHAR(20) DEFAULT 'checkbox'", "options_json": "TEXT DEFAULT '[]'"},
         "inspection_checklist_decisions": {"input_type": "VARCHAR(20) DEFAULT 'checkbox'", "value": "VARCHAR(2000) DEFAULT ''", "options_json": "TEXT DEFAULT '[]'"},
     }
     for table, columns in additions.items():
         existing = {column["name"] for column in inspect(engine).get_columns(table)}
         with engine.begin() as connection:
+            if engine.dialect.name == 'sqlite' and table == 'inspection_tasks' and 'section' not in existing:
+                # SQLite needs an explicit BEGIN to make column creation and
+                # the one-time field move atomic together.
+                connection.exec_driver_sql('BEGIN IMMEDIATE')
             for name, definition in columns.items():
                 if name not in existing:
                     connection.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {definition}"))
+                    if table == "inspection_tasks" and name == "section":
+                        # One-time move only. IDs, answers, types and options stay intact.
+                        connection.execute(text("UPDATE inspection_tasks SET section = 'nfpa72' "
+                            "WHERE lower(trim(text)) IN ('panel model', 'firmware version')"))
 
 
 def _ensure_point_list_columns(engine) -> None:

@@ -46,10 +46,10 @@ def _configuration(base, payload, entries, receipt, ident):
         if m is None:
             m=TargetMapping(target_id=target.id,disposition='sign_later' if target.kind=='signature' else 'blank',reason='Left unmapped when saving the integration.')
         if m.required_when or m.disposition=='computed':
-            raise ValueError('Choose one Store Data or Check List field for each PDF field.')
+            raise ValueError('Choose one Store Data, NFPA 72 or Compliance field for each PDF field.')
         if m.source:
             entry=entries.get(canonical_json(m.source))
-            if entry is None: raise ValueError('Choose an active Store Data or Check List field.')
+            if entry is None: raise ValueError('Choose an active Store Data, NFPA 72 or Compliance field.')
             if m.default_value is not None and target.kind != 'checkbox':
                 typ=entry['type']; value=m.default_value
                 if not answered(value): raise ValueError('Enter a default value or turn off Use default.')
@@ -59,7 +59,7 @@ def _configuration(base, payload, entries, receipt, ident):
                     from datetime import date
                     date.fromisoformat(value)
             if target.kind in {'checkbox','radio'} and (entry['type']!='yes_no_na' or m.check_on is None):
-                raise ValueError('Map result marks to a Yes/No/NA Check List field and choose when to mark it.')
+                raise ValueError('Map result marks to a Yes/No/NA Inspection field and choose when to mark it.')
             m=m.model_copy(update={'source_schema_sha256':entry.get('schema_sha256')})
         if m.default_value is not None and not m.source: raise ValueError('A fallback default requires a mapped source. Use a fixed value for an unmapped text field.')
         if target.kind=='radio' and m.disposition=='constant': raise ValueError('Radio defaults require an explicit group policy.')
@@ -74,7 +74,7 @@ def _configuration(base, payload, entries, receipt, ident):
         mapped.append(m)
     raw=base.model_dump(mode='json')
     raw.update(version_id=ident,original=receipt.model_dump(mode='json'),mapping_mode='store_checklist',mappings=[m.model_dump(mode='json') for m in mapped],
-        manual_inputs=[],answer_groups=[],applicability='no_panel',applicability_reason='These forms use only Store Data and Check List fields.',
+        manual_inputs=[],answer_groups=[],applicability='no_panel',applicability_reason='These forms use only Store Data, NFPA 72 and Compliance fields.',
         categories=[],signature_policy='later_signing',supplemental_policy='not_applicable',supplemental_source=None,filename_policy='completion_date_panel_id')
     return IntegrationConfig.model_validate(raw)
 
@@ -92,7 +92,7 @@ def save_mapping(store, version_id, raw, *, files, actor_id):
         if base.normalized: raise ValueError('This template needs Debug review before simplified mapping.')
         catalog=definition_catalog(session,actor_id=actor_id)
         if payload.source_catalog_sha256 != catalog['schema_sha256']:
-            raise repo.ConflictError('Check List fields changed. Reopen the integration to review the current fields.')
+            raise repo.ConflictError('Inspection fields changed. Reopen the integration to review the current fields.')
         original=files.read(base.original)
     ident=str(uuid4())
     receipt=files.put(files.template_key(base.integration_key,ident,'original.pdf'),original)
@@ -137,7 +137,7 @@ def save_mapping(store, version_id, raw, *, files, actor_id):
         _base(session,version_id,payload,actor_id)
         # A checklist type/options change during rendering must not publish stale mappings.
         current=definition_catalog(session,actor_id=actor_id)
-        if current!=catalog: raise repo.ConflictError('Check List fields changed while saving. Reload and review your mapping.')
+        if current!=catalog: raise repo.ConflictError('Inspection fields changed while saving. Reload and review your mapping.')
         row=repo.create_draft(session,config,files=files,actor_id=actor_id)
         session.execute(update(PdfIntegrationVersion).where(PdfIntegrationVersion.id==ident,PdfIntegrationVersion.status=='draft')
             .values(status='published',revision=2,verification_json=canonical_json(evidence),updated_at=repo._now()))
@@ -146,5 +146,5 @@ def save_mapping(store, version_id, raw, *, files, actor_id):
         if result.rowcount!=1: raise repo.ConflictError('Integration changed before activation. Your edits are retained.')
         repo._audit(session,config.integration_key,ident,'simple_mapping_saved',actor_id,{
             'previous_version_id':version_id,'mapped_fields':sum(m.disposition in {'source','constant'} for m in config.mappings),
-            'scope':'Store Data and Check List only','evidence':evidence.model_dump(mode='json')})
+            'scope':'Store Data, NFPA 72 and Compliance only','evidence':evidence.model_dump(mode='json')})
     return ident

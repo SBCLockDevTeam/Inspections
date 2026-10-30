@@ -11,10 +11,12 @@ from sqlalchemy.exc import IntegrityError
 
 from alarm_inspection.api.auth_support import require_admin
 from alarm_inspection.domain.checklist import CHECKBOX_CHOICES, checkbox_value, validate_options, validate_answer
+from alarm_inspection.domain.inspection_sections import InspectionSection
 from alarm_inspection.storage import Inspection, InspectionTask, InspectionChecklistDecision
 
 
 class TaskCreate(BaseModel):
+    section: InspectionSection = "compliance"
     text: str = Field(min_length=1, max_length=200)
     position: int | None = Field(default=None, ge=1, le=10000, strict=True)
     input_type: Literal["checkbox", "textbox", "dropdown"] = "checkbox"
@@ -35,6 +37,7 @@ class TaskCreate(BaseModel):
 
 
 class TaskUpdate(BaseModel):
+    section: InspectionSection | None = None
     text: str | None = Field(default=None, min_length=1, max_length=200)
     position: int | None = Field(default=None, ge=1, le=10000, strict=True)
     active: StrictBool | None = None
@@ -59,7 +62,7 @@ class ChecklistUpdate(BaseModel):
 
 
 def serialize_task(task):
-    return {"id": task.id, "text": task.text, "position": task.position, "active": task.active, "input_type": task.input_type, "options": json.loads(task.options_json or "[]")}
+    return {"section": task.section, "id": task.id, "text": task.text, "position": task.position, "active": task.active, "input_type": task.input_type, "options": json.loads(task.options_json or "[]")}
 
 
 def admin_only(request: Request):
@@ -85,7 +88,7 @@ def create_admin_router(store):
                 position = payload.position or ((session.query(func.max(InspectionTask.position)).scalar() or 0) + 1)
                 task = InspectionTask(id=str(uuid4()), text=payload.text, text_key=payload.text.casefold(),
                                       input_type=payload.input_type, options_json=json.dumps(payload.options),
-                                      position=position, active=True, created_at=datetime.now(timezone.utc))
+                                      section=payload.section, position=position, active=True, created_at=datetime.now(timezone.utc))
                 session.add(task)
                 session.flush()
                 result = serialize_task(task)
@@ -106,11 +109,14 @@ def create_admin_router(store):
                     options = validate_options(input_type, options)
                 except ValueError as exc:
                     raise HTTPException(status_code=422, detail=str(exc)) from exc
+                if input_type != task.input_type or options != json.loads(task.options_json or "[]"):
+                    task.options_json = json.dumps(options)
                 task.input_type = input_type
-                task.options_json = json.dumps(options)
                 if payload.text is not None:
                     task.text = payload.text
                     task.text_key = payload.text.casefold()
+                if payload.section is not None:
+                    task.section = payload.section
                 if payload.position is not None:
                     task.position = payload.position
                 if payload.active is not None:

@@ -151,7 +151,7 @@ def test_technician_two_devices_private_edits_failure_recovery_and_readiness(bro
                 for page in (a,b):
                     page.on('pageerror',lambda e:errors.append(str(e)));await login(page,base)
                     await page.select_option('#inspection-picker',inspection);await page.click('#open-inspection')
-                    await page.locator('#export-form-details-section summary').click()
+                    await page.click('#inspection-menu-button');await page.click('#inspection-menu-option-form-exports')
                     await playwright.expect(page.locator('[data-form="compliance"] [data-answer]')).to_have_count(3)
                 selector='#form-detail-compliance-remarks-inspection'
                 await a.fill(selector,'Private device A draft')
@@ -217,7 +217,7 @@ def test_technician_explicit_scope_navigation_and_definition_changes(browser_app
             browser=await p.chromium.launch(headless=True,args=['--no-sandbox']);page=await browser.new_page()
             try:
                 await login(page,base);await page.select_option('#inspection-picker',inspection);await page.click('#open-inspection')
-                await page.locator('#export-form-details-section summary').click()
+                await page.click('#inspection-menu-button');await page.click('#inspection-menu-option-form-exports')
                 card=page.locator('[data-form="compliance"]')
                 await playwright.expect(card.locator('[data-answer]')).to_have_count(0)
                 await card.locator('[data-scope-panel="explicit-panel"]').check()
@@ -228,8 +228,10 @@ def test_technician_explicit_scope_navigation_and_definition_changes(browser_app
                 # An unrelated tab/navigation retains a private unsaved override draft.
                 await card.locator('summary').click()
                 await card.get_by_label('Override reason for Remarks').fill('Private reason, not submitted')
+                await page.click('#close-inspection-exports')
                 await page.click('#home-link-from-inspection')
                 await page.select_option('#inspection-picker',inspection);await page.click('#open-inspection')
+                await page.click('#inspection-menu-button');await page.click('#inspection-menu-option-form-exports')
                 await playwright.expect(card.get_by_label('Override reason for Remarks')).to_have_value('Private reason, not submitted')
                 # Publish a different question under the same stable ID; earlier decisions survive.
                 copied=client.post('/api/admin/integrations/versions/'+draft['id']+'/copy').json()
@@ -291,7 +293,7 @@ def test_technician_preview_stale_confirmation_final_download_and_history(browse
             try:
                 await page.add_init_script("Object.defineProperty(window.crypto,'randomUUID',{value:undefined})")
                 await login(page,base);await page.select_option('#inspection-picker',inspection);await page.click('#open-inspection')
-                await page.locator('#export-form-details-section summary').click()
+                await page.click('#inspection-menu-button');await page.click('#inspection-menu-option-form-exports')
                 await page.fill('#form-detail-compliance-remarks-inspection','Saved negative result: No')
                 await page.locator('[data-form="compliance"] h3').click()
                 export=page.get_by_role('button',name='Export Compliance Form',exact=True)
@@ -348,6 +350,7 @@ def test_simple_picker_save_then_export_without_manual_details(browser_app,tmp_p
                 [(d.id,d.task_id,d.value,d.completed) for d in session.query(InspectionChecklistDecision).order_by(InspectionChecklistDecision.id)])
     original_data=saved_data()
     async def check():
+        nonlocal original_data
         async with playwright.async_playwright() as p:
             browser=await p.chromium.launch(headless=True,args=['--no-sandbox'])
             page=await browser.new_page();errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
@@ -361,7 +364,7 @@ def test_simple_picker_save_then_export_without_manual_details(browser_app,tmp_p
                 target=next(t for t in draft['config']['inventory']['targets'] if t['kind']=='text')
                 await page.locator(f'#simple-targets [data-target="{target["id"]}"]').click()
                 assert await page.locator('#simple-editor').get_by_role('heading',name='Store Data',exact=True).is_visible()
-                assert await page.locator('#simple-editor').get_by_role('heading',name='Check List',exact=True).is_visible()
+                assert await page.locator('#simple-editor').get_by_role('heading',name='Compliance',exact=True).is_visible()
                 await page.locator('#simple-editor').get_by_role('button',name='Start Date',exact=True).click()
                 source=page.locator('#simple-editor').get_by_role('button',name='Start Date',exact=True)
                 await playwright.expect(source).to_have_attribute('aria-pressed','true')
@@ -382,6 +385,18 @@ def test_simple_picker_save_then_export_without_manual_details(browser_app,tmp_p
                 await playwright.expect(default).to_have_value('2025-01-01')
                 await source.click()
                 await playwright.expect(default).to_have_value('2025-01-01')
+                # New fields in either section appear without discarding local mapping edits.
+                created=[]
+                for section in ('nfpa72','compliance'):
+                    response=client.post('/api/admin/inspection-tasks',json={'text':'New '+section+' integration field','section':section,'input_type':'textbox'})
+                    assert response.status_code==201,response.text
+                    created.append(response.json()['task'])
+                await page.evaluate('window.PdfIntegrations.refreshAdmin()')
+                for field in created:
+                    await playwright.expect(page.locator('#simple-editor').get_by_role('button',name=field['text'],exact=True)).to_be_visible()
+                await playwright.expect(default).to_have_value('2025-01-01')
+                # These are intentional schema additions; compare values/history only below.
+                original_data=(original_data[0],saved_data()[1],original_data[2])
                 rect=page.locator(f'#simple-sheet [data-preview-target="{target["id"]}"]')
                 box=await rect.bounding_box();sheet=await page.locator('#simple-sheet').bounding_box()
                 assert abs((box['x']-sheet['x'])-target['preview_rect'][0])<2
@@ -424,7 +439,7 @@ def test_simple_picker_save_then_export_without_manual_details(browser_app,tmp_p
                 await page.select_option('#inspection-picker',inspection)
                 await page.click('#open-inspection')
                 await playwright.expect(page.locator('#inspection-screen')).to_be_visible()
-                await page.locator('#export-form-details-section summary').click()
+                await page.click('#inspection-menu-button');await page.click('#inspection-menu-option-form-exports')
                 card=page.locator('[data-form="compliance"]')
                 await playwright.expect(card.locator('[data-answer]')).to_have_count(0)
                 await playwright.expect(card.get_by_role('button',name='Export Compliance Form',exact=True)).to_be_enabled()

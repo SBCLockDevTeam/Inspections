@@ -451,7 +451,7 @@
   async function loadAdminInspectionTasks(supplied = null) {
     if (!supplied) {
       const loading = document.createElement('tr');
-      const cell = document.createElement('td'); cell.colSpan = 5; cell.textContent = 'Loading inspection tasks...';
+      const cell = document.createElement('td'); cell.colSpan = 6; cell.textContent = 'Loading inspection tasks...';
       loading.append(cell); inspectionTasksBody.replaceChildren(loading);
     }
     const response = supplied ? { ok: true } : await fetch('/api/admin/inspection-tasks');
@@ -468,6 +468,10 @@
       text.autocomplete = 'off'; text.name = `inspection_task_${task.id}`;
       text.className = 'admin-task-text'; text.setAttribute('aria-label', 'Task description');
       textCell.append(text);
+      const sectionCell = document.createElement('td');
+      const section = document.createElement('select'); section.setAttribute('aria-label', 'Field section');
+      section.add(new Option('Compliance', 'compliance')); section.add(new Option('NFPA 72', 'nfpa72'));
+      section.value = task.section || 'compliance'; sectionCell.append(section);
       const typeCell = document.createElement('td');
       const type = makeTaskTypeSelect(task.input_type);
       const optionsRoot = document.createElement('div');
@@ -492,7 +496,7 @@
         try {
           const response = await fetch(`/api/admin/inspection-tasks/${task.id}`, {
             method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text: text.value, position: Number(position.value), active: active.checked, input_type: type.value, options: editor.values() }),
+            body: JSON.stringify({ text: text.value, section: section.value, position: Number(position.value), active: active.checked, input_type: type.value, options: editor.values() }),
           });
           const result = await response.json();
           if (!response.ok) throw new Error(taskError(result, 'Saving task failed.'));
@@ -502,7 +506,7 @@
         finally { save.disabled = false; }
       });
       actions.append(save);
-      row.append(textCell, typeCell, orderCell, activeCell, actions);
+      row.append(textCell, sectionCell, typeCell, orderCell, activeCell, actions);
       inspectionTasksBody.append(row);
     }
     rememberControls(inspectionTasksBody);
@@ -516,7 +520,7 @@
     inspectionTasksMessage.textContent = 'Adding task...';
     const position = document.querySelector('#inspection-task-position').value;
     if (!newTaskOptions.valid()) { button.disabled = false; return; }
-    const payload = { text: document.querySelector('#inspection-task-text').value, input_type: newTaskType.value, options: newTaskOptions.values() };
+    const payload = { section: document.querySelector('#inspection-task-section').value, text: document.querySelector('#inspection-task-text').value, input_type: newTaskType.value, options: newTaskOptions.values() };
     if (position) payload.position = Number(position);
     try {
       const response = await fetch('/api/admin/inspection-tasks', {
@@ -533,9 +537,11 @@
   });
 
   function updateChecklistProgress() {
-    const controls = [...checklistContainer.querySelectorAll('[data-task-id]')];
-    const complete = controls.filter((control) => Boolean(control.value.trim())).length;
-    checklistProgress.textContent = controls.length ? `${complete} of ${controls.length} complete` : '';
+    for (const [containerId, progressId] of [['compliance-fields','checklist-progress'],['nfpa72-fields','nfpa72-progress']]) {
+      const controls = [...document.getElementById(containerId).querySelectorAll('[data-task-id]')];
+      const complete = controls.filter(control => Boolean(control.value.trim())).length;
+      document.getElementById(progressId).textContent = controls.length ? `${complete} of ${controls.length} complete` : '';
+    }
   }
 
   async function loadInspectionChecklist(inspectionId, supplied = null) {
@@ -545,14 +551,14 @@
       const response = supplied ? { ok: true } : await fetch(`/api/inspections/${inspectionId}/checklist`);
       const result = supplied || await response.json();
       if (currentInspectionId !== inspectionId) return;
-      if (!response.ok) throw new Error(taskError(result, 'Unable to load the Check List.'));
+      if (!response.ok) throw new Error(taskError(result, 'Unable to load Inspection fields.'));
       rememberResponse(`/api/inspections/${inspectionId}/checklist`, result);
       const focused = checklistContainer.contains(document.activeElement) ? document.activeElement : null;
       const focusedId = focused?.id;
       const selectionStart = focused?.selectionStart;
       const selectionEnd = focused?.selectionEnd;
-      checklistContainer.replaceChildren();
-      if (!result.tasks.length) checklistContainer.textContent = 'No inspection tasks have been added. An administrator can add them under Administration → Inspection Tasks.';
+      const fieldContainers = {compliance: document.getElementById('compliance-fields'), nfpa72: document.getElementById('nfpa72-fields')};
+      for (const container of Object.values(fieldContainers)) container.replaceChildren();
       for (const task of result.tasks) {
         const checkbox = task.input_type === 'checkbox';
         const row = document.createElement('div'); row.className = checkbox ? 'inspection-task-row' : 'form-field inspection-task-value';
@@ -603,7 +609,7 @@
           note.textContent = task.removed_choice ? 'Saved choice retained. Select a current choice to change it.' : 'The previous answer is retained in history. Enter a value for the new type.';
           row.append(note);
         }
-        checklistContainer.append(row);
+        fieldContainers[task.section || 'compliance'].append(row);
         control.addEventListener('input', updateChecklistProgress);
         if (!checkbox) control.addEventListener('keydown', (event) => {
           if (event.key === 'Enter' && control.tagName === 'INPUT') { event.preventDefault(); control.dispatchEvent(new Event('change', { bubbles: true })); }
@@ -624,7 +630,7 @@
               const result = await response.json();
               if (!response.ok) throw new Error(taskError(result, 'Saving checklist value failed.'));
               fieldBaselines.set(control, value);
-              if (currentInspectionId === inspectionId) checklistMessage.textContent = 'Check List saved.';
+              if (currentInspectionId === inspectionId) checklistMessage.textContent = `${task.section === 'nfpa72' ? 'NFPA 72' : 'Compliance'} saved.`;
               return true;
             } catch (error) {
               if (checkbox) control.value = previous;
@@ -651,7 +657,7 @@
     }
   }
 
-  document.querySelector('#refresh-checklist')?.addEventListener('click', async () => {
+  for (const buttonId of ['refresh-checklist','refresh-nfpa72']) document.getElementById(buttonId)?.addEventListener('click', async () => {
     if (!currentInspectionId) return;
     await Promise.all([...checklistSaves]);
     if (hasDraft(checklistContainer)) { checklistMessage.textContent = 'Save the edited checklist value before refreshing.'; return; }

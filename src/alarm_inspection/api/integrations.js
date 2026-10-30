@@ -288,7 +288,7 @@
   window.PdfIntegrations = {randomId,refreshAdmin: refresh, resetAdmin: () => {draft=null;dirty=false;editorDirty=false;test=null;verified.clear();integrations=[];root?.querySelector('#integration-cards')?.replaceChildren();root?.querySelector('#integration-workspace')?.classList.add('hidden');}};
 })();
 
-/* The normal administration workflow uses only Store Data and Check List fields. */
+/* The normal administration workflow uses only Store Data, NFPA 72 and Compliance fields. */
 (() => {
   'use strict';
   const host = document.querySelector('#admin-panel-integrations');
@@ -405,10 +405,27 @@
     $('coverage').textContent = `${connected} mapped · ${fixed} fixed · ${version.config.inventory.targets.length-connected-fixed} left blank. Defaults belong only to the PDF.`;
   }
   async function refresh(force = false) {
-    if (host.classList.contains('hidden') || busy || (!force && (dirty || host.contains(document.activeElement)))) return;
+    if (host.classList.contains('hidden') || busy) return;
+    if (!force && (dirty || host.contains(document.activeElement))) { await refreshCatalog(); return; }
     const result = await request('');
     integrations = result.integrations;
     renderCards();
+    await refreshCatalog();
+  }
+
+  async function refreshCatalog() {
+    if (version) {
+      const catalog = await request('/sources');
+      const byId = new Map(catalog.entries.map(entry => [sourceKey(entry.source), entry]));
+      const compatible = sources.every(entry => {
+        const next = byId.get(sourceKey(entry.source));
+        return next && next.type === entry.type && JSON.stringify(next.options) === JSON.stringify(entry.options) && next.schema_sha256 === entry.schema_sha256;
+      });
+      if (compatible && catalog.schema_sha256 !== sourceCatalogHash) {
+        sources = catalog.entries; sourceCatalogHash = catalog.schema_sha256;
+        if (!$('editor').contains(document.activeElement)) renderEditor();
+      }
+    }
   }
 
   function renderCards() {
@@ -598,7 +615,7 @@
     const choices = node('div', null, {class: 'pdf-source-choices', 'aria-label': 'Inspection fields'});
     editor.append(choices);
     let selectedButton = null;
-    for (const group of ['Store Data', 'Check List']) {
+    for (const group of ['Store Data', 'NFPA 72', 'Compliance']) {
       const section = node('section', null, {'data-source-group': group});
       section.append(node('h4', group));
       for (const source of sources.filter(s => s.section === group)) {
@@ -623,7 +640,7 @@
           'data-source-section': group, 'aria-pressed': String(active)
         });
         b.disabled = buttonTarget && source.type !== 'yes_no_na';
-        if (b.disabled) b.title = 'Result marks need a Yes/No/NA Check List field.';
+        if (b.disabled) b.title = 'Result marks need a Yes/No/NA NFPA 72 or Compliance field.';
         if (active) {
           row.append(clear);
           if (check) row.append(check);
@@ -654,7 +671,7 @@
       dirty = false;
       await refreshAfterSave();
       await open(saved);
-      message('Integration saved and ready. Open an inspection, save its Store Data and Check List answers, then export ' + names[saved.key] + '.');
+      message('Integration saved and ready. Open an inspection, save its Store Data, NFPA 72 and Compliance answers, then export ' + names[saved.key] + '.');
     } finally {
       busy = false;
       $('save').disabled = false;
@@ -664,7 +681,7 @@
     integrations = (await request('')).integrations;
     renderCards();
   }
-  root.innerHTML = `<div id="simple-message" role="status"></div><div id="simple-cards"></div><section id="simple-workspace" hidden><h3 id="simple-title"></h3><p id="simple-coverage"></p><p>Map Store Data and Check List fields. Points Lists and Events are not used. Unmapped PDF fields stay blank.</p><div class="pdf-toolbar"><button id="simple-save" type="button">Save integration</button><button id="simple-discard" type="button">Discard changes</button><label>Page: <select id="simple-page"></select></label><label>Zoom: <select id="simple-zoom"><option value="0.5">50%</option><option value="1" selected>100%</option><option value="1.5">150%</option></select></label><label>Find PDF field: <input id="simple-search" type="search"></label></div><div class="pdf-mapping-grid"><div id="simple-targets" aria-label="PDF fields"></div><div class="pdf-page-scroll"><div id="simple-sheet" class="pdf-simple-sheet"></div></div><div id="simple-editor"></div></div></section>`;
+  root.innerHTML = `<div id="simple-message" role="status"></div><div id="simple-cards"></div><section id="simple-workspace" hidden><h3 id="simple-title"></h3><p id="simple-coverage"></p><p>Map Store Data, NFPA 72 and Compliance fields. Points Lists and Events are not used. Unmapped PDF fields stay blank.</p><div class="pdf-toolbar"><button id="simple-save" type="button">Save integration</button><button id="simple-discard" type="button">Discard changes</button><label>Page: <select id="simple-page"></select></label><label>Zoom: <select id="simple-zoom"><option value="0.5">50%</option><option value="1" selected>100%</option><option value="1.5">150%</option></select></label><label>Find PDF field: <input id="simple-search" type="search"></label></div><div class="pdf-mapping-grid"><div id="simple-targets" aria-label="PDF fields"></div><div class="pdf-page-scroll"><div id="simple-sheet" class="pdf-simple-sheet"></div></div><div id="simple-editor"></div></div></section>`;
   $('save').addEventListener('click', () => save().catch(e => message(e.message)));
   $('discard').addEventListener('click', async () => {
     if (dirty && !window.confirm('Discard your unsaved mapping edits and load current saved mappings?')) return;
@@ -732,6 +749,12 @@
   if (!root) return;
   const message = document.querySelector('#form-details-message');
   const names = {nfpa72:'NFPA 72',compliance:'Compliance inspection'};
+  const exportDialog = document.getElementById('inspection-export-dialog');
+  document.getElementById('inspection-menu-option-form-exports')?.addEventListener('click', () => {
+    document.getElementById('inspection-menu').classList.add('hidden');
+    if (active) { exportDialog.showModal(); refresh(); }
+  });
+  document.getElementById('close-inspection-exports')?.addEventListener('click', () => exportDialog.close());
   const records = new Map();
   let active = null, epoch = 0, reading = false, controller = null;
   const fieldKey = field => `${field.definition.id}:${field.panel_id || ''}`;
@@ -768,6 +791,7 @@
   }
   function setInspection(id) {
     if (active===id) return;
+    exportDialog?.close();
     previewDialog?.close();previewDialog?.remove();previewDialog=null;
     active=id;epoch++;controller?.abort();reading=false;root.replaceChildren();message.textContent='';
     if (id) { render(); refresh(); }
@@ -825,7 +849,7 @@
       card.append(node('p',form.export_reason,{class:'pdf-export-reason'}));
       card.append(node('ul',null,{class:'pdf-readiness-blockers'}));root.append(card);
     }
-    card.querySelector('.pdf-form-summary').textContent=form.mapping_mode==='store_checklist' ? (form.readiness.ready?'Saved Store Data and Check List answers are ready to export.':'Complete the required mapped Store Data or Check List fields below.') : form.version_id ? `Version ${form.version_id} · ${hasDirty ? 'Local changes unsaved · ' : ''}${form.readiness.ready ? 'Saved data ready' : 'Resolve the blockers below'} · Signatures: ${({later_signing:'reserved for later signing',signed_required:'a supported signature is required',unresolved:'policy needs review'})[form.signature_policy] || 'policy needs review'}. Supplemental sheets: ${form.supplemental_policy==='manual_declaration'?'a saved declaration is required; reports remain separate':form.supplemental_policy==='not_applicable'?'not applicable under the reviewed policy':'policy needs review'}.` : 'Integration disabled or unconfigured.';
+    card.querySelector('.pdf-form-summary').textContent=form.mapping_mode==='store_checklist' ? (form.readiness.ready?'Saved Store Data, NFPA 72 and Compliance answers are ready to export.':'Complete the required mapped Store Data, NFPA 72 or Compliance fields below.') : form.version_id ? `Version ${form.version_id} · ${hasDirty ? 'Local changes unsaved · ' : ''}${form.readiness.ready ? 'Saved data ready' : 'Resolve the blockers below'} · Signatures: ${({later_signing:'reserved for later signing',signed_required:'a supported signature is required',unresolved:'policy needs review'})[form.signature_policy] || 'policy needs review'}. Supplemental sheets: ${form.supplemental_policy==='manual_declaration'?'a saved declaration is required; reports remain separate':form.supplemental_policy==='not_applicable'?'not applicable under the reviewed policy':'policy needs review'}.` : 'Integration disabled or unconfigured.';
     card.querySelector('.pdf-export-action').disabled=!form.export_available || hasDirty || Boolean(record.scopes.get(form.key)?.dirty);
     card.querySelector('.pdf-export-reason').textContent=form.export_reason;
     const scopeState=record.scopes.get(form.key);
@@ -858,7 +882,7 @@
       link.addEventListener('click',()=>{
         const ids={store_data:'store-data-section',checklist:'checklist-section',points:'points-events-section',form_details:'export-form-details-section'};
         const section=document.getElementById(ids[blocker.navigation] || 'export-form-details-section');if(section){section.open=true;section.scrollIntoView({block:'start'});}
-        if(blocker.navigation==='checklist'){const task=[...document.querySelectorAll('[data-task-id]')].find(control=>control.dataset.taskId===blocker.source_id);task?.focus();}
+        if(blocker.navigation==='checklist'){const task=[...document.querySelectorAll('[data-task-id]')].find(control=>control.dataset.taskId===blocker.source_id);const section=task?.closest('details');if(section)section.open=true;exportDialog.close();task?.scrollIntoView({block:'center'});task?.focus();}else if(blocker.navigation==='store_data'||blocker.navigation==='points')exportDialog.close();
         const fieldRow=[...card.querySelectorAll('[data-input-key]')].find(row=>row.dataset.inputKey.startsWith(blocker.source_id+':'));
         fieldRow?.querySelector('[data-answer]')?.focus();
       });item.append(link);blockers.append(item);
@@ -906,7 +930,7 @@
       act(row,`Required when ${dependency.kind} ${dependency.id || dependency.field} ${definition.required_when.operator}`,()=>{
         const section=document.getElementById(dependency.kind==='checklist'?'checklist-section':dependency.kind==='inspection'?'store-data-section':'export-form-details-section');
         if(section){section.open=true;section.scrollIntoView({block:'start'});}
-        const control=[...document.querySelectorAll('[data-task-id]')].find(c=>c.dataset.taskId===dependency.id);control?.focus();
+        const control=[...document.querySelectorAll('[data-task-id]')].find(c=>c.dataset.taskId===dependency.id);if(dependency.kind==='checklist'){const parent=control?.closest('details');if(parent)parent.open=true;exportDialog.close();control?.scrollIntoView({block:'center'});}control?.focus();
       });
     }
     control.id=id;control.dataset.answer='true';control.value=draft.value ?? '';row.append(control,node('p',definition.meaning),node('span','',{class:'pdf-field-status',role:'status'}));

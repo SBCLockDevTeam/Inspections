@@ -49,3 +49,7 @@ The user explicitly requested form-first opening, a left PDF field list and righ
 ## October 29 — Explicit PDF checkbox defaults
 
 The user requested Checked/Not checked defaults on PDF checkbox fields. This supersedes the earlier blanket restriction on static checkbox marks in the normal `store_checklist` mode. An explicitly configured Boolean is retained as a PDF-only fixed value without a source, or a missing-answer fallback with a source. No default is inferred from a template preset. Saved Yes/No/NA answers take precedence, changed sources still block, and Inspection data/answers are never updated. Advanced legacy mappings, radio policies, signatures and Initiating Devices approval gates retain their existing behavior.
+
+## October 30 — Editable NFPA 72 and Compliance sections
+
+The user renamed Check List to Compliance and replaced the inline Export Form Details area with an editable NFPA 72 section. The existing Panel Model and Firmware version definitions move to NFPA 72 with the same IDs/answers. Both sections use administrator-managed typed fields and the existing per-inspection decision history/autosave/sync system. Adding or moving fields updates integration source grouping automatically. Export details, readiness, legacy manual decisions/scope, previews, confirmation, history and recovery move together to hamburger → Export Forms. Existing template and Initiating Devices menu actions remain available.

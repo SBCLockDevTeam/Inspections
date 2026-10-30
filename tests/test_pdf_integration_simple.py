@@ -27,7 +27,7 @@ def test_picker_without_inspection_and_save_exports_each_inspections_data(admin_
     assert client.get('/api/admin/integrations/sources',headers={'x-actor':'tech'}).status_code==403
     catalog=client.get('/api/admin/integrations/sources').json()
     assert {e['source']['kind'] for e in catalog['entries']}=={'inspection','checklist'}
-    assert {e['section'] for e in catalog['entries']}=={'Store Data','Check List'}
+    assert {e['section'] for e in catalog['entries']}=={'Store Data','Compliance'}
     draft=uploaded(client);target=text_target(draft)
     mapping={'target_id':target['id'],'disposition':'source','source':{'kind':'inspection','field':'start_date'},'required':True,
         'transforms':[{'kind':'date','format':'%m/%d/%Y'}]}
@@ -198,3 +198,37 @@ def test_checkbox_defaults_require_actual_booleans(admin_api,invalid):
     target=next(t for t in draft['config']['inventory']['targets'] if t['kind']=='checkbox')
     response=save(client,draft,[{'target_id':target['id'],'disposition':'constant','constant':invalid,'reason':'Invalid typed default.'}])
     assert response.status_code==400
+
+
+def test_both_sections_are_automatic_sources_and_moves_keep_existing_mapping(admin_api):
+    from alarm_inspection.integrations.pdf_sources import checklist_schema
+    client,store,files,inspection=admin_api
+    with store.begin() as session:
+        session.add(InspectionTask(id='nfpa-new',text='New NFPA field',text_key='new nfpa field',section='nfpa72',input_type='textbox',options_json='[]',position=20,active=True,created_at=datetime.now(timezone.utc)))
+    catalog=client.get('/api/admin/integrations/sources').json()
+    assert next(e for e in catalog['entries'] if e['source'].get('id')=='nfpa-new')['section']=='NFPA 72'
+    assert next(e for e in catalog['entries'] if e['source'].get('id')=='task')['section']=='Compliance'
+    draft=uploaded(client);target=text_target(draft)
+    response=save(client,draft,[{'target_id':target['id'],'disposition':'source','source':{'kind':'checklist','id':'task'},'required':True}])
+    assert response.status_code==200,response.text
+    with store.begin() as session:
+        field=session.get(InspectionTask,'task');before=checklist_schema(field);field.section='nfpa72'
+        assert checklist_schema(field)==before
+    result=evaluate_snapshot(capture_snapshot(store,inspection,'compliance',actor_id='tech'))
+    assert result.ready and result.targets[target['id']].text=='No'
+    catalog=client.get('/api/admin/integrations/sources').json()
+    assert next(e for e in catalog['entries'] if e['source'].get('id')=='task')['section']=='NFPA 72'
+
+
+def test_existing_database_section_migration_keeps_decisions_on_both_engines(database):
+    from sqlalchemy import text
+    from alarm_inspection.storage import open_store
+    store,files,inspection,_=database
+    with store.begin() as session:session.get(InspectionTask,'task').text='Panel Model'
+    with store.kw['bind'].begin() as connection:connection.execute(text('ALTER TABLE inspection_tasks DROP COLUMN section'))
+    migrated=open_store()
+    try:
+        with migrated() as session:
+            assert session.get(InspectionTask,'task').section=='nfpa72'
+            assert session.get(InspectionChecklistDecision,'answer').value=='No'
+    finally:migrated.kw['bind'].dispose()

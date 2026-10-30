@@ -124,7 +124,7 @@ def evaluate_snapshot(snapshot: SavedSnapshot) -> ReadinessResult:
             else: source = resolve(mapping.source)
             if config.mapping_mode == 'store_checklist':
                 if mapping.source_schema_sha256 and snapshot.catalog_metadata.get(canonical_json(mapping.source),{}).get('schema_sha256') != mapping.source_schema_sha256:
-                    raise MappingError('The mapped Check List field changed. Review its mapping in Administration.', 'SOURCE_CHANGED', mapping.source)
+                    raise MappingError('The mapped Inspection field changed. Review its mapping in Administration.', 'SOURCE_CHANGED', mapping.source)
                 checkbox_default = target.kind == 'checkbox' and source.state == 'missing' and type(mapping.default_value) is bool
                 if source.state == 'missing' and mapping.default_value is not None:
                     source = source.model_copy(update={'value':mapping.default_value,'state':'ready',
@@ -135,7 +135,7 @@ def evaluate_snapshot(snapshot: SavedSnapshot) -> ReadinessResult:
                     else:
                         usable(source)
                         if source.value not in ('Yes','No','NA') or mapping.check_on is None:
-                            raise MappingError('Choose which Check List answer marks this PDF field.', 'UNCONFIGURED', mapping.source)
+                            raise MappingError('Choose which Inspection answer marks this PDF field.', 'UNCONFIGURED', mapping.source)
                         source = source.model_copy(update={'value':source.value == mapping.check_on,'type':'boolean'})
             outputs[target.id] = map_target(target,mapping,source,resolve,required=required)
         except MappingError as exc: error(exc,mapping)

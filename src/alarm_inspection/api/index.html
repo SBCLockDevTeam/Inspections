@@ -269,7 +269,7 @@ button:active {
 .inspection-section > summary { padding: 14px 16px; font-weight: 600; cursor: pointer; background: var(--panel-alt); }
 .inspection-section > summary:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
 .inspection-section-body { padding: 16px; }
-#checklist-progress { font-size: 0.9rem; font-weight: 400; color: var(--muted); margin-left: 10px; }
+#checklist-progress, #nfpa72-progress { font-size: 0.9rem; font-weight: 400; color: var(--muted); margin-left: 10px; }
 .inspection-task-row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 16px; padding: 11px 0; margin: 0; font-weight: 400; }
 .inspection-task-description { flex: 0 1 auto; min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
 .task-checkbox-choices { display: flex; flex: 0 0 auto; gap: 16px; }
@@ -934,7 +934,7 @@ button.inspection-menu-option {
 .pdf-form-scope label { display: block; }
 .pdf-form-scope input[type=checkbox] { width: auto; }
 .pdf-field-status { display: block; font-size: .9em; }
-.pdf-export-dialog { width: min(1100px, 95vw); max-height: 95vh; overflow: auto; }
+.pdf-export-dialog, .pdf-form-tools-dialog { width: min(1100px, 95vw); max-height: 95vh; overflow: auto; }
 .pdf-export-dialog iframe { width: 100%; height: 65vh; border: 1px solid #888; }
     #simple-targets {max-height:800px;overflow:auto;display:flex;flex-direction:column;gap:6px;}
     #simple-targets button {text-align:left;white-space:normal;}
@@ -1012,9 +1012,9 @@ button.inspection-menu-option {
 <div id="admin-panel-integrations" role="tabpanel" aria-labelledby="admin-tab-integrations" class="hidden"></div>
 <div id="admin-panel-inspection-tasks" role="tabpanel" aria-labelledby="admin-tab-inspection-tasks" class="hidden">
 <h3>Inspection Tasks</h3><p>Choose Checkbox, Textbox, or Dropdown for each item. Add or remove dropdown choices below. Existing answers remain in history when you change a type or remove a choice.</p>
-<form id="add-inspection-task-form" autocomplete="off"><div class="form-field"><label for="inspection-task-text">Task Description:</label><input id="inspection-task-text" name="inspection_checklist_task" type="text" maxlength="200" autocomplete="off" required></div><div class="form-field"><label for="inspection-task-type">Type:</label><select id="inspection-task-type" name="inspection_task_type"><option value="checkbox">Checkbox (Yes / No / NA)</option><option value="textbox">Textbox</option><option value="dropdown">Dropdown</option></select></div><div id="inspection-task-options"></div><div class="form-field"><label for="inspection-task-position">Order (optional):</label><input id="inspection-task-position" type="number" min="1" max="10000" step="1" placeholder="Next available position"></div><button type="submit" id="add-inspection-task">Add Task</button></form>
+<form id="add-inspection-task-form" autocomplete="off"><div class="form-field"><label for="inspection-task-section">Section:</label><select id="inspection-task-section"><option value="compliance">Compliance</option><option value="nfpa72">NFPA 72</option></select></div><div class="form-field"><label for="inspection-task-text">Task Description:</label><input id="inspection-task-text" name="inspection_checklist_task" type="text" maxlength="200" autocomplete="off" required></div><div class="form-field"><label for="inspection-task-type">Type:</label><select id="inspection-task-type" name="inspection_task_type"><option value="checkbox">Checkbox (Yes / No / NA)</option><option value="textbox">Textbox</option><option value="dropdown">Dropdown</option></select></div><div id="inspection-task-options"></div><div class="form-field"><label for="inspection-task-position">Order (optional):</label><input id="inspection-task-position" type="number" min="1" max="10000" step="1" placeholder="Next available position"></div><button type="submit" id="add-inspection-task">Add Task</button></form>
 <div id="inspection-tasks-message" role="status"></div>
-<div class="table-scroll"><table class="table"><thead><tr><th>Task</th><th>Type &amp; Choices</th><th>Order</th><th>Active</th><th>Actions</th></tr></thead><tbody id="inspection-tasks-body"></tbody></table></div>
+<div class="table-scroll"><table class="table"><thead><tr><th>Task</th><th>Section</th><th>Type &amp; Choices</th><th>Order</th><th>Active</th><th>Actions</th></tr></thead><tbody id="inspection-tasks-body"></tbody></table></div>
 </div>
 </div>
 
@@ -1043,7 +1043,7 @@ button.inspection-menu-option {
 <input type="hidden" name="point_decisions" id="point-decisions" value="[]"></form><div id="message"></div></div>
 
 <div id="inspection-screen" class="card hidden">
-<div class="inspection-breadcrumb-row"><div class="inspection-breadcrumb"><a href="#" id="home-link-from-inspection" class="inspection-breadcrumb-link">Home</a></div><div class="inspection-header-actions"><button type="button" id="save-all-inspection" class="secondary">Save</button><div id="inspection-menu-wrap" class="inspection-menu-wrap"><button type="button" id="inspection-menu-button" class="secondary" title="Inspection menu">☰</button><div id="inspection-menu" class="hidden"><div id="inspection-menu-option-open-another" class="inspection-menu-option disabled" role="menuitem" aria-disabled="true" tabindex="-1" title="Not ready yet">Open Another Inspection (coming soon)</div><div id="inspection-menu-option-add-point-list" class="inspection-menu-option" role="menuitem" tabindex="0">Add New Points List</div><div id="inspection-menu-option-delete-point-list" class="inspection-menu-option" role="menuitem" tabindex="0">Delete Points List</div><div id="inspection-menu-option-edit-nfpa" class="inspection-menu-option" role="menuitem" tabindex="0">Edit NFPA PDF</div><div id="inspection-menu-option-toggle-missing" class="inspection-menu-option" role="menuitem" tabindex="0">Show Missing Points Only</div><div id="inspection-menu-option-export-pdf" class="inspection-menu-option" role="menuitem" tabindex="0">Export PDF</div><div id="inspection-menu-option-clear-dates" class="inspection-menu-option" role="menuitem" tabindex="0">Clear Dates</div><button type="button" id="delete-open-inspection" class="inspection-menu-option" role="menuitem">Delete Inspection</button></div></div></div></div>
+<div class="inspection-breadcrumb-row"><div class="inspection-breadcrumb"><a href="#" id="home-link-from-inspection" class="inspection-breadcrumb-link">Home</a></div><div class="inspection-header-actions"><button type="button" id="save-all-inspection" class="secondary">Save</button><div id="inspection-menu-wrap" class="inspection-menu-wrap"><button type="button" id="inspection-menu-button" class="secondary" title="Inspection menu">☰</button><div id="inspection-menu" class="hidden"><div id="inspection-menu-option-open-another" class="inspection-menu-option disabled" role="menuitem" aria-disabled="true" tabindex="-1" title="Not ready yet">Open Another Inspection (coming soon)</div><div id="inspection-menu-option-add-point-list" class="inspection-menu-option" role="menuitem" tabindex="0">Add New Points List</div><div id="inspection-menu-option-delete-point-list" class="inspection-menu-option" role="menuitem" tabindex="0">Delete Points List</div><button type="button" id="inspection-menu-option-form-exports" class="inspection-menu-option" role="menuitem">Export Forms</button><div id="inspection-menu-option-edit-nfpa" class="inspection-menu-option" role="menuitem" tabindex="0">Edit NFPA PDF</div><div id="inspection-menu-option-toggle-missing" class="inspection-menu-option" role="menuitem" tabindex="0">Show Missing Points Only</div><div id="inspection-menu-option-export-pdf" class="inspection-menu-option" role="menuitem" tabindex="0">Export PDF</div><div id="inspection-menu-option-clear-dates" class="inspection-menu-option" role="menuitem" tabindex="0">Clear Dates</div><button type="button" id="delete-open-inspection" class="inspection-menu-option" role="menuitem">Delete Inspection</button></div></div></div></div>
 
 <h2 id="inspection-name"></h2>
 <details id="store-data-section" class="inspection-section" open><summary>Store Data</summary><div class="inspection-section-body">
@@ -1081,10 +1081,11 @@ button.inspection-menu-option {
 </div>
 
 </div></details>
-<details id="export-form-details-section" class="inspection-section"><summary>Export Form Details</summary><div class="inspection-section-body"><p id="form-details-message" role="status"></p><div id="form-details-integrations"></div></div></details>
-<details id="checklist-section" class="inspection-section" open><summary>Check List <span id="checklist-progress"></span></summary><div class="inspection-section-body">
-<div id="inspection-checklist"></div><button type="button" id="refresh-checklist" class="secondary">Refresh Check List</button><div id="checklist-message" role="status" aria-live="polite"></div>
-</div></details>
+<div id="inspection-checklist">
+<details id="export-form-details-section" class="inspection-section" open><summary>NFPA 72 <span id="nfpa72-progress"></span></summary><div class="inspection-section-body"><div id="nfpa72-fields"></div><button type="button" id="refresh-nfpa72" class="secondary">Refresh NFPA 72</button></div></details>
+<details id="checklist-section" class="inspection-section" open><summary>Compliance <span id="checklist-progress"></span></summary><div class="inspection-section-body">
+<div id="compliance-fields"></div><button type="button" id="refresh-checklist" class="secondary">Refresh Compliance</button>
+</div></details><div id="checklist-message" role="status" aria-live="polite"></div></div>
 <details id="points-events-section" class="inspection-section" open><summary>Points Lists &amp; Events</summary><div class="inspection-section-body">
 <div class="inspection-actions-row">
   <div class="compact-field points-list-picker">
@@ -1117,6 +1118,7 @@ button.inspection-menu-option {
 <div id="delete-inspection-modal" class="modal"><div class="modal-card"><button class="close" id="close-delete-inspection">Close</button><h2>Delete Inspection</h2><div class="form-field"><label for="delete-inspection-selector">Select inspection:</label><select id="delete-inspection-selector"></select></div><div class="delete-actions"><button type="button" id="confirm-delete-inspection" class="danger">Delete</button><button type="button" id="cancel-delete-inspection" class="secondary">Cancel</button></div></div></div>
 
 <div id="preview-modal" class="modal"><div class="modal-card"><button class="close" id="close-preview">Close</button><h2>Points List Review</h2><div class="form-field"><label for="preview-list-selector">Points List:</label><select id="preview-list-selector"></select></div><p id="preview-summary"></p><p>Edit descriptions and use each row's status button to toggle Accept or Review. Rows remain visible until you delete them.</p><div class="nav"><button type="button" class="delete-review-action">Delete all Review rows</button><button type="button" class="save-review-action">Save Decisions</button></div><table class="table"><thead><tr><th>Point</th><th>Description</th><th>Status</th></tr></thead><tbody id="preview-body"></tbody></table></div></div>
+<dialog id="inspection-export-dialog" class="pdf-form-tools-dialog" aria-label="Export Forms"><button type="button" id="close-inspection-exports" class="secondary">Close</button><h2>Export Forms</h2><p id="form-details-message" role="status"></p><div id="form-details-integrations"></div></dialog>
 <script src="/integrations.js"></script>
 <script src="/review.js"></script>
 </body></html>

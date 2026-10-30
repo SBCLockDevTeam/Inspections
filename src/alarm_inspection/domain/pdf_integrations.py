@@ -337,7 +337,7 @@ class IntegrationConfig(Versioned):
         if self.mapping_mode == 'store_checklist':
             refs = [m.source for m in self.mappings if m.source] + extras + [c.source for c in conditions if c]
             if self.manual_inputs or self.answer_groups or self.applicability != 'no_panel' or any(r.kind not in {'inspection','checklist'} for r in refs):
-                raise ValueError('These forms map only Store Data and Check List fields.')
+                raise ValueError('These forms map only Store Data, NFPA 72 and Compliance fields.')
             for m in self.mappings:
                 target = targets[m.target_id]
                 if target.kind == 'checkbox':

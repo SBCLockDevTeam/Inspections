@@ -12,6 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool, SingletonThreadPool
 
+from alarm_inspection.domain.inspection_sections import SECTION_LABELS
 from alarm_inspection.domain.checklist import CHECKBOX_CHOICES, checkbox_value, validate_options
 from alarm_inspection.domain.export import validate_export_rows
 from alarm_inspection.domain.inspection_names import normalize_city, normalize_state
@@ -160,7 +161,7 @@ def capture_snapshot_session(session, inspection_id, integration_key, *, actor_i
         except (TypeError,ValueError,AttributeError):
             options, valid_definition = [], False
         if not task.active or not valid_definition or decision and decision.input_type != task.input_type:
-            state, message = 'changed','Checklist source was deactivated or its input type changed.'
+            state, message = 'changed','Inspection field was deactivated or its input type changed.'
         elif decision:
             value = checkbox_value(decision.value,decision.completed) if task.input_type=='checkbox' else decision.value
             if task.input_type=='dropdown' and value and value not in options:
@@ -170,7 +171,7 @@ def capture_snapshot_session(session, inspection_id, integration_key, *, actor_i
         provenance = [SourceProvenance(source=ref,decision_id=decision.id,decided_by=decision.decided_by,
                         decided_at=decision.decided_at.replace(tzinfo=timezone.utc) if decision.decided_at.tzinfo is None else decision.decided_at)] if decision else []
         sources[canonical_json(ref)] = _source(ref,kind,value,raw,state=state,message=message,provenance=provenance)
-        catalog[canonical_json(ref)] = {'label':task.text,'options':list(CHECKBOX_CHOICES) if task.input_type=='checkbox' else options,'unit':None,'schema_sha256':checklist_schema(task)}
+        catalog[canonical_json(ref)] = {'label':task.text,'section':SECTION_LABELS[task.section],'options':list(CHECKBOX_CHOICES) if task.input_type=='checkbox' else options,'unit':None,'schema_sha256':checklist_schema(task)}
     if simple:
         refs = _refs(config)
         facts['dependencies'] = {canonical_json(ref):sources[canonical_json(ref)].fingerprint if canonical_json(ref) in sources else None for ref in refs}
@@ -334,10 +335,10 @@ def definition_catalog(session, *, actor_id):
         entries.append({'source':SourceRef(kind='inspection',field=field).model_dump(mode='json'),
             'label':field.replace('_',' ').title(),'section':'Store Data',
             'type':'date' if field.endswith('_date') else 'text','options':[]})
-    for task in session.scalars(select(InspectionTask).where(InspectionTask.active.is_(True)).order_by(InspectionTask.position,InspectionTask.id)):
+    for task in session.scalars(select(InspectionTask).where(InspectionTask.active.is_(True)).order_by(InspectionTask.position,InspectionTask.created_at,InspectionTask.id)):
         options=json.loads(task.options_json or '[]');validate_options(task.input_type,options)
         entry={'source':SourceRef(kind='checklist',id=task.id).model_dump(mode='json'),'label':task.text,
-            'section':'Check List','type':{'checkbox':'yes_no_na','textbox':'text','dropdown':'choice'}[task.input_type],
+            'section':SECTION_LABELS[task.section],'type':{'checkbox':'yes_no_na','textbox':'text','dropdown':'choice'}[task.input_type],
             'options':list(CHECKBOX_CHOICES) if task.input_type=='checkbox' else options}
         entry['schema_sha256']=checklist_schema(task)
         entries.append(entry)
