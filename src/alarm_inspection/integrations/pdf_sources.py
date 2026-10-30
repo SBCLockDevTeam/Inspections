@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool, SingletonThreadPool
 
 from alarm_inspection.domain.inspection_sections import SECTION_LABELS
-from alarm_inspection.domain.checklist import CHECKBOX_CHOICES, checkbox_value, validate_options
+from alarm_inspection.domain.checklist import CHECKBOX_CHOICES, effective_answer, validate_default, validate_options
 from alarm_inspection.domain.export import validate_export_rows
 from alarm_inspection.domain.inspection_names import normalize_city, normalize_state
 from alarm_inspection.domain.pdf_integrations import FormAnswer, SourceRef, SourceProvenance, canonical_json, payload_hash
@@ -157,17 +157,20 @@ def capture_snapshot_session(session, inspection_id, integration_key, *, actor_i
         try:
             options = json.loads(task.options_json or '[]')
             validate_options(task.input_type,options)
+            validate_default(task.input_type,task.default_value or '',options)
             valid_definition = True
         except (TypeError,ValueError,AttributeError):
             options, valid_definition = [], False
         if not task.active or not valid_definition or decision and decision.input_type != task.input_type:
             state, message = 'changed','Inspection field was deactivated or its input type changed.'
         elif decision:
-            value = checkbox_value(decision.value,decision.completed) if task.input_type=='checkbox' else decision.value
+            value = effective_answer(task,decision)
             if task.input_type=='dropdown' and value and value not in options:
                 state, message = 'changed','The saved dropdown choice was removed; explicit review is required.'
             if task.input_type=='checkbox' and value not in ('','Yes','No','NA'):
                 state, message = 'changed','The saved checkbox answer is incompatible.'
+        else:
+            value = effective_answer(task,None)
         provenance = [SourceProvenance(source=ref,decision_id=decision.id,decided_by=decision.decided_by,
                         decided_at=decision.decided_at.replace(tzinfo=timezone.utc) if decision.decided_at.tzinfo is None else decision.decided_at)] if decision else []
         sources[canonical_json(ref)] = _source(ref,kind,value,raw,state=state,message=message,provenance=provenance)

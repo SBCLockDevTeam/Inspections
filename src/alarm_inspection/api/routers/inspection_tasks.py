@@ -10,7 +10,7 @@ from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 
 from alarm_inspection.api.auth_support import require_admin
-from alarm_inspection.domain.checklist import CHECKBOX_CHOICES, checkbox_value, validate_options, validate_answer
+from alarm_inspection.domain.checklist import CHECKBOX_CHOICES, effective_answer, validate_default, validate_options, validate_answer
 from alarm_inspection.domain.inspection_sections import InspectionSection
 from alarm_inspection.storage import Inspection, InspectionTask, InspectionChecklistDecision
 
@@ -21,10 +21,12 @@ class TaskCreate(BaseModel):
     position: int | None = Field(default=None, ge=1, le=10000, strict=True)
     input_type: Literal["checkbox", "textbox", "dropdown"] = "checkbox"
     options: list[StrictStr] = Field(default_factory=list, max_length=50)
+    default_value: StrictStr = Field(default="", max_length=2000)
 
     @model_validator(mode="after")
     def validate_definition(self):
         self.options = validate_options(self.input_type, self.options)
+        validate_default(self.input_type, self.default_value, self.options)
         return self
 
     @field_validator("text")
@@ -43,6 +45,7 @@ class TaskUpdate(BaseModel):
     active: StrictBool | None = None
     input_type: Literal["checkbox", "textbox", "dropdown"] | None = None
     options: list[StrictStr] | None = Field(default=None, max_length=50)
+    default_value: StrictStr | None = Field(default=None, max_length=2000)
 
     @model_validator(mode="after")
     def validate_changes(self):
@@ -61,8 +64,14 @@ class ChecklistUpdate(BaseModel):
     value: StrictStr | None = Field(default=None, max_length=2000)
 
 
+class TaskOrder(BaseModel):
+    section: InspectionSection
+    task_ids: list[StrictStr] = Field(max_length=10000)
+    expected_order: list[StrictStr] = Field(max_length=10000)
+
+
 def serialize_task(task):
-    return {"section": task.section, "id": task.id, "text": task.text, "position": task.position, "active": task.active, "input_type": task.input_type, "options": json.loads(task.options_json or "[]")}
+    return {"section": task.section, "id": task.id, "text": task.text, "position": task.position, "active": task.active, "input_type": task.input_type, "options": json.loads(task.options_json or "[]"), "default_value": task.default_value}
 
 
 def admin_only(request: Request):
@@ -85,16 +94,33 @@ def create_admin_router(store):
     def add_task(payload: TaskCreate):
         try:
             with store.begin() as session:
-                position = payload.position or ((session.query(func.max(InspectionTask.position)).scalar() or 0) + 1)
+                position = payload.position or ((session.query(func.max(InspectionTask.position)).filter(InspectionTask.section == payload.section).scalar() or 0) + 1)
                 task = InspectionTask(id=str(uuid4()), text=payload.text, text_key=payload.text.casefold(),
                                       input_type=payload.input_type, options_json=json.dumps(payload.options),
-                                      section=payload.section, position=position, active=True, created_at=datetime.now(timezone.utc))
+                                      section=payload.section, default_value=payload.default_value, position=position, active=True, created_at=datetime.now(timezone.utc))
                 session.add(task)
                 session.flush()
                 result = serialize_task(task)
         except IntegrityError as exc:
             raise HTTPException(status_code=409, detail="Task already exists. Edit or reactivate the existing task.") from exc
         return {"task": result}
+
+    @router.put("/order")
+    def reorder_tasks(payload: TaskOrder):
+        with store.begin() as session:
+            # Lock definitions so two reorders cannot partially interleave.
+            tasks = session.query(InspectionTask).filter(InspectionTask.section == payload.section).order_by(
+                InspectionTask.id).with_for_update().all()
+            tasks.sort(key=lambda task: (task.position, task.created_at, task.id))
+            current = [task.id for task in tasks]
+            if len(set(payload.task_ids)) != len(payload.task_ids) or set(payload.task_ids) != set(current):
+                raise HTTPException(status_code=409, detail="Section fields changed. Refresh before reordering.")
+            if payload.expected_order != current:
+                raise HTTPException(status_code=409, detail="Section order changed on another device. Refresh before reordering.")
+            by_id = {task.id: task for task in tasks}
+            for position, task_id in enumerate(payload.task_ids, 1):
+                by_id[task_id].position = position
+        return {"status": "saved"}
 
     @router.patch("/{task_id}")
     def edit_task(task_id: str, payload: TaskUpdate):
@@ -107,11 +133,17 @@ def create_admin_router(store):
                 options = payload.options if payload.options is not None else (json.loads(task.options_json or "[]") if input_type == "dropdown" else [])
                 try:
                     options = validate_options(input_type, options)
+                    # A changed type/choice list cannot retain an incompatible default.
+                    default = payload.default_value if payload.default_value is not None else task.default_value
+                    if payload.default_value is None and (input_type != task.input_type or input_type == "dropdown" and default not in ["", *options]):
+                        default = ""
+                    validate_default(input_type, default, options)
                 except ValueError as exc:
                     raise HTTPException(status_code=422, detail=str(exc)) from exc
                 if input_type != task.input_type or options != json.loads(task.options_json or "[]"):
                     task.options_json = json.dumps(options)
                 task.input_type = input_type
+                task.default_value = default
                 if payload.text is not None:
                     task.text = payload.text
                     task.text_key = payload.text.casefold()
@@ -154,11 +186,10 @@ def create_checklist_router(store):
             for task in tasks:
                 decision = latest.get(task.id)
                 same_type = bool(decision and decision.input_type == task.input_type)
-                value = decision.value if same_type else ""
-                if same_type and task.input_type == "checkbox":
-                    value = checkbox_value(value, decision.completed)
+                value = effective_answer(task, decision)
                 completed = bool(value.strip())
                 rows.append({**serialize_task(task), "completed": completed, "value": value,
+                             "default_applied": decision is None and bool(value),
                              "previous_type": decision.input_type if decision and not same_type else None,
                              "removed_choice": bool(value and task.input_type == "dropdown" and value not in json.loads(task.options_json or "[]"))})
             return {"tasks": rows, "completed_count": sum(row["completed"] for row in rows), "total_count": len(rows)}

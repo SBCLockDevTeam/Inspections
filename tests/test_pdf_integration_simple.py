@@ -234,3 +234,29 @@ def test_existing_database_section_migration_keeps_decisions_on_both_engines(dat
             assert session.get(InspectionTask,'task').section=='nfpa72'
             assert session.get(InspectionChecklistDecision,'answer').value=='No'
     finally:migrated.kw['bind'].dispose()
+
+
+@pytest.mark.parametrize('kind,options,default', [
+    ('textbox', [], 'Office contact'), ('dropdown', ['Ready','Repair'], 'Ready'), ('checkbox', [], 'NA'),
+])
+def test_inspection_task_defaults_render_without_writing_answers(admin_api, kind, options, default):
+    from alarm_inspection.integrations.pdf_sources import checklist_schema
+    client,store,files,inspection=admin_api
+    with store.begin() as session:
+        session.query(InspectionChecklistDecision).filter_by(task_id='task').delete()
+        task=session.get(InspectionTask,'task')
+        task.input_type=kind;task.options_json=__import__('json').dumps(options)
+        schema=checklist_schema(task);task.default_value=default
+        assert checklist_schema(task)==schema
+    draft=uploaded(client);target=text_target(draft)
+    response=save(client,draft,[{'target_id':target['id'],'disposition':'source','source':{'kind':'checklist','id':'task'},'required':True}])
+    assert response.status_code==200,response.text
+    version=response.json()
+    context=exports.frozen_snapshot(store,inspection,'compliance',actor_id='tech')
+    preview=exports.preview(store,inspection,'compliance',exports.PreviewRequest(expected_version_id=version['id'],expected_source_fingerprint=context.source_fingerprint),files=files,actor_id='tech')
+    final=exports.confirm(store,inspection,'compliance',proof(preview),files=files,actor_id='tech')
+    data,_=exports.download(store,inspection,'compliance',final['id'],files=files,actor_id='tech')
+    assert default in PdfReader(BytesIO(data)).pages[0].extract_text()
+    with store() as session:
+        assert session.query(InspectionChecklistDecision).filter_by(task_id='task').count()==0
+        assert session.get(InspectionTask,'task').default_value==default

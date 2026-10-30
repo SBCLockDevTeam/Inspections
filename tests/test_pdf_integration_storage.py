@@ -286,3 +286,51 @@ def test_missing_template_cannot_create_draft(database):
     with pytest.raises(FileNotFoundError), store.begin() as session:
         create_draft(session, IntegrationConfig.model_validate(config_data()), files=files, actor_id='admin')
     with store() as session: assert session.query(PdfIntegrationVersion).count() == 0
+
+
+def test_task_default_additive_migration_preserves_definitions_and_decisions(database):
+    store, _, _, _ = database
+    engine = store.kw['bind']
+    def retained():
+        with engine.connect() as connection:
+            tasks = list(connection.execute(text('SELECT id,text,text_key,input_type,options_json,section,position,active,created_at FROM inspection_tasks ORDER BY id')))
+            decisions = list(connection.execute(text('SELECT * FROM inspection_checklist_decisions ORDER BY id')))
+            return tasks, decisions
+    before = retained()
+    with engine.begin() as connection: connection.execute(text('ALTER TABLE inspection_tasks DROP COLUMN default_value'))
+    for _ in range(2):
+        reopened = open_store()
+        try:
+            with reopened() as session: assert session.get(InspectionTask, 'task').default_value == ''
+            assert retained() == before
+        finally: reopened.kw['bind'].dispose()
+
+
+def test_section_reorders_reject_concurrent_stale_order(database):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+    from fastapi.testclient import TestClient
+    from fastapi import FastAPI, Request
+    from alarm_inspection.api.routers.inspection_tasks import create_admin_router
+    store, _, _, _ = database
+    now = datetime.now(timezone.utc)
+    with store.begin() as session:
+        for ident in ('order-a', 'order-b'):
+            session.add(InspectionTask(id=ident, text=ident, text_key=ident, section='nfpa72', position=1 if ident=='order-a' else 2, created_at=now))
+    app = FastAPI()
+    @app.middleware('http')
+    async def auth(request: Request, call_next):
+        with store() as session: request.state.current_user = session.get(User, 'admin')
+        return await call_next(request)
+    app.include_router(create_admin_router(store))
+    client = TestClient(app)
+    payload = {'section':'nfpa72','expected_order':['order-a','order-b'],'task_ids':['order-b','order-a']}
+    if store.kw['bind'].dialect.name == 'postgresql':
+        barrier = Barrier(2)
+        def reorder(_):
+            barrier.wait(timeout=10)
+            return client.put('/api/admin/inspection-tasks/order', json=payload).status_code
+        with ThreadPoolExecutor(max_workers=2) as pool: statuses = list(pool.map(reorder, range(2)))
+    else:
+        statuses = [client.put('/api/admin/inspection-tasks/order', json=payload).status_code for _ in range(2)]
+    assert sorted(statuses) == [200, 409]

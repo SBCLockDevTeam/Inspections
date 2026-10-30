@@ -3,6 +3,23 @@
 CHECKBOX_CHOICES = ("Yes", "No", "NA")
 
 
+def validate_default(input_type: str, value: str, options: list[str]) -> str:
+    """Defaults use the same values as answers, including an unanswered checkbox."""
+    validate_answer(input_type, None, value, options)
+    return value
+
+
+def effective_answer(task, decision) -> str:
+    """An explicit answer (even empty or from an older type) takes precedence."""
+    if decision is None:
+        return task.default_value or ""
+    if decision.input_type != task.input_type:
+        return ""
+    if task.input_type == "checkbox":
+        return checkbox_value(decision.value, decision.completed)
+    return decision.value
+
+
 def checkbox_value(value: str, completed: bool) -> str:
     """Display legacy checked answers as Yes without rewriting their audit rows."""
     return value or ("Yes" if completed else "")

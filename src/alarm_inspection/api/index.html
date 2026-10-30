@@ -285,8 +285,21 @@ button:active {
 .task-option-row button, .task-options-editor > button { width: auto; margin: 0; }
 .task-option-row .move-task-choice-up, .task-option-row .move-task-choice-down { padding: 7px 9px; }
 .task-value-note { grid-column: 1 / -1; font-size: 0.85rem; color: var(--muted); }
-#inspection-tasks-body td:first-child { min-width: 200px; }
-#inspection-tasks-body td:nth-child(2) { min-width: 240px; }
+.admin-data-section { border: 1px solid var(--border); border-radius: 8px; margin: 16px 0; }
+.admin-data-section > summary { display: flex; align-items: center; gap: 12px; cursor: pointer; padding: 12px; font-weight: 600; }
+.admin-data-section > summary::before { content: '▸'; }
+.admin-data-section[open] > summary::before { content: '▾'; }
+.admin-data-section > summary span { flex: 1; text-align: left; }
+.admin-data-section > summary button { width: auto; margin: 0; }
+.admin-data-section .table { margin: 0; }
+.admin-task-default { min-width: 140px; }
+.task-row-actions { white-space: nowrap; }
+.task-row-actions button { display: inline-flex; width: auto; margin: 0 4px; align-items: center; justify-content: center; min-width: 40px; }
+.task-drag-handle { cursor: grab; width: auto; margin: 0; padding: 8px; }
+.task-drag-handle:active { cursor: grabbing; }
+.task-dragging { opacity: .45; }
+.show-inactive-tasks { display: inline-flex; align-items: center; gap: 8px; }
+.show-inactive-tasks input { width: auto; margin: 0; }
 .table-scroll { overflow-x: auto; max-width: 100%; min-width: 0; }
 #points-table-scroll { width: 100%; margin-top: 12px; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; }
 #points-table-scroll .table { min-width: 760px; margin-top: 0; }
@@ -295,9 +308,7 @@ button:active {
 #points-table-scroll .table-editing { min-width: 980px; }
 #points-table-scroll:focus-visible { outline: 2px solid var(--ring); }
 .admin-task-text { min-width: 240px; }
-.admin-task-order { width: 80px; }
 .admin-task-active { width: auto; }
-#add-inspection-task-form { max-width: 720px; margin-bottom: 20px; }
 #inspection-screen {
   position: relative;
 }
@@ -1011,10 +1022,10 @@ button.inspection-menu-option {
 </div>
 <div id="admin-panel-integrations" role="tabpanel" aria-labelledby="admin-tab-integrations" class="hidden"></div>
 <div id="admin-panel-inspection-tasks" role="tabpanel" aria-labelledby="admin-tab-inspection-tasks" class="hidden">
-<h3>Data Sections</h3><p>Add fields to Store Data, NFPA 72, or Compliance. Choose Checkbox, Textbox, or Dropdown for each item. Add or remove dropdown choices below. Existing answers remain in history when you change a type or remove a choice.</p>
-<form id="add-inspection-task-form" autocomplete="off"><div class="form-field"><label for="inspection-task-section">Section:</label><select id="inspection-task-section"><option value="store_data">Store Data</option><option value="compliance" selected>Compliance</option><option value="nfpa72">NFPA 72</option></select></div><div class="form-field"><label for="inspection-task-text">Task Description:</label><input id="inspection-task-text" name="inspection_checklist_task" type="text" maxlength="200" autocomplete="off" required></div><div class="form-field"><label for="inspection-task-type">Type:</label><select id="inspection-task-type" name="inspection_task_type"><option value="checkbox">Checkbox (Yes / No / NA)</option><option value="textbox">Textbox</option><option value="dropdown">Dropdown</option></select></div><div id="inspection-task-options"></div><div class="form-field"><label for="inspection-task-position">Order (optional):</label><input id="inspection-task-position" type="number" min="1" max="10000" step="1" placeholder="Next available position"></div><button type="submit" id="add-inspection-task">Add Task</button></form>
+<h3>Data Sections</h3>
+<label class="show-inactive-tasks"><input id="show-inactive-tasks" type="checkbox"> Show inactive tasks</label>
 <div id="inspection-tasks-message" role="status"></div>
-<div class="table-scroll"><table class="table"><thead><tr><th>Task</th><th>Section</th><th>Type &amp; Choices</th><th>Order</th><th>Active</th><th>Actions</th></tr></thead><tbody id="inspection-tasks-body"></tbody></table></div>
+<div id="inspection-tasks-body"></div>
 </div>
 </div>
 

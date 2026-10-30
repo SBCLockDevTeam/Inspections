@@ -262,3 +262,26 @@ def test_shared_in_memory_pool_is_rejected_without_rolling_back_caller_edits():
         assert writer.execute(text('SELECT COUNT(*) FROM pending_test')).scalar_one()==1
         writer.rollback()
     engine.dispose()
+
+
+def test_task_defaults_match_inspection_values_and_preserve_explicit_clear(database):
+    store, config, ident = setup_config(database)
+    with store.begin() as session:
+        session.query(InspectionChecklistDecision).filter_by(task_id='task').delete()
+        session.get(InspectionTask,'task').default_value = 'NA'
+    snapshot = capture_snapshot(store,ident,'compliance',actor_id='tech',panel_ids=[])
+    source = snapshot.resolve(SourceRef(kind='checklist',id='task'))
+    assert source.value == 'NA' and not source.provenance
+    with store() as session:
+        assert session.query(InspectionChecklistDecision).filter_by(task_id='task').count() == 0
+    with store.begin() as session:
+        session.add(InspectionChecklistDecision(id='explicit-clear',inspection_id=ident,task_id='task',task_text='Task',input_type='checkbox',
+            value='',completed=False,decided_by='tech',decided_at=datetime.now(timezone.utc)))
+    cleared = capture_snapshot(store,ident,'compliance',actor_id='tech',panel_ids=[])
+    assert cleared.resolve(SourceRef(kind='checklist',id='task')).state == 'missing'
+    assert cleared.resolve(SourceRef(kind='checklist',id='task')).fingerprint != source.fingerprint
+    with store.begin() as session:
+        session.get(InspectionTask,'task').input_type = 'textbox'
+        session.get(InspectionTask,'task').default_value = 'Cannot hide changed type'
+    changed = capture_snapshot(store,ident,'compliance',actor_id='tech',panel_ids=[])
+    assert changed.resolve(SourceRef(kind='checklist',id='task')).state == 'changed'

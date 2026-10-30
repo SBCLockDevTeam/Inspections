@@ -22,7 +22,6 @@
 
   const inspectionTasksBody = document.querySelector('#inspection-tasks-body');
   const inspectionTasksMessage = document.querySelector('#inspection-tasks-message');
-  const addInspectionTaskForm = document.querySelector('#add-inspection-task-form');
   const checklistContainer = document.querySelector('#inspection-checklist');
   const checklistMessage = document.querySelector('#checklist-message');
   const checklistProgress = document.querySelector('#checklist-progress');
@@ -138,6 +137,7 @@
   let suppressInspectionDetailsSave = false;
   let inspectionDetailsSaveQueue = Promise.resolve();
   let currentUser = null;
+  let adminTaskActor = null;
   let tableEditable = false;
   let activePdfTemplateKey = 'nfpa72';
   let activePdfTemplateFields = {};
@@ -357,6 +357,14 @@
   }
 
   function updateUserChrome() {
+    if (adminTaskActor !== (currentUser?.id || null)) {
+      // Private definition edits must not survive an account/session change.
+      inspectionTasksBody.querySelectorAll('tbody').forEach(body => body.replaceChildren());
+      adminTaskSnapshot = [];
+      showInactiveTasks.checked = false;
+      inspectionTasksMessage.textContent = '';
+      adminTaskActor = currentUser?.id || null;
+    }
     window.PdfIntegrations?.setActor?.(currentUser?.id || null);
     if (!currentUser) {
       userBar?.classList.add('hidden');
@@ -445,96 +453,203 @@
       reset: () => { rows.replaceChildren(); delete root.dataset.checklistDirty; refresh(); },
     };
   }
-  const newTaskType = document.querySelector('#inspection-task-type');
-  const newTaskOptions = createTaskOptionsEditor(document.querySelector('#inspection-task-options'), newTaskType);
+  const dataSections = [['store_data', 'Store Data'], ['nfpa72', 'NFPA 72'], ['compliance', 'Compliance']];
+  const adminSectionBodies = new Map();
+  let adminTaskSnapshot = [];
+  let draggedTaskRow = null;
+  const showInactiveTasks = document.querySelector('#show-inactive-tasks');
 
-  async function loadAdminInspectionTasks(supplied = null) {
-    if (!supplied) {
-      const loading = document.createElement('tr');
-      const cell = document.createElement('td'); cell.colSpan = 6; cell.textContent = 'Loading inspection tasks...';
-      loading.append(cell); inspectionTasksBody.replaceChildren(loading);
-    }
-    const response = supplied ? { ok: true } : await fetch('/api/admin/inspection-tasks');
-    const result = supplied || await response.json();
-    if (!response.ok) throw new Error(taskError(result, 'Unable to load inspection tasks.'));
-    rememberResponse('/api/admin/inspection-tasks', result);
-    inspectionTasksBody.replaceChildren();
-    for (const task of result.tasks) {
-      const row = document.createElement('tr');
-      row.dataset.taskId = task.id;
-      const textCell = document.createElement('td');
-      const text = document.createElement('input');
-      text.type = 'text'; text.value = task.text; text.maxLength = 200; text.required = true;
-      text.autocomplete = 'off'; text.name = `inspection_task_${task.id}`;
-      text.className = 'admin-task-text'; text.setAttribute('aria-label', 'Task description');
-      textCell.append(text);
-      const sectionCell = document.createElement('td');
-      const section = document.createElement('select'); section.setAttribute('aria-label', 'Field section');
-      section.add(new Option('Store Data', 'store_data')); section.add(new Option('Compliance', 'compliance')); section.add(new Option('NFPA 72', 'nfpa72'));
-      section.value = task.section || 'compliance'; sectionCell.append(section);
-      const typeCell = document.createElement('td');
-      const type = makeTaskTypeSelect(task.input_type);
-      const optionsRoot = document.createElement('div');
-      const editor = createTaskOptionsEditor(optionsRoot, type, task.options || []);
-      typeCell.append(type, optionsRoot);
-      const orderCell = document.createElement('td');
-      const position = document.createElement('input');
-      position.type = 'number'; position.required = true; position.min = '1'; position.max = '10000'; position.step = '1';
-      position.value = task.position; position.className = 'admin-task-order'; position.setAttribute('aria-label', 'Task order');
-      orderCell.append(position);
-      const activeCell = document.createElement('td');
-      const active = document.createElement('input');
-      active.type = 'checkbox'; active.checked = task.active; active.className = 'admin-task-active'; active.setAttribute('aria-label', 'Task active');
-      activeCell.append(active);
-      const actions = document.createElement('td');
-      const save = document.createElement('button');
-      save.type = 'button'; save.textContent = 'Save';
-      save.addEventListener('click', async () => {
-        if (!text.reportValidity() || !position.reportValidity() || !editor.valid()) return;
-        save.disabled = true;
-        inspectionTasksMessage.textContent = 'Saving task...';
-        try {
-          const response = await fetch(`/api/admin/inspection-tasks/${task.id}`, {
-            method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text: text.value, section: section.value, position: Number(position.value), active: active.checked, input_type: type.value, options: editor.values() }),
-          });
-          const result = await response.json();
-          if (!response.ok) throw new Error(taskError(result, 'Saving task failed.'));
-          await loadAdminInspectionTasks();
-          inspectionTasksMessage.textContent = 'Task updated.';
-        } catch (error) { inspectionTasksMessage.textContent = error.message; }
-        finally { save.disabled = false; }
-      });
-      actions.append(save);
-      row.append(textCell, sectionCell, typeCell, orderCell, activeCell, actions);
-      inspectionTasksBody.append(row);
-    }
-    rememberControls(inspectionTasksBody);
+  function taskDefaultEditor(root, type, optionsRoot, initial = '') {
+    let current = initial;
+    const refresh = () => {
+      const options = [...optionsRoot.querySelectorAll('.task-option-input')].map(input => input.value);
+      const value = root.firstElementChild?.value ?? current;
+      const control = document.createElement(type.value === 'textbox' ? 'input' : 'select');
+      control.className = 'admin-task-default'; control.setAttribute('aria-label', 'Default value');
+      if (type.value === 'textbox') { control.type = 'text'; control.maxLength = 2000; }
+      else {
+        control.add(new Option(type.value === 'checkbox' ? 'None' : 'No default', ''));
+        for (const option of type.value === 'checkbox' ? ['Yes', 'No', 'NA'] : options.filter(Boolean)) control.add(new Option(option, option));
+      }
+      control.value = type.value === 'textbox' || [...control.options].some(option => option.value === value) ? value : '';
+      current = control.value; root.replaceChildren(control);
+    };
+    type.addEventListener('change', () => { current = ''; root.replaceChildren(); refresh(); });
+    optionsRoot.addEventListener('input', refresh);
+    optionsRoot.addEventListener('click', () => refresh());
+    refresh();
+    return () => root.firstElementChild.value;
   }
 
-  addInspectionTaskForm?.addEventListener('submit', async (event) => {
-    event.preventDefault();
-    const button = document.querySelector('#add-inspection-task');
-    if (button.disabled) return;
-    button.disabled = true;
-    inspectionTasksMessage.textContent = 'Adding task...';
-    const position = document.querySelector('#inspection-task-position').value;
-    if (!newTaskOptions.valid()) { button.disabled = false; return; }
-    const payload = { section: document.querySelector('#inspection-task-section').value, text: document.querySelector('#inspection-task-text').value, input_type: newTaskType.value, options: newTaskOptions.values() };
-    if (position) payload.position = Number(position);
+  function applyInactiveVisibility() {
+    for (const row of inspectionTasksBody.querySelectorAll('tr[data-task-id]')) row.hidden = row.dataset.active === 'false' && !showInactiveTasks.checked;
+  }
+  showInactiveTasks.addEventListener('change', applyInactiveVisibility);
+
+  async function reorderTaskRow(row, target, after = false) {
+    const body = row.parentElement;
+    if (!row.dataset.taskId || target.parentElement !== body || !target.dataset.taskId || row === target) return;
+    if (body.dataset.reordering) return;
+    const previousRows = [...body.children];
+    const section = body.dataset.section;
+    const expected = adminTaskSnapshot.filter(task => task.section === section).map(task => task.id);
+    body.insertBefore(row, after ? target.nextSibling : target);
+    const ids = [...body.querySelectorAll('tr[data-task-id]')].map(item => item.dataset.taskId);
+    if (JSON.stringify(ids) === JSON.stringify(expected)) return;
+    body.dataset.reordering = 'true'; mutationVersion++;
     try {
-      const response = await fetch('/api/admin/inspection-tasks', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+      const response = await fetch('/api/admin/inspection-tasks/order', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({section, task_ids: ids, expected_order: expected}),
       });
       const result = await response.json();
-      if (!response.ok) throw new Error(taskError(result, 'Adding task failed.'));
-      addInspectionTaskForm.reset();
-      newTaskOptions.reset();
-      await loadAdminInspectionTasks();
-      inspectionTasksMessage.textContent = 'Task added.';
-    } catch (error) { inspectionTasksMessage.textContent = error.message; }
-    finally { button.disabled = false; }
-  });
+      if (!response.ok) throw new Error(taskError(result, 'Unable to save order.'));
+      const ordered = new Map(ids.map((id, index) => [id, index + 1]));
+      adminTaskSnapshot.filter(task => task.section === section).forEach(task => { task.position = ordered.get(task.id); });
+      adminTaskSnapshot.sort((a, b) => a.position - b.position);
+      inspectionTasksMessage.textContent = 'Task order saved.';
+    } catch (error) {
+      body.replaceChildren(...previousRows);
+      inspectionTasksMessage.textContent = error.message;
+    } finally { delete body.dataset.reordering; }
+  }
+
+  function makeAdminTaskRow(task, section) {
+    const row = document.createElement('tr');
+    if (task.id) row.dataset.taskId = task.id;
+    else row.dataset.checklistDirty = 'true';
+    row.dataset.active = String(task.active ?? true);
+    const handleCell = document.createElement('td');
+    const handle = document.createElement('button');
+    handle.type = 'button'; handle.className = 'task-drag-handle secondary'; handle.textContent = '⠿';
+    handle.draggable = Boolean(task.id); handle.disabled = !task.id;
+    handle.setAttribute('aria-label', 'Reorder task'); handle.title = 'Drag to reorder; Alt + Up/Down also moves this task';
+    handleCell.append(handle);
+    row.addEventListener('dragstart', event => {
+      if (event.target !== handle || !task.id) { event.preventDefault(); return; }
+      draggedTaskRow = row; row.classList.add('task-dragging');
+      event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', task.id);
+    });
+    row.addEventListener('dragend', () => { draggedTaskRow = null; row.classList.remove('task-dragging'); });
+    row.addEventListener('dragover', event => {
+      if (draggedTaskRow?.parentElement === row.parentElement && task.id) { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; }
+    });
+    row.addEventListener('drop', event => {
+      event.preventDefault();
+      if (draggedTaskRow) void reorderTaskRow(draggedTaskRow, row, event.clientY > row.getBoundingClientRect().top + row.offsetHeight / 2);
+    });
+    handle.addEventListener('keydown', event => {
+      if (!event.altKey || !['ArrowUp', 'ArrowDown'].includes(event.key)) return;
+      event.preventDefault();
+      const rows = [...row.parentElement.querySelectorAll('tr[data-task-id]')].filter(item => !item.hidden);
+      const index = rows.indexOf(row); const down = event.key === 'ArrowDown';
+      const target = rows[index + (down ? 1 : -1)];
+      if (target) void reorderTaskRow(row, target, down);
+    });
+    const textCell = document.createElement('td');
+    const text = document.createElement('input');
+    text.type = 'text'; text.value = task.text || ''; text.maxLength = 200; text.required = true;
+    text.autocomplete = 'off'; text.className = 'admin-task-text'; text.setAttribute('aria-label', 'Task description');
+    textCell.append(text);
+    const typeCell = document.createElement('td');
+    const type = makeTaskTypeSelect(task.input_type);
+    const optionsRoot = document.createElement('div');
+    const editor = createTaskOptionsEditor(optionsRoot, type, task.options || []);
+    typeCell.append(type, optionsRoot);
+    const defaultCell = document.createElement('td');
+    const defaultValue = taskDefaultEditor(defaultCell, type, optionsRoot, task.default_value || '');
+    const activeCell = document.createElement('td');
+    const active = document.createElement('input');
+    active.type = 'checkbox'; active.checked = task.active ?? true; active.className = 'admin-task-active'; active.setAttribute('aria-label', 'Task active');
+    active.disabled = !task.id;
+    activeCell.append(active);
+    const actions = document.createElement('td'); actions.className = 'task-row-actions';
+    const save = document.createElement('button');
+    save.type = 'button'; save.className = 'save-data-task'; save.textContent = '💾'; save.setAttribute('aria-label', 'Save task'); save.title = 'Save task';
+    const remove = document.createElement('button');
+    remove.type = 'button'; remove.className = 'secondary delete-data-task'; remove.textContent = '×'; remove.setAttribute('aria-label', 'Delete task'); remove.title = 'Delete task';
+    save.addEventListener('click', async () => {
+      if (!text.reportValidity() || !editor.valid()) return;
+      save.disabled = true; remove.disabled = true;
+      try {
+        const response = await fetch('/api/admin/inspection-tasks' + (task.id ? `/${task.id}` : ''), {
+          method: task.id ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({text: text.value, section, input_type: type.value, options: editor.values(), default_value: defaultValue(), ...(task.id ? {active: active.checked} : {})}),
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(taskError(result, 'Saving task failed.'));
+        const replacement = makeAdminTaskRow(result.task, section);
+        row.replaceWith(replacement); rememberControls(replacement);
+        await loadAdminInspectionTasks(null, true);
+        inspectionTasksMessage.textContent = task.id ? 'Task updated.' : 'Task added.';
+      } catch (error) { inspectionTasksMessage.textContent = error.message; }
+      finally { save.disabled = false; remove.disabled = false; }
+    });
+    remove.addEventListener('click', async () => {
+      if (!task.id) { row.remove(); mutationVersion++; return; }
+      if (!window.confirm('Delete this task from inspections? Existing answers and history will be retained.')) return;
+      save.disabled = true; remove.disabled = true;
+      try {
+        const response = await fetch(`/api/admin/inspection-tasks/${task.id}`, {
+          method: 'PATCH', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({active: false}),
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(taskError(result, 'Deleting task failed.'));
+        const replacement = makeAdminTaskRow(result.task, section);
+        row.replaceWith(replacement); rememberControls(replacement);
+        await loadAdminInspectionTasks(null, true);
+        inspectionTasksMessage.textContent = 'Task deleted. Its history is retained.';
+      } catch (error) { inspectionTasksMessage.textContent = error.message; }
+      finally { save.disabled = false; remove.disabled = false; }
+    });
+    actions.append(save, remove); row.append(handleCell, textCell, typeCell, defaultCell, activeCell, actions);
+    return row;
+  }
+
+  for (const [section, label] of dataSections) {
+    const details = document.createElement('details'); details.className = 'admin-data-section'; details.dataset.section = section; details.open = true;
+    const summary = document.createElement('summary');
+    const title = document.createElement('span'); title.textContent = label;
+    const add = document.createElement('button'); add.type = 'button'; add.className = 'add-data-task'; add.textContent = 'Add Task'; add.setAttribute('aria-label', `Add ${label} task`);
+    const scroll = document.createElement('div'); scroll.className = 'table-scroll';
+    const table = document.createElement('table'); table.className = 'table';
+    const head = document.createElement('thead');
+    const header = document.createElement('tr');
+    for (const title of ['', 'Task', 'Type & Choices', 'Default', 'Active', 'Actions']) { const th = document.createElement('th'); th.textContent = title; header.append(th); }
+    head.append(header);
+    const body = document.createElement('tbody'); body.dataset.section = section; adminSectionBodies.set(section, body);
+    add.addEventListener('click', event => {
+      event.preventDefault(); details.open = true;
+      const row = makeAdminTaskRow({}, section); body.append(row); mutationVersion++;
+      row.querySelector('.admin-task-text').focus();
+    });
+    summary.append(title, add); table.append(head, body); scroll.append(table); details.append(summary, scroll); inspectionTasksBody.append(details);
+  }
+
+  async function loadAdminInspectionTasks(supplied = null, preserve = false) {
+    if (!supplied && !preserve && !hasDraft(inspectionTasksBody)) {
+      for (const body of adminSectionBodies.values()) body.replaceChildren();
+      inspectionTasksMessage.textContent = 'Loading inspection tasks...';
+    }
+    const response = supplied ? {ok: true} : await fetch('/api/admin/inspection-tasks');
+    const result = supplied || await response.json();
+    if (!response.ok) throw new Error(taskError(result, 'Unable to load inspection tasks.'));
+    rememberResponse('/api/admin/inspection-tasks', result); adminTaskSnapshot = result.tasks;
+    const existing = new Map([...inspectionTasksBody.querySelectorAll('tr[data-task-id]')].map(row => [row.dataset.taskId, row]));
+    for (const task of result.tasks) {
+      const old = existing.get(task.id); existing.delete(task.id);
+      // Refresh clean definitions without discarding another row's private edits.
+      const row = old && (hasDraft(old) || old.contains(document.activeElement)) ? old : makeAdminTaskRow(task, task.section);
+      if (row !== old) old?.remove();
+      adminSectionBodies.get(task.section || 'compliance').append(row);
+      if (row !== old) rememberControls(row);
+    }
+    for (const row of existing.values()) if (!hasDraft(row)) row.remove();
+    // Uncommitted new tasks always stay at the bottom of their section.
+    for (const body of adminSectionBodies.values()) for (const row of body.querySelectorAll('tr:not([data-task-id])')) body.append(row);
+    applyInactiveVisibility();
+    if (inspectionTasksMessage.textContent === 'Loading inspection tasks...') inspectionTasksMessage.textContent = '';
+  }
 
   function updateChecklistProgress() {
     for (const [containerId, progressId] of [['store-data-fields','store-data-progress'],['compliance-fields','checklist-progress'],['nfpa72-fields','nfpa72-progress']]) {
@@ -562,6 +677,7 @@
       for (const task of result.tasks) {
         const checkbox = task.input_type === 'checkbox';
         const row = document.createElement('div'); row.className = checkbox ? 'inspection-task-row' : 'form-field inspection-task-value';
+        if (task.default_applied) row.title = 'Using the configured default. Saving an answer overrides it for this inspection.';
         const control = document.createElement(task.input_type === 'dropdown' ? 'select' : 'input');
         control.id = `checklist-task-${task.id}`; control.dataset.taskId = task.id;
         const label = document.createElement(checkbox ? 'span' : 'label');

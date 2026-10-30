@@ -113,6 +113,7 @@ class InspectionTask(Base):
     input_type: Mapped[str] = mapped_column(String(20), default="checkbox")
     options_json: Mapped[str] = mapped_column(Text, default="[]")
     section: Mapped[str] = mapped_column(String(20), default="compliance", server_default="compliance", nullable=False)
+    default_value: Mapped[str] = mapped_column(String(2000), default="", server_default="", nullable=False)
     position: Mapped[int] = mapped_column(default=1)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
@@ -293,7 +294,7 @@ def _ensure_point_list_decision_columns(engine) -> None:
 
 def _ensure_checklist_columns(engine) -> None:
     additions = {
-        "inspection_tasks": {"section": "VARCHAR(20) NOT NULL DEFAULT 'compliance'", "input_type": "VARCHAR(20) DEFAULT 'checkbox'", "options_json": "TEXT DEFAULT '[]'"},
+        "inspection_tasks": {"section": "VARCHAR(20) NOT NULL DEFAULT 'compliance'", "input_type": "VARCHAR(20) DEFAULT 'checkbox'", "options_json": "TEXT DEFAULT '[]'", "default_value": "VARCHAR(2000) NOT NULL DEFAULT ''"},
         "inspection_checklist_decisions": {"input_type": "VARCHAR(20) DEFAULT 'checkbox'", "value": "VARCHAR(2000) DEFAULT ''", "options_json": "TEXT DEFAULT '[]'"},
     }
     for table, columns in additions.items():

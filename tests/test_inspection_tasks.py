@@ -300,3 +300,87 @@ def test_store_data_custom_field_uses_existing_value_history(task_app):
     assert client.patch('/api/admin/inspection-tasks/'+task['id'],json={'section':'nfpa72'}).status_code==200
     with store() as session:
         assert session.query(InspectionChecklistDecision).filter_by(task_id=task['id']).one().value=='555-0100'
+
+
+@pytest.mark.parametrize('kind,options,default', [
+    ('checkbox', [], 'Yes'), ('checkbox', [], 'No'), ('checkbox', [], 'NA'), ('checkbox', [], ''),
+    ('textbox', [], 'Default contact'), ('dropdown', ['Ready', 'Repair'], 'Ready'),
+])
+def test_typed_defaults_never_replace_explicit_answers(task_app, kind, options, default):
+    client, store = task_app
+    inspection = make_inspection(client)
+    task = add_task(client, 'Default task', input_type=kind, options=options, default_value=default)
+    path = f'/api/inspections/{inspection}/checklist'
+    row = client.get(path).json()['tasks'][0]
+    assert row['value'] == default and row['default_applied'] == bool(default)
+    with store() as session:
+        assert session.query(InspectionChecklistDecision).count() == 0
+    # Explicitly clearing a value suppresses future defaults, including after a change.
+    assert client.patch(path+'/'+task['id'], json={'value': ''}).status_code == 200
+    replacement = 'No' if kind == 'checkbox' else 'Repair' if kind == 'dropdown' else 'New contact'
+    assert client.patch('/api/admin/inspection-tasks/'+task['id'], json={'default_value': replacement}).status_code == 200
+    row = client.get(path).json()['tasks'][0]
+    assert row['value'] == '' and not row['default_applied']
+    another = make_inspection(client, '0043')
+    assert client.get(f'/api/inspections/{another}/checklist').json()['tasks'][0]['value'] == replacement
+    with store() as session:
+        assert session.query(InspectionChecklistDecision).count() == 1
+
+
+@pytest.mark.parametrize('extra', [
+    {'default_value': True}, {'default_value': 'checked'}, {'default_value': None},
+    {'input_type': 'textbox', 'default_value': 'x'*2001},
+    {'input_type': 'dropdown', 'options': ['Ready'], 'default_value': 'Repair'},
+])
+def test_invalid_defaults_rejected(task_app, extra):
+    client, _ = task_app
+    assert client.post('/api/admin/inspection-tasks', json={'text': 'Invalid default', **extra}).status_code == 422
+
+
+def test_default_validation_on_edit_and_type_change(task_app):
+    client, _ = task_app
+    task = add_task(client, input_type='dropdown', options=['Ready', 'Repair'], default_value='Ready')
+    path = '/api/admin/inspection-tasks/'+task['id']
+    assert client.patch(path, json={'default_value': 'Invalid'}).status_code == 422
+    assert client.get('/api/admin/inspection-tasks').json()['tasks'][0]['default_value'] == 'Ready'
+    assert client.patch(path, json={'options': ['Repair']}).json()['task']['default_value'] == ''
+    assert client.patch(path, json={'input_type': 'textbox', 'default_value': 'Contact'}).status_code == 200
+    assert client.patch(path, json={'input_type': 'checkbox'}).json()['task']['default_value'] == ''
+    assert client.patch(path, json={'default_value': None}).status_code == 422
+
+
+def test_atomic_section_reorder_conflicts_and_history(task_app):
+    client, store = task_app
+    first = add_task(client, 'First', section='nfpa72')
+    second = add_task(client, 'Second', section='nfpa72')
+    other = add_task(client, 'Other', section='store_data')
+    inspection = make_inspection(client)
+    client.patch(f'/api/inspections/{inspection}/checklist/{first["id"]}', json={'value': 'Yes'})
+    request = {'section': 'nfpa72', 'expected_order': [first['id'], second['id']], 'task_ids': [second['id'], first['id']]}
+    assert client.put('/api/admin/inspection-tasks/order', json=request).status_code == 200
+    assert client.put('/api/admin/inspection-tasks/order', json=request).status_code == 409
+    for ids in ([first['id'], first['id']], [first['id']], [other['id'], first['id']]):
+        assert client.put('/api/admin/inspection-tasks/order', json={**request, 'task_ids': ids}).status_code == 409
+    third = add_task(client, 'Third', section='nfpa72')
+    assert third['position'] == 3
+    rows = client.get(f'/api/inspections/{inspection}/checklist').json()['tasks']
+    assert [t['id'] for t in rows if t['section'] == 'nfpa72'] == [second['id'], first['id'], third['id']]
+    with store() as session:
+        assert session.get(InspectionTask, other['id']).position == other['position']
+        assert session.query(InspectionChecklistDecision).one().value == 'Yes'
+
+
+def test_default_column_migration_is_additive_and_repeatable(tmp_path, monkeypatch):
+    from sqlalchemy import create_engine, text
+    from alarm_inspection.storage import open_store
+    url = f"sqlite:///{tmp_path / 'default-migration.db'}"
+    monkeypatch.setenv('DATABASE_URL', url)
+    engine = create_engine(url)
+    with engine.begin() as connection:
+        connection.execute(text('CREATE TABLE inspection_tasks (id VARCHAR(36) PRIMARY KEY, text VARCHAR(200), text_key VARCHAR(600), section VARCHAR(20), input_type VARCHAR(20), options_json TEXT, position INTEGER, active BOOLEAN, created_at DATETIME)'))
+        connection.execute(text("INSERT INTO inspection_tasks VALUES ('original', 'Panel model', 'panel model', 'store_data', 'textbox', '[]', 8, 1, '2026-10-01 00:00:00')"))
+    for _ in range(2):
+        store = open_store()
+        with store() as session:
+            task = session.get(InspectionTask, 'original')
+            assert task.default_value == '' and task.section == 'store_data' and task.position == 8
