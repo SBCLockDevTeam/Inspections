@@ -269,7 +269,7 @@ button:active {
 .inspection-section > summary { padding: 14px 16px; font-weight: 600; cursor: pointer; background: var(--panel-alt); }
 .inspection-section > summary:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
 .inspection-section-body { padding: 16px; }
-#checklist-progress, #nfpa72-progress { font-size: 0.9rem; font-weight: 400; color: var(--muted); margin-left: 10px; }
+#checklist-progress, #nfpa72-progress, #store-data-progress { font-size: 0.9rem; font-weight: 400; color: var(--muted); margin-left: 10px; }
 .inspection-task-row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 16px; padding: 11px 0; margin: 0; font-weight: 400; }
 .inspection-task-description { flex: 0 1 auto; min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
 .task-checkbox-choices { display: flex; flex: 0 0 auto; gap: 16px; }
@@ -992,7 +992,7 @@ button.inspection-menu-option {
 <button type="button" id="admin-tab-users" role="tab" aria-controls="admin-panel-users" aria-selected="true">Users</button>
 <button type="button" id="admin-tab-panel-types" role="tab" aria-controls="admin-panel-panel-types" aria-selected="false" tabindex="-1">Panel Types</button>
 <button type="button" id="admin-tab-integrations" role="tab" aria-controls="admin-panel-integrations" aria-selected="false" tabindex="-1">Integrations</button>
-<button type="button" id="admin-tab-inspection-tasks" role="tab" aria-controls="admin-panel-inspection-tasks" aria-selected="false" tabindex="-1">Inspection Tasks</button>
+<button type="button" id="admin-tab-inspection-tasks" role="tab" aria-controls="admin-panel-inspection-tasks" aria-selected="false" tabindex="-1">Data Sections</button>
 </div>
 <div id="admin-panel-users" role="tabpanel" aria-labelledby="admin-tab-users">
 <div class="admin-grid">
@@ -1011,8 +1011,8 @@ button.inspection-menu-option {
 </div>
 <div id="admin-panel-integrations" role="tabpanel" aria-labelledby="admin-tab-integrations" class="hidden"></div>
 <div id="admin-panel-inspection-tasks" role="tabpanel" aria-labelledby="admin-tab-inspection-tasks" class="hidden">
-<h3>Inspection Tasks</h3><p>Choose Checkbox, Textbox, or Dropdown for each item. Add or remove dropdown choices below. Existing answers remain in history when you change a type or remove a choice.</p>
-<form id="add-inspection-task-form" autocomplete="off"><div class="form-field"><label for="inspection-task-section">Section:</label><select id="inspection-task-section"><option value="compliance">Compliance</option><option value="nfpa72">NFPA 72</option></select></div><div class="form-field"><label for="inspection-task-text">Task Description:</label><input id="inspection-task-text" name="inspection_checklist_task" type="text" maxlength="200" autocomplete="off" required></div><div class="form-field"><label for="inspection-task-type">Type:</label><select id="inspection-task-type" name="inspection_task_type"><option value="checkbox">Checkbox (Yes / No / NA)</option><option value="textbox">Textbox</option><option value="dropdown">Dropdown</option></select></div><div id="inspection-task-options"></div><div class="form-field"><label for="inspection-task-position">Order (optional):</label><input id="inspection-task-position" type="number" min="1" max="10000" step="1" placeholder="Next available position"></div><button type="submit" id="add-inspection-task">Add Task</button></form>
+<h3>Data Sections</h3><p>Add fields to Store Data, NFPA 72, or Compliance. Choose Checkbox, Textbox, or Dropdown for each item. Add or remove dropdown choices below. Existing answers remain in history when you change a type or remove a choice.</p>
+<form id="add-inspection-task-form" autocomplete="off"><div class="form-field"><label for="inspection-task-section">Section:</label><select id="inspection-task-section"><option value="store_data">Store Data</option><option value="compliance" selected>Compliance</option><option value="nfpa72">NFPA 72</option></select></div><div class="form-field"><label for="inspection-task-text">Task Description:</label><input id="inspection-task-text" name="inspection_checklist_task" type="text" maxlength="200" autocomplete="off" required></div><div class="form-field"><label for="inspection-task-type">Type:</label><select id="inspection-task-type" name="inspection_task_type"><option value="checkbox">Checkbox (Yes / No / NA)</option><option value="textbox">Textbox</option><option value="dropdown">Dropdown</option></select></div><div id="inspection-task-options"></div><div class="form-field"><label for="inspection-task-position">Order (optional):</label><input id="inspection-task-position" type="number" min="1" max="10000" step="1" placeholder="Next available position"></div><button type="submit" id="add-inspection-task">Add Task</button></form>
 <div id="inspection-tasks-message" role="status"></div>
 <div class="table-scroll"><table class="table"><thead><tr><th>Task</th><th>Section</th><th>Type &amp; Choices</th><th>Order</th><th>Active</th><th>Actions</th></tr></thead><tbody id="inspection-tasks-body"></tbody></table></div>
 </div>
@@ -1046,7 +1046,8 @@ button.inspection-menu-option {
 <div class="inspection-breadcrumb-row"><div class="inspection-breadcrumb"><a href="#" id="home-link-from-inspection" class="inspection-breadcrumb-link">Home</a></div><div class="inspection-header-actions"><button type="button" id="save-all-inspection" class="secondary">Save</button><div id="inspection-menu-wrap" class="inspection-menu-wrap"><button type="button" id="inspection-menu-button" class="secondary" title="Inspection menu">☰</button><div id="inspection-menu" class="hidden"><div id="inspection-menu-option-open-another" class="inspection-menu-option disabled" role="menuitem" aria-disabled="true" tabindex="-1" title="Not ready yet">Open Another Inspection (coming soon)</div><div id="inspection-menu-option-add-point-list" class="inspection-menu-option" role="menuitem" tabindex="0">Add New Points List</div><div id="inspection-menu-option-delete-point-list" class="inspection-menu-option" role="menuitem" tabindex="0">Delete Points List</div><button type="button" id="inspection-menu-option-form-exports" class="inspection-menu-option" role="menuitem">Export Forms</button><div id="inspection-menu-option-edit-nfpa" class="inspection-menu-option" role="menuitem" tabindex="0">Edit NFPA PDF</div><div id="inspection-menu-option-toggle-missing" class="inspection-menu-option" role="menuitem" tabindex="0">Show Missing Points Only</div><div id="inspection-menu-option-export-pdf" class="inspection-menu-option" role="menuitem" tabindex="0">Export PDF</div><div id="inspection-menu-option-clear-dates" class="inspection-menu-option" role="menuitem" tabindex="0">Clear Dates</div><button type="button" id="delete-open-inspection" class="inspection-menu-option" role="menuitem">Delete Inspection</button></div></div></div></div>
 
 <h2 id="inspection-name"></h2>
-<details id="store-data-section" class="inspection-section" open><summary>Store Data</summary><div class="inspection-section-body">
+<div id="inspection-checklist">
+<details id="store-data-section" class="inspection-section" open><summary>Store Data <span id="store-data-progress"></span></summary><div class="inspection-section-body">
 <div class="inspection-details">
   <div class="details-row">
     <div class="compact-field">
@@ -1080,8 +1081,8 @@ button.inspection-menu-option {
   </div>
 </div>
 
+<div id="store-data-fields"></div>
 </div></details>
-<div id="inspection-checklist">
 <details id="export-form-details-section" class="inspection-section" open><summary>NFPA 72 <span id="nfpa72-progress"></span></summary><div class="inspection-section-body"><div id="nfpa72-fields"></div><button type="button" id="refresh-nfpa72" class="secondary">Refresh NFPA 72</button></div></details>
 <details id="checklist-section" class="inspection-section" open><summary>Compliance <span id="checklist-progress"></span></summary><div class="inspection-section-body">
 <div id="compliance-fields"></div><button type="button" id="refresh-checklist" class="secondary">Refresh Compliance</button>

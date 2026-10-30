@@ -41,9 +41,11 @@ def test_admin_choices_and_typed_checklist_values_sync(tmp_path, monkeypatch):
                 response = await a.request.post(base+'/api/inspections/blank', data={'store_number':'TYPED','address':'Test','city':'Norfolk','state':'VA','start_date':'2026-10-01','completion_date':'2026-10-02'})
                 inspection_id = (await response.json())['id']
                 await a.locator('#avatar-button').click(button='right'); await a.click('#avatar-menu-option-admin'); await a.click('#admin-tab-inspection-tasks')
-                for label, kind in [('Restore system','checkbox'),('Panel serial','textbox'),('Condition','dropdown')]:
+                await playwright.expect(a.locator('#admin-tab-inspection-tasks')).to_have_text('Data Sections')
+                await playwright.expect(a.locator('#inspection-task-section option[value=store_data]')).to_have_text('Store Data')
+                for label, kind in [('Restore system','checkbox'),('Panel serial','textbox'),('Condition','dropdown'),('Store contact','textbox')]:
                     await a.fill('#inspection-task-text',label); await a.select_option('#inspection-task-type',kind)
-                    await a.select_option('#inspection-task-section','nfpa72' if label=='Panel serial' else 'compliance')
+                    await a.select_option('#inspection-task-section','nfpa72' if label=='Panel serial' else 'store_data' if label=='Store contact' else 'compliance')
                     if kind == 'dropdown':
                         choices = a.locator('#inspection-task-options .task-option-input')
                         await choices.nth(0).fill('Ready'); await a.locator('#inspection-task-options .add-task-choice').click(); await choices.nth(1).fill('Remove me')
@@ -63,6 +65,11 @@ def test_admin_choices_and_typed_checklist_values_sync(tmp_path, monkeypatch):
                     await playwright.expect(page.locator('#inspection-screen')).to_be_visible()
                 assert await b.locator(f'#export-form-details-section #checklist-task-{ids["Panel serial"]}').count()==1
                 assert await b.locator(f'#checklist-section #checklist-task-{ids["Panel serial"]}').count()==0
+                store_contact=f'#checklist-task-{ids["Store contact"]}'
+                assert await b.locator('#store-data-section '+store_contact).count()==1
+                await b.fill(store_contact,'Store contact value');await b.locator(store_contact).press('Tab')
+                await playwright.expect(c.locator(store_contact)).to_have_value('Store contact value',timeout=12000)
+                assert await b.locator('#inspection-store-number').input_value()=='TYPED'
                 text = f'#checklist-task-{ids["Panel serial"]}'; dropdown = f'#checklist-task-{ids["Condition"]}'; checkbox = f'#checklist-task-{ids["Restore system"]}-yes'
                 await b.locator(checkbox).check(); await b.fill(text,'SN-0042'); await b.locator(text).press('Tab')
                 await b.select_option(dropdown,'Ready'); await b.locator('#inspection-name').click()

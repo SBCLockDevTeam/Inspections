@@ -882,7 +882,7 @@
       link.addEventListener('click',()=>{
         const ids={store_data:'store-data-section',checklist:'checklist-section',points:'points-events-section',form_details:'export-form-details-section'};
         const section=document.getElementById(ids[blocker.navigation] || 'export-form-details-section');if(section){section.open=true;section.scrollIntoView({block:'start'});}
-        if(blocker.navigation==='checklist'){const task=[...document.querySelectorAll('[data-task-id]')].find(control=>control.dataset.taskId===blocker.source_id);const section=task?.closest('details');if(section)section.open=true;exportDialog.close();task?.scrollIntoView({block:'center'});task?.focus();}else if(blocker.navigation==='store_data'||blocker.navigation==='points')exportDialog.close();
+        if(blocker.navigation==='checklist'){const task=[...document.querySelectorAll('input[data-task-id],select[data-task-id],textarea[data-task-id]')].find(control=>control.dataset.taskId===blocker.source_id);const section=task?.closest('details');if(section)section.open=true;exportDialog.close();task?.scrollIntoView({block:'center'});task?.focus();}else if(blocker.navigation==='store_data'||blocker.navigation==='points')exportDialog.close();
         const fieldRow=[...card.querySelectorAll('[data-input-key]')].find(row=>row.dataset.inputKey.startsWith(blocker.source_id+':'));
         fieldRow?.querySelector('[data-answer]')?.focus();
       });item.append(link);blockers.append(item);
@@ -930,7 +930,7 @@
       act(row,`Required when ${dependency.kind} ${dependency.id || dependency.field} ${definition.required_when.operator}`,()=>{
         const section=document.getElementById(dependency.kind==='checklist'?'checklist-section':dependency.kind==='inspection'?'store-data-section':'export-form-details-section');
         if(section){section.open=true;section.scrollIntoView({block:'start'});}
-        const control=[...document.querySelectorAll('[data-task-id]')].find(c=>c.dataset.taskId===dependency.id);if(dependency.kind==='checklist'){const parent=control?.closest('details');if(parent)parent.open=true;exportDialog.close();control?.scrollIntoView({block:'center'});}control?.focus();
+        const control=[...document.querySelectorAll('input[data-task-id],select[data-task-id],textarea[data-task-id]')].find(c=>c.dataset.taskId===dependency.id);if(dependency.kind==='checklist'){const parent=control?.closest('details');if(parent)parent.open=true;exportDialog.close();control?.scrollIntoView({block:'center'});}control?.focus();
       });
     }
     control.id=id;control.dataset.answer='true';control.value=draft.value ?? '';row.append(control,node('p',definition.meaning),node('span','',{class:'pdf-field-status',role:'status'}));

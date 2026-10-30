@@ -387,7 +387,7 @@ def test_simple_picker_save_then_export_without_manual_details(browser_app,tmp_p
                 await playwright.expect(default).to_have_value('2025-01-01')
                 # New fields in either section appear without discarding local mapping edits.
                 created=[]
-                for section in ('nfpa72','compliance'):
+                for section in ('nfpa72','compliance','store_data'):
                     response=client.post('/api/admin/inspection-tasks',json={'text':'New '+section+' integration field','section':section,'input_type':'textbox'})
                     assert response.status_code==201,response.text
                     created.append(response.json()['task'])

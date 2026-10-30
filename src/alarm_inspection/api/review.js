@@ -470,7 +470,7 @@
       textCell.append(text);
       const sectionCell = document.createElement('td');
       const section = document.createElement('select'); section.setAttribute('aria-label', 'Field section');
-      section.add(new Option('Compliance', 'compliance')); section.add(new Option('NFPA 72', 'nfpa72'));
+      section.add(new Option('Store Data', 'store_data')); section.add(new Option('Compliance', 'compliance')); section.add(new Option('NFPA 72', 'nfpa72'));
       section.value = task.section || 'compliance'; sectionCell.append(section);
       const typeCell = document.createElement('td');
       const type = makeTaskTypeSelect(task.input_type);
@@ -537,7 +537,7 @@
   });
 
   function updateChecklistProgress() {
-    for (const [containerId, progressId] of [['compliance-fields','checklist-progress'],['nfpa72-fields','nfpa72-progress']]) {
+    for (const [containerId, progressId] of [['store-data-fields','store-data-progress'],['compliance-fields','checklist-progress'],['nfpa72-fields','nfpa72-progress']]) {
       const controls = [...document.getElementById(containerId).querySelectorAll('[data-task-id]')];
       const complete = controls.filter(control => Boolean(control.value.trim())).length;
       document.getElementById(progressId).textContent = controls.length ? `${complete} of ${controls.length} complete` : '';
@@ -557,7 +557,7 @@
       const focusedId = focused?.id;
       const selectionStart = focused?.selectionStart;
       const selectionEnd = focused?.selectionEnd;
-      const fieldContainers = {compliance: document.getElementById('compliance-fields'), nfpa72: document.getElementById('nfpa72-fields')};
+      const fieldContainers = {store_data: document.getElementById('store-data-fields'), compliance: document.getElementById('compliance-fields'), nfpa72: document.getElementById('nfpa72-fields')};
       for (const container of Object.values(fieldContainers)) container.replaceChildren();
       for (const task of result.tasks) {
         const checkbox = task.input_type === 'checkbox';
@@ -630,7 +630,7 @@
               const result = await response.json();
               if (!response.ok) throw new Error(taskError(result, 'Saving checklist value failed.'));
               fieldBaselines.set(control, value);
-              if (currentInspectionId === inspectionId) checklistMessage.textContent = `${task.section === 'nfpa72' ? 'NFPA 72' : 'Compliance'} saved.`;
+              if (currentInspectionId === inspectionId) checklistMessage.textContent = `${({store_data:'Store Data',nfpa72:'NFPA 72',compliance:'Compliance'})[task.section || 'compliance']} saved.`;
               return true;
             } catch (error) {
               if (checkbox) control.value = previous;
@@ -645,7 +645,7 @@
           checklistSaves.add(save); save.finally(() => checklistSaves.delete(save));
         });
       }
-      rememberControls(checklistContainer);
+      for (const container of Object.values(fieldContainers)) rememberControls(container);
       if (focusedId) {
         const replacement = document.getElementById(focusedId);
         replacement?.focus({ preventScroll: true });

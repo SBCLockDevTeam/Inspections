@@ -21,7 +21,7 @@ NFPA exports exactly pages 1–4; Compliance exports page 1. Supplemental report
 
 ## Technician export
 
-Save the inspection's **Store Data**, **NFPA 72** and **Compliance** answers. Open **☰ → Export Forms** and choose **Export NFPA 72** or **Export Compliance Form**. Required mapped answers must exist or have a configured default. Optional missing answers remain blank. NFPA 72 and Compliance fields use the same editable, automatically saved checklist controls. Administrators add or move fields using the Section selector under Administration → Inspection Tasks; new fields become PDF sources automatically. No panel selection, Points List approval, Event History mapping or separate manual Form Details answers are required for integrations saved through the normal interface. Existing Initiating Devices export rules are unchanged.
+Save the inspection's **Store Data**, **NFPA 72** and **Compliance** answers. Open **☰ → Export Forms** and choose **Export NFPA 72** or **Export Compliance Form**. Required mapped answers must exist or have a configured default. Optional missing answers remain blank. NFPA 72 and Compliance fields use the same editable, automatically saved checklist controls. Administrators add or move fields using the Section selector under Administration → Data Sections; new fields become PDF sources automatically. No panel selection, Points List approval, Event History mapping or separate manual Form Details answers are required for integrations saved through the normal interface. Existing Initiating Devices export rules are unchanged.
 
 Review the watermarked preview, then confirm and download. The PDF uses saved data from that specific inspection. The server rechecks authorization, current configuration and preview hash; a source/configuration change requires a new preview. Retries reuse the same confirmed record. Export history retains final PDFs and offers technical provenance under Debug provenance.
 
@@ -73,8 +73,14 @@ Checkbox-default update: the full suite passed 345 tests with SQLite, PostgreSQL
 
 ## October 30 inspection section update
 
-The inspection form now has editable NFPA 72 and Compliance sections. Manage both under Administration → Inspection Tasks using the Section selector. The one-time additive migration assigns existing tasks to Compliance and moves Panel Model/Firmware version to NFPA 72, preserving IDs, choices, answer history and existing PDF references. Administrators may subsequently move fields without changing their saved answers. Source grouping refreshes from those definitions; moving a field does not change its compatibility hash.
+The inspection form now has editable NFPA 72 and Compliance sections. Manage both under Administration → Data Sections using the Section selector. The one-time additive migration assigns existing tasks to Compliance and moves Panel Model/Firmware version to NFPA 72, preserving IDs, choices, answer history and existing PDF references. Administrators may subsequently move fields without changing their saved answers. Source grouping refreshes from those definitions; moving a field does not change its compatibility hash.
 
 All former Export Form Details tools are under inspection ☰ → Export Forms, including existing advanced manual details/scope, readiness, preview, confirmation, history and recovery. Closing the dialog preserves local export-detail edits. NFPA 72 in the inspection form is for editable inspection data and is independent of the optional PDF feature switch.
 
 Verification: 351 full regression cases passed with PostgreSQL and Chromium enabled; 27 focused field/API/migration cases also passed, including the final dropdown-definition byte-preservation check. The single warning is the existing test-client deprecation. Deployment compares legacy data excluding only the new section column, and separately verifies the exact intended section assignments and unchanged field IDs/types/options.
+
+### Administration → Data Sections
+
+The former Inspection Tasks tab is named Data Sections. The Section selector supports Store Data, NFPA 72 and Compliance for new and existing custom fields. Store Data custom fields use the same typed controls, autosave, Header Save, history and shared refresh as the other sections, and automatically appear in the Store Data integration source group. The built-in Store Number/address/date identity fields and their validation remain intact. No existing field is moved automatically by this update.
+
+Data Sections/Store Data update: 353 regression tests passed with PostgreSQL and Chromium enabled and no skips. Browser coverage adds a Store Data custom field through Administration, verifies its placement and cross-device saving, and confirms the built-in Store Number is unchanged. Mapping coverage confirms new Store Data fields appear while preserving local mapping edits. The only warning is the existing test-client deprecation.

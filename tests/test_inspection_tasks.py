@@ -287,3 +287,16 @@ def test_section_move_preserves_dropdown_definition_bytes(task_app):
     response=client.patch('/api/admin/inspection-tasks/'+field['id'],json={'section':'nfpa72','input_type':'dropdown','options':['A','B']})
     assert response.status_code==200
     with store() as session:assert session.get(InspectionTask,field['id']).options_json=='["A","B"]'
+
+
+def test_store_data_custom_field_uses_existing_value_history(task_app):
+    client,store=task_app;inspection=make_inspection(client)
+    task=add_task(client,'Store contact phone',section='store_data',input_type='textbox')
+    assert task['section']=='store_data'
+    response=client.patch(f'/api/inspections/{inspection}/checklist/{task["id"]}',json={'value':'555-0100'})
+    assert response.status_code==200
+    field=next(row for row in client.get(f'/api/inspections/{inspection}/checklist').json()['tasks'] if row['id']==task['id'])
+    assert field['section']=='store_data' and field['value']=='555-0100'
+    assert client.patch('/api/admin/inspection-tasks/'+task['id'],json={'section':'nfpa72'}).status_code==200
+    with store() as session:
+        assert session.query(InspectionChecklistDecision).filter_by(task_id=task['id']).one().value=='555-0100'

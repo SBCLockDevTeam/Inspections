@@ -205,8 +205,10 @@ def test_both_sections_are_automatic_sources_and_moves_keep_existing_mapping(adm
     client,store,files,inspection=admin_api
     with store.begin() as session:
         session.add(InspectionTask(id='nfpa-new',text='New NFPA field',text_key='new nfpa field',section='nfpa72',input_type='textbox',options_json='[]',position=20,active=True,created_at=datetime.now(timezone.utc)))
+        session.add(InspectionTask(id='store-new',text='Store custom field',text_key='store custom field',section='store_data',input_type='textbox',options_json='[]',position=21,active=True,created_at=datetime.now(timezone.utc)))
     catalog=client.get('/api/admin/integrations/sources').json()
     assert next(e for e in catalog['entries'] if e['source'].get('id')=='nfpa-new')['section']=='NFPA 72'
+    assert next(e for e in catalog['entries'] if e['source'].get('id')=='store-new')['section']=='Store Data'
     assert next(e for e in catalog['entries'] if e['source'].get('id')=='task')['section']=='Compliance'
     draft=uploaded(client);target=text_target(draft)
     response=save(client,draft,[{'target_id':target['id'],'disposition':'source','source':{'kind':'checklist','id':'task'},'required':True}])
