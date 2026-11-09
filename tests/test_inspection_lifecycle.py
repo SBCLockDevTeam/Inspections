@@ -93,3 +93,25 @@ def test_invalid_location_edit_preserves_existing_name(inspection_app):
     inspection_id = client.post("/api/inspections/blank", json=new_inspection()).json()["id"]
     assert "error" in client.patch(f"/api/inspections/{inspection_id}", json={"state": "XX"}).json()
     assert client.get(f"/api/inspections/{inspection_id}").json()["name"] == "1234-Norfolk-VA-10-2026"
+
+
+@pytest.mark.parametrize("initial", [None, "", "2026-11-15"])
+def test_due_date_round_trip_edit_clear_and_validation(inspection_app, initial):
+    client, _, _ = inspection_app
+    saved = client.post("/api/inspections/blank", json=new_inspection() | {"due_date": initial})
+    assert saved.status_code == 200
+    url = f"/api/inspections/{saved.json()['id']}"
+    assert client.get(url).json()["due_date"] == (initial or None)
+    assert client.patch(url, json={"due_date": "2026-12-01"}).json()["due_date"] == "2026-12-01"
+    assert client.patch(url, json={"inspector_name": "Updated"}).json()["due_date"] == "2026-12-01"
+    assert client.patch(url, json={"due_date": "invalid"}).status_code == 422
+    assert client.get(url).json()["due_date"] == "2026-12-01"
+    assert client.get("/api/inspections").json()[0]["due_date"] == "2026-12-01"
+    assert client.patch(url, json={"due_date": ""}).json()["due_date"] is None
+    assert client.get(url).json()["due_date"] is None
+
+
+def test_invalid_due_date_rejects_creation(inspection_app):
+    client, _, _ = inspection_app
+    assert client.post("/api/inspections/blank", json=new_inspection() | {"due_date": "2026-02-30"}).status_code == 422
+    assert client.get("/api/inspections").json() == []

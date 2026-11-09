@@ -45,6 +45,12 @@ class NewInspection(BaseModel):
     inspector_name: str = Field(default="", max_length=120)
     start_date: date
     completion_date: date
+    due_date: date | None = None
+
+    @field_validator("due_date", mode="before")
+    @classmethod
+    def blank_due_date(cls, value):
+        return None if value == "" else value
 
     @field_validator("city")
     @classmethod
@@ -240,6 +246,7 @@ def create_router(store) -> APIRouter:
                     "address": row.address,
                     "start_date": row.start_date.isoformat(),
                     "completion_date": row.completion_date.isoformat(),
+                    "due_date": row.due_date.isoformat() if row.due_date else None,
                     "status": row.status,
                     "created_at": row.created_at.isoformat(),
                 }
@@ -317,6 +324,7 @@ def create_router(store) -> APIRouter:
                 "inspector_name": inspection.inspector_name,
                 "start_date": inspection.start_date.isoformat(),
                 "completion_date": inspection.completion_date.isoformat(),
+                "due_date": inspection.due_date.isoformat() if inspection.due_date else None,
                 "status": inspection.status,
                 "accepted_points": [
                     {
@@ -359,6 +367,10 @@ def create_router(store) -> APIRouter:
             start_date = parse_date_value(payload.get("start_date"))
             completion_date = parse_date_value(payload.get("completion_date"))
 
+            due_date = parse_date_value(payload.get("due_date"))
+            if payload.get("due_date") not in (None, "") and due_date is None:
+                raise HTTPException(status_code=422, detail="Enter a valid Due By date.")
+
             candidate_store_number = store_number or inspection.store_number
             candidate_store_type = store_type or inspection.store_type
             candidate_start_date = start_date or inspection.start_date
@@ -389,6 +401,8 @@ def create_router(store) -> APIRouter:
                 inspection.inspector_name = inspector_name
             if start_date is not None:
                 inspection.start_date = start_date
+            if "due_date" in payload:
+                inspection.due_date = due_date
             if completion_date is not None:
                 inspection.completion_date = completion_date
 
@@ -403,6 +417,7 @@ def create_router(store) -> APIRouter:
                 "inspector_name": inspection.inspector_name,
                 "start_date": inspection.start_date.isoformat(),
                 "completion_date": inspection.completion_date.isoformat(),
+                "due_date": inspection.due_date.isoformat() if inspection.due_date else None,
                 "status": inspection.status,
             }
 

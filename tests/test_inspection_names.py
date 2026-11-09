@@ -45,7 +45,11 @@ def test_migration_is_idempotent_and_preserves_explicit_locations(tmp_path, monk
         row = session.get(Inspection, "legacy")
         assert row.name == "0042-Norfolk-VA-09-2026"
         assert row.address == "123 Main St, Norfolk, VA 23502"
+        assert row.due_date is None
+        from datetime import date
+        row.due_date = date(2026, 12, 1)
         row.city = "Virginia Beach"
     store = open_store()
     with store() as session:
+        assert session.get(Inspection, "legacy").due_date == date(2026, 12, 1)
         assert session.get(Inspection, "legacy").name == "0042-Virginia Beach-VA-09-2026"

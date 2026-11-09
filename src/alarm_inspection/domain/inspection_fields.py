@@ -12,6 +12,7 @@ NATIVE_FIELDS = [
     ('inspector_name', 'Inspector', 'textbox', 120),
     ('start_date', 'Start Date', 'date', 10),
     ('completion_date', 'End Date', 'date', 10),
+    ('due_date', 'Due By', 'date', 10),
 ]
 
 

@@ -32,6 +32,7 @@ class Inspection(Base):
     inspector_name: Mapped[str] = mapped_column(String(120), default="")
     start_date: Mapped[date] = mapped_column(Date)
     completion_date: Mapped[date] = mapped_column(Date)
+    due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     status: Mapped[str] = mapped_column(String(40), default="received")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
@@ -244,6 +245,8 @@ def _ensure_inspection_columns(engine) -> None:
         for column in inspect(engine).get_columns("inspections")
     }
     statements: list[str] = []
+    if "due_date" not in existing_columns:
+        statements.append("ALTER TABLE inspections ADD COLUMN due_date DATE")
     if "store_type" not in existing_columns:
         statements.append(
             "ALTER TABLE inspections ADD COLUMN store_type VARCHAR(80) DEFAULT 'Walmart - Supercenter'"

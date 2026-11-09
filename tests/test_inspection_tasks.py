@@ -34,7 +34,7 @@ def add_task(client, text="Notify monitoring station", **extra):
 def test_task_management_order_and_duplicates(task_app):
     client, store = task_app
     assert client.get("/api/admin/inspection-tasks").json()["tasks"] == []
-    assert len(client.get("/api/admin/inspection-tasks").json()["builtin_fields"]) == 8
+    assert len(client.get("/api/admin/inspection-tasks").json()["builtin_fields"]) == 9
     task = add_task(client, "  Notify   monitoring station  ", position=4)
     assert task["text"] == "Notify monitoring station"
     second = add_task(client, "Restore system", position=2)
@@ -391,8 +391,8 @@ def test_native_store_fields_link_to_actual_properties_and_keep_values(task_app)
     client, store = task_app
     inspection = make_inspection(client)
     fields = client.get('/api/admin/inspection-tasks').json()['builtin_fields']
-    assert [f['native_field'] for f in fields] == ['store_number','store_type','address','city','state','inspector_name','start_date','completion_date']
-    assert len({f['id'] for f in fields}) == 8
+    assert [f['native_field'] for f in fields] == ['store_number','store_type','address','city','state','inspector_name','start_date','completion_date','due_date']
+    assert len({f['id'] for f in fields}) == 9
     with store() as session: assert session.query(InspectionTask).count() == 0
     path = '/api/admin/inspection-tasks/builtin/city'
     assert client.patch(path, json={'text':'Municipality','default_value':'Richmond'}).status_code == 200
@@ -427,7 +427,7 @@ def test_native_dates_and_mixed_store_order_are_atomic(task_app):
     result = client.get('/api/admin/inspection-tasks').json()
     assert [f['id'] for f in sorted(result['builtin_fields']+result['tasks'],key=lambda f:f['position'])] == reordered
     newer = add_task(client, 'Second contact', section='store_data')
-    assert newer['position'] == 10
+    assert newer['position'] == 11
     forged = {**request,'expected_order':reordered,'task_ids':reordered[:-1]}
     assert client.put('/api/admin/inspection-tasks/order', json=forged).status_code == 409
     with store() as session:

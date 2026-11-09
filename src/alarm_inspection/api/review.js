@@ -68,6 +68,7 @@
   const inspectionAddress = document.querySelector('#inspection-address');
   const inspectionInspector = document.querySelector('#inspection-inspector');
   const inspectionStartDate = document.querySelector('#inspection-start-date');
+  const inspectionDueDate = document.querySelector('#inspection-due-date');
   const inspectionEndDate = document.querySelector('#inspection-end-date');
   const acceptedPointsBody = document.querySelector('#accepted-points-body');
   const inspectionPointListSelector = document.querySelector('#inspection-point-list-selector');
@@ -167,7 +168,7 @@
   document.addEventListener('change', () => { mutationVersion++; });
   const detailFields = () => ({ store_number: inspectionStoreNumber, store_type: inspectionStoreType,
     address: inspectionAddress, city: inspectionCity, state: inspectionState,
-    inspector_name: inspectionInspector, start_date: inspectionStartDate, completion_date: inspectionEndDate });
+    inspector_name: inspectionInspector, start_date: inspectionStartDate, completion_date: inspectionEndDate, due_date: inspectionDueDate });
 
   async function refreshSharedState() {
     if (syncing || !currentUser || currentScreen === 'login' || document.hidden || pendingWrites || loadingInspection) return;
@@ -1680,6 +1681,7 @@
       inspector_name: inspectionInspector?.value || '',
       start_date: inspectionStartDate?.value || '',
       completion_date: inspectionEndDate?.value || '',
+      due_date: inspectionDueDate?.value || '',
     };
     for (const [key, control] of Object.entries(detailFields())) {
       if (fieldBaselines.has(control) && payload[key] === fieldBaselines.get(control)) delete payload[key];
@@ -1786,6 +1788,7 @@
     if (inspectionStartDate) {
       inspectionStartDate.value = asDateInputValue(inspection.start_date);
     }
+    if (inspectionDueDate) inspectionDueDate.value = asDateInputValue(inspection.due_date);
     if (inspectionEndDate) {
       inspectionEndDate.value = asDateInputValue(inspection.completion_date);
     }
@@ -2664,7 +2667,7 @@
     });
   });
 
-  [inspectionStartDate, inspectionEndDate].forEach((element) => {
+  [inspectionStartDate, inspectionEndDate, inspectionDueDate].forEach((element) => {
     element?.addEventListener('change', async () => {
       await saveInspectionDetails();
     });

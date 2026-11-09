@@ -130,7 +130,7 @@ class SourceRef(Contract):
     @model_validator(mode='after')
     def allowlist(self):
         allowed = {'inspection': {'store_number', 'store_type', 'address', 'city', 'state', 'inspector_name',
-                                  'start_date', 'completion_date'},
+                                  'start_date', 'completion_date', 'due_date'},
                    'panel': {'id', 'category', 'accepted_points', 'accepted_times'},
                    'count': {'installed', 'tested_good'}}
         if self.kind in allowed and self.field not in allowed[self.kind]:

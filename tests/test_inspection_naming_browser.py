@@ -45,15 +45,30 @@ def test_latest_details_win_when_autosaves_are_delayed(tmp_path, monkeypatch):
                 await page.fill("#login-password", "TestBootstrapPassword42!")
                 await page.locator("#login-form button[type=submit]").click()
                 await playwright.expect(page.locator("#home-screen")).to_be_visible()
-                response = await page.request.post(base + "/api/inspections/blank", data={
-                    "store_number": "0042", "address": "123 Test St", "city": "Norfolk", "state": "VA",
-                    "start_date": "2026-09-01", "completion_date": "2026-09-02",
-                })
-                inspection_id = (await response.json())["id"]
-                await page.click("#refresh-inspections")
+                await page.click("#start-create")
+                for field, value in {
+                    "store-number": "0042", "address": "123 Test St", "city": "Norfolk",
+                    "state": "VA", "start-date": "2026-09-01", "end-date": "2026-09-02",
+                    "due-date": "2026-11-15",
+                }.items():
+                    await page.fill("#new-" + field, value)
+                await page.click("#save-new-inspection")
+                await playwright.expect(page.locator("#inspection-name")).to_have_text("0042-Norfolk-VA-09-2026")
+                inspections = await page.request.get(base + "/api/inspections")
+                inspection_id = (await inspections.json())[0]["id"]
+                await playwright.expect(page.locator("#inspection-due-date")).to_have_value("2026-11-15")
+                async with page.expect_response(lambda r: r.request.method == "PATCH" and r.url.endswith(inspection_id)):
+                    await page.fill("#inspection-due-date", "2026-12-01")
+                    await page.locator("#inspection-due-date").dispatch_event("change")
+                await page.reload()
                 await page.locator("#inspection-picker").select_option(inspection_id)
                 await page.click("#open-inspection")
-                await playwright.expect(page.locator("#inspection-name")).to_have_text("0042-Norfolk-VA-09-2026")
+                await playwright.expect(page.locator("#inspection-due-date")).to_have_value("2026-12-01")
+                async with page.expect_response(lambda r: r.request.method == "PATCH" and r.url.endswith(inspection_id)):
+                    await page.fill("#inspection-due-date", "")
+                    await page.locator("#inspection-due-date").dispatch_event("change")
+                persisted = await page.request.get(base + "/api/inspections/" + inspection_id)
+                assert (await persisted.json())["due_date"] is None
 
                 async def delay_older_save(route):
                     if route.request.method == "PATCH" and route.request.post_data_json.get("city") == "Virginia Beach":

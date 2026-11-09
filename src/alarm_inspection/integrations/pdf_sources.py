@@ -140,7 +140,7 @@ def capture_snapshot_session(session, inspection_id, integration_key, *, actor_i
         blockers.append(issue('Store number, address, city and valid state are required.','MISSING_ANSWER',navigation='store_data'))
     if not simple and inspection.completion_date < inspection.start_date:
         blockers.append(issue('Completion date cannot precede start date.','MISSING_ANSWER',navigation='store_data'))
-    for field in ('store_number','store_type','address','city','state','inspector_name','start_date','completion_date'):
+    for field in ('store_number','store_type','address','city','state','inspector_name','start_date','completion_date','due_date'):
         ref = SourceRef(kind='inspection',field=field)
         value = _json(getattr(inspection,field))
         sources[canonical_json(ref)] = _source(ref,'date' if field.endswith('_date') else 'text',value,{'inspection':inspection.id,'field':field,'value':value})
