@@ -430,12 +430,18 @@
 
   function renderCards() {
     const cards = $('cards');
+    const expanded = new Set([...cards.querySelectorAll('details[data-template-key][open]')].map(el => el.dataset.templateKey));
+    const workspace = $('workspace');
+    // Preserve the editor and private edits when polling rebuilds cards.
+    root.append(workspace);
     cards.replaceChildren();
     for (const integration of integrations) {
       const name = names[integration.key];
-      const card = node('section', null, {class: 'pdf-integration-card', 'data-template-key': integration.key});
+      const card = node('details', null, {class: 'pdf-integration-card pdf-template-section', 'data-template-key': integration.key});
+      card.open = expanded.has(integration.key);
+      card.append(node('summary', name));
       const active = integration.versions.find(v => v.id === integration.active_version_id);
-      card.append(node('h3', name), node('p', active && integration.enabled
+      card.append(node('p', active && integration.enabled
         ? 'Published template: ' + active.template_filename + '. Available to technicians.'
         : 'Not published. Upload a template, set mappings/defaults, then Save integration to publish.'));
       card.append(node('p', integration.key === 'nfpa72'
@@ -487,6 +493,7 @@
         } finally { busy = false; uploadButton.disabled = false; file.disabled = false; }
       }, upload);
       card.append(upload); cards.append(card);
+      if (version?.config.integration_key === integration.key) card.append(workspace);
     }
   }
   async function open(v, integrationRevision = integrations.find(i => i.key === v.config.integration_key).revision) {
@@ -507,6 +514,9 @@
     dirty = false;
     selected = v.config.inventory.targets[0]?.id;
     page = v.config.inventory.selected_pages[0];
+    const section = root.querySelector('[data-template-key="' + v.config.integration_key + '"]');
+    section.append($('workspace'));
+    section.open = true;
     $('workspace').hidden = false;
     $('title').textContent = names[v.key || v.config.integration_key] + ' field mapping — ' + v.template_filename;
     $('page').replaceChildren(...v.config.inventory.selected_pages.map(p => new Option('Page ' + p, p)));
@@ -764,8 +774,10 @@
       integrations = [];
       sources = [];
       mappings.clear();
+      const workspace = $('workspace');
+      workspace.hidden = true;
+      root.append(workspace);
       $('cards').replaceChildren();
-      $('workspace').hidden = true;
       debug.open = false;
     }
   };
