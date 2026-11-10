@@ -29,12 +29,46 @@ def section(key,target):
     return next((label for bottom,label in bands if y>=bottom),'Remarks / acknowledgement / signatures')
 
 
-def _label(target,words,key):
+def _legacy_label(target,words,key):
     x0,y0,x1,y1=target['rect'];cy=(y0+y1)/2
     region=(50,245) if key=='nfpa72' else (55,160) if x0<300 else (305,410)
     candidates=[word for word in words if abs(word['y']-cy)<4 and region[0]<=word['x']<min(region[1],x0-2)]
     label=' '.join(w['text'] for w in sorted(candidates,key=lambda w:w['x']))
     return label if label.strip() else target['qualified_name'] or f'Page {target["page"]} field {target["occurrence"]}'
+
+
+def _label(target, words, key, targets=()):
+    if target['kind'] not in {'text', 'choice'}:
+        return _legacy_label(target, words, key)
+    x0, y0, _, y1 = target['rect']; cy = (y0 + y1) / 2
+    # A label cannot belong to a field beyond an intervening widget on this row.
+    left = max((t['rect'][2] for t in targets if t['page'] == target['page']
+                and t['rect'][2] <= x0 and t['rect'][1] <= cy <= t['rect'][3]), default=0)
+    candidates = sorted((w for w in words if abs(w['y'] - cy) < 4
+                         and left <= w['x'] < x0), key=lambda w: w['x'])
+    if candidates:
+        # Keep the nearest printed phrase, not an unrelated earlier column.
+        phrase = [candidates[-1]]
+        for word in reversed(candidates[:-1]):
+            if phrase[0].get('x_min', phrase[0]['x']) - word.get('x_max', word['x']) > 20:
+                break
+            phrase.insert(0, word)
+        if x0 - phrase[-1].get('x_max', phrase[-1]['x']) <= 40:
+            return ' '.join(w['text'] for w in phrase).strip()
+    return target.get('tooltip') or target['qualified_name'] or f'Page {target["page"]} field {target["occurrence"]}'
+
+
+def corrected_labels(config, words):
+    """Correct only old generated labels; preserve administrator labels and bindings."""
+    mappings = {m['target_id']: m for m in config['mappings']}
+    targets = config['inventory']['targets']; key = config['integration_key']
+    result = {}
+    for target in targets:
+        page_words = words.get(str(target['page']), words.get(target['page'], []))
+        label = mappings.get(target['id'], {}).get('label')
+        if not label or label == _legacy_label(target, page_words, key):
+            result[target['id']] = _label(target, page_words, key, targets)[:200]
+    return result
 
 
 def build_candidate(data,key,*,words=None):
@@ -44,7 +78,7 @@ def build_candidate(data,key,*,words=None):
     original={'key':PrivatePdfFiles.template_key(key,ident,'original.pdf'),'sha256':sha256(data).hexdigest(),'size':len(data)}
     if words is None:words={int(page):rows for page,rows in bounded_pdf(data,inventory['selected_pages'],'words').items()}
     targets=inventory['targets'];mappings=[];inputs=[];groups=[];review=[];bindings={}
-    labels={t['id']:_label(t,(words or {}).get(t['page'],[]),key) for t in targets}
+    labels={t['id']:_label(t,(words or {}).get(t['page'],[]),key,targets) for t in targets}
     identity={('compliance',1,0):'inspector_name',('compliance',1,278):'inspector_name',('compliance',1,6):'store_number',
               ('compliance',1,9):'address',('nfpa72',1,5):'store_number',('nfpa72',1,6):'address',('nfpa72',4,14):'inspector_name'}
     # Identity bindings apply ONLY to the recorded supplied fingerprint/count.

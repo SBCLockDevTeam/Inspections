@@ -41,3 +41,18 @@ def test_installation_keeps_integrations_disabled_and_unpublished(database):
         saved=IntegrationConfig.model_validate_json(version.payload_json)
         assert saved.default_timezone is None and saved.categories==[] and saved.signature_policy=='unresolved'
         assert len(saved.mappings)==len(saved.inventory.targets)
+
+
+def test_labels_use_each_column_and_preserve_custom_mapping_labels():
+    from alarm_inspection.integrations.pdf_setup import _label, corrected_labels
+    targets=[dict(id=str(i),page=1,occurrence=i,kind='text',rect=[x,100,x+75,116],
+                  qualified_name=name,tooltip=name) for i,(x,name) in enumerate([(90,'Store Phone'),(280,'Store Fax'),(470,'Store Email')])]
+    words=[dict(x=x,y=108,text=text,x_min=x-12,x_max=x+12) for x,text in [(70,'Phone:'),(260,'Fax:'),(450,'Email:')]]
+    assert [_label(t,words,'nfpa72',targets) for t in targets]==['Phone:','Fax:','Email:']
+    config=dict(integration_key='nfpa72',inventory={'targets':targets},mappings=[
+        dict(target_id='0',label='Phone:',source={'kind':'inspection','field':'address'}),
+        dict(target_id='1',label='Phone:'),dict(target_id='2',label='Custom email label')])
+    import copy
+    original=copy.deepcopy(config)
+    assert corrected_labels(config,{'1':words})=={'0':'Phone:','1':'Fax:'}
+    assert config==original

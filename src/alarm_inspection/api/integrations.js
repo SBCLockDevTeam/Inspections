@@ -502,7 +502,7 @@
     for (const [el, top, left] of scrollPositions) { el.scrollTop = top; el.scrollLeft = left; }
   }
   async function open(v, integrationRevision = integrations.find(i => i.key === v.config.integration_key).revision) {
-    const result = await request('/sources');
+    const [result, detected] = await Promise.all([request('/sources'), request('/versions/' + v.id + '/labels')]);
     sources = result.entries;
     sourceCatalogHash = result.schema_sha256;
     openedRevision = integrationRevision;
@@ -516,6 +516,9 @@
       });
     }
     for (const t of v.config.inventory.targets) mappings.set(t.id, checkboxDefault(mappings.get(t.id), t));
+    for (const [id, label] of Object.entries(detected.labels)) {
+      if (mappings.has(id)) mappings.get(id).label = label;
+    }
     dirty = false;
     selected = v.config.inventory.targets[0]?.id;
     page = v.config.inventory.selected_pages[0];
@@ -558,7 +561,8 @@
       const row = node('div', null, {class: 'pdf-target-row', 'data-pdf-field': t.id});
       const caption = value => `Page ${t.page} · ${label} — ${value.disposition === 'constant' ? 'Fixed' : mapped(value) ? 'Mapped' : 'Blank'}`;
       const fieldButton = button(caption(m), () => choose(t.id), row, {
-        'data-target': t.id, 'aria-pressed': String(selected === t.id)
+        'data-target': t.id, 'aria-pressed': String(selected === t.id),
+        title: `PDF field: ${t.qualified_name} · Page ${t.page}, field ${t.occurrence + 1}`
       });
       if (['text', 'choice', 'checkbox'].includes(t.kind)) {
         const current = sourceFor(m);
@@ -622,7 +626,7 @@
       const b = button('', () => choose(t.id), sheet, {
         class: 'pdf-target',
         'data-preview-target': t.id,
-        'aria-label': t.tooltip || t.qualified_name || 'PDF field',
+        'aria-label': mappings.get(t.id)?.label || t.tooltip || t.qualified_name || 'PDF field',
         'aria-pressed': String(t.id === selected)
       });
       Object.assign(b.style, {

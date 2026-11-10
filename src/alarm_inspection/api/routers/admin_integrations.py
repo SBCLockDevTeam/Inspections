@@ -101,6 +101,15 @@ def create_router(store):
     def catalog(ident:str,request:Request,inspection_id:str,panel_ids:str=''):
         return run(request,lambda s,a:configuration_source_catalog(store,inspection_id,ident,actor_id=a,panel_ids=panel_ids.split(',') if panel_ids else []))
 
+    @router.get('/versions/{ident}/labels')
+    def labels(ident: str, request: Request):
+        def operation(session, actor):
+            from alarm_inspection.integrations.pdf_setup import corrected_labels
+            _, config = repo._version(session, ident)
+            words = service.bounded_pdf(files.read(config.original), config.inventory.selected_pages, 'words')
+            return {'labels': corrected_labels(config.model_dump(mode='json'), words)}
+        return run(request, operation)
+
     @router.get('/versions/{ident}/pages/{page}')
     def page(ident:str,page:int,request:Request):
         def operation(session,actor):

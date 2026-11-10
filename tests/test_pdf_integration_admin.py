@@ -243,3 +243,22 @@ def test_upload_without_fillable_fields_is_not_a_publishable_draft(admin_api):
     assert 'No fillable fields' in response.json()['error']
     with store() as session:
         assert session.query(PdfIntegrationVersion).count() == 0
+
+
+def test_detected_labels_are_admin_only_and_do_not_rewrite_version(admin_api):
+    from reportlab.pdfgen.canvas import Canvas
+    client,store,files,inspection=admin_api
+    stream=BytesIO(); canvas=Canvas(stream)
+    for x,label in [(90,'Phone:'),(280,'Fax:'),(470,'Email:')]:
+        canvas.drawString(x-36,108,label)
+        canvas.acroForm.textfield(name=label,x=x,y=100,width=75,height=18)
+    canvas.showPage();canvas.save()
+    response=client.post('/api/admin/integrations/compliance/templates',files={'file':('labels.pdf',stream.getvalue())})
+    assert response.status_code==200,response.text
+    draft=response.json(); ident=draft['id']
+    labels=client.get(f'/api/admin/integrations/versions/{ident}/labels')
+    assert labels.status_code==200,labels.text
+    assert list(labels.json()['labels'].values())==['Phone:','Fax:','Email:']
+    assert client.get(f'/api/admin/integrations/versions/{ident}/labels',headers={'x-actor':'tech'}).status_code==403
+    with store() as session:
+        assert session.get(PdfIntegrationVersion,ident).revision==draft['revision']

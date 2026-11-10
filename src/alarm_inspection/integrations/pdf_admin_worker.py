@@ -25,7 +25,8 @@ def main():
             for word in page.findall('.//{*}word'):
                 x=(float(word.attrib['xMin'])+float(word.attrib['xMax']))/2;y=height-(float(word.attrib['yMin'])+float(word.attrib['yMax']))/2
                 if any(t['page']==number and t['rect'][0]<=x<=t['rect'][2] and t['rect'][1]<=y<=t['rect'][3] for t in inventory['targets']):continue
-                words.append({'x':x,'y':y,'text':word.text or ''})
+                words.append({'x':x,'y':y,'x_min':float(word.attrib['xMin']),
+                              'x_max':float(word.attrib['xMax']),'text':word.text or ''})
             pages[number]=words
         output.write_text(json.dumps(pages));return
     if request['operation'] == 'inventory':
