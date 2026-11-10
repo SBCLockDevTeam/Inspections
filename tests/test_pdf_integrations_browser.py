@@ -523,3 +523,57 @@ def test_template_upload_defaults_and_replacement_are_admin_managed(browser_app)
             finally:
                 await browser.close()
     asyncio.run(check())
+
+
+def test_pdf_dropdown_options_and_scroll_survive_selection_and_refresh(browser_app):
+    from io import BytesIO
+    from reportlab.pdfgen.canvas import Canvas
+    base,client,store,inspection,draft=browser_app
+    output=BytesIO(); canvas=Canvas(output)
+    for index in range(24):
+        canvas.acroForm.textfield(name=f'Field {index}',x=40,y=760-index*20,width=180,height=16)
+    canvas.acroForm.choice(name='Name of Property',x=40,y=240,width=180,height=18,
+        options=['Store','Warehouse'],value='Store',fieldFlags='combo edit')
+    canvas.acroForm.choice(name='Description of property',x=40,y=200,width=180,height=18,
+        options=[('Retail building','retail'),('Storage building','storage')],value='retail',fieldFlags='combo')
+    for _ in range(4): canvas.showPage()
+    canvas.save()
+    response=client.post('/api/admin/integrations/nfpa72/templates',files={'file':('dropdowns.pdf',output.getvalue())})
+    assert response.status_code==200,response.text
+    targets=response.json()['config']['inventory']['targets']
+    editable=next(t for t in targets if t['qualified_name']=='Name of Property')
+    closed=next(t for t in targets if t['qualified_name']=='Description of property')
+    assert editable['kind']=='choice' and editable['options']==['Store','Warehouse']
+    assert closed['options']==[['retail','Retail building'],['storage','Storage building']]
+    async def check():
+        async with playwright.async_playwright() as p:
+            browser=await p.chromium.launch(headless=True,args=['--no-sandbox'])
+            page=await browser.new_page(viewport={'width':1400,'height':1000})
+            try:
+                await login(page,base)
+                await page.locator('#avatar-button').click(button='right');await page.click('#avatar-menu-option-admin');await page.click('#admin-tab-integrations')
+                await page.locator('[data-template-key="nfpa72"] > summary').click()
+                await page.get_by_role('button',name='Open NFPA 72',exact=True).click()
+                listing=page.locator('#simple-targets')
+                await playwright.expect(listing.locator('[data-target]')).to_have_count(26)
+                combo=page.locator(f'[data-pdf-default="{editable["id"]}"]')
+                assert await combo.get_attribute('list')=='pdf-options-'+editable['id']
+                assert await page.locator('#pdf-options-'+editable['id']+' option').all_text_contents()==['Store','Warehouse']
+                dropdown=page.locator(f'select[data-pdf-default="{closed["id"]}"]')
+                assert await dropdown.locator('option').all_text_contents()==['PDF default','Retail building','Storage building']
+                await listing.evaluate('(el) => el.scrollTop = 450')
+                before=await listing.evaluate('(el) => el.scrollTop')
+                await page.locator('h1').click()
+                await page.evaluate('window.PdfIntegrations.refreshAdmin(true)')
+                assert await listing.evaluate('(el) => el.scrollTop')==before
+                await listing.locator('[data-target]').nth(8).click()
+                selected_scroll=await listing.evaluate('(el) => el.scrollTop')
+                assert selected_scroll>0
+                await page.wait_for_timeout(3500)
+                assert await listing.evaluate('(el) => el.scrollTop')==selected_scroll
+                await combo.fill('Custom property')
+                assert await combo.input_value()=='Custom property'
+                await dropdown.select_option('storage')
+                assert await dropdown.input_value()=='storage'
+            finally: await browser.close()
+    asyncio.run(check())

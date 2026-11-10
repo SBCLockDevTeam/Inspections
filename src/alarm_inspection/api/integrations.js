@@ -408,8 +408,9 @@
     if (host.classList.contains('hidden') || busy) return;
     if (!force && (dirty || host.contains(document.activeElement))) { await refreshCatalog(); return; }
     const result = await request('');
+    const changed = JSON.stringify(integrations) !== JSON.stringify(result.integrations);
     integrations = result.integrations;
-    renderCards();
+    if (force || changed) renderCards();
     await refreshCatalog();
   }
 
@@ -432,6 +433,9 @@
     const cards = $('cards');
     const expanded = new Set([...cards.querySelectorAll('details[data-template-key][open]')].map(el => el.dataset.templateKey));
     const workspace = $('workspace');
+    const scrollPositions = [workspace, ...workspace.querySelectorAll('*')]
+      .filter(el => el.scrollTop || el.scrollLeft)
+      .map(el => [el, el.scrollTop, el.scrollLeft]);
     // Preserve the editor and private edits when polling rebuilds cards.
     root.append(workspace);
     cards.replaceChildren();
@@ -495,6 +499,7 @@
       card.append(upload); cards.append(card);
       if (version?.config.integration_key === integration.key) card.append(workspace);
     }
+    for (const [el, top, left] of scrollPositions) { el.scrollTop = top; el.scrollLeft = left; }
   }
   async function open(v, integrationRevision = integrations.find(i => i.key === v.config.integration_key).revision) {
     const result = await request('/sources');
@@ -543,6 +548,7 @@
 
   function renderTargets() {
     const list = $('targets');
+    const scrollTop = list.scrollTop;
     list.replaceChildren();
     const search = $('search').value.toLowerCase();
     for (const t of version.config.inventory.targets) {
@@ -556,13 +562,23 @@
       });
       if (['text', 'choice', 'checkbox'].includes(t.kind)) {
         const current = sourceFor(m);
-        const options = current?.options?.length ? current.options :
-          t.kind === 'choice' && !(t.flags & (1 << 18)) ? t.options.map(o => Array.isArray(o) ? o[0] : o) : [];
+        const options = t.kind === 'choice' ? t.options.map(o => Array.isArray(o) ? {value: o[0], label: o[1]} : {value:o, label:o}) :
+          current?.options || [];
+        const editableChoice = t.kind === 'choice' && Boolean(t.flags & (1 << 18));
         const checkbox = t.kind === 'checkbox';
         const value = checkbox ? select([
           {value: 'true', label: 'Checked'}, {value: 'false', label: 'Not checked'}
-        ], pdfDefault(m) ?? false) : options.length ? select([{value: '', label: 'PDF default'}, ...options], pdfDefault(m)) :
+        ], pdfDefault(m) ?? false) : options.length && !editableChoice ? select([{value: '', label: 'PDF default'}, ...options], pdfDefault(m)) :
           input(pdfDefault(m) ?? '', current?.type === 'date' ? 'date' : 'text');
+        if (t.kind === 'choice') {
+          row.append(node('small', `PDF dropdown · ${options.length} options${editableChoice ? ' · custom text allowed' : ''}`));
+          if (editableChoice && options.length) {
+            const suggestions = node('datalist', null, {id: 'pdf-options-' + t.id});
+            for (const option of options) suggestions.append(new Option(option.label, option.value));
+            value.setAttribute('list', suggestions.id);
+            row.append(suggestions);
+          }
+        }
         value.setAttribute('aria-label', 'PDF default for ' + label);
         value.setAttribute('placeholder', 'PDF default');
         value.setAttribute('data-pdf-default', t.id);
@@ -588,6 +604,7 @@
       }
       list.append(row);
     }
+    list.scrollTop = scrollTop;
   }
 
   function renderPage() {
