@@ -987,7 +987,10 @@ button.inspection-menu-option {
     .pdf-source-row > .pdf-clear-mapping {padding:5px;font-size:18px;}
     .pdf-target-row {display:flex;flex-direction:column;gap:4px;}
     .pdf-target-row input, .pdf-target-row select {width:100%;min-width:0;box-sizing:border-box;}
-    .pdf-source-choices button {text-align:left;white-space:normal;}
+    .pdf-source-choices button {text-align:left;white-space:normal;overflow-wrap:anywhere;min-width:0;width:100%;}
+    @media (min-width:1001px) {
+      #simple-workspace .pdf-mapping-grid {grid-template-columns:minmax(150px,1fr) minmax(250px,4fr) minmax(150px,1fr);}
+    }
     #simple-editor {min-width:0;}
     #simple-editor input:not([type="checkbox"]), #simple-editor select {max-width:100%;}
     #simple-cards {display:flex;flex-wrap:wrap;gap:12px;}
