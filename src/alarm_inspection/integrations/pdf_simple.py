@@ -3,6 +3,7 @@
 The previous draft/published version is never edited. Rendering holds no database
 write lock, and activation uses optimistic concurrency against the opened version.
 """
+import json
 from math import floor
 from uuid import uuid4
 from pydantic import Field
@@ -14,7 +15,7 @@ from alarm_inspection.domain.pdf_integrations import (
 from alarm_inspection.domain.pdf_mapping import SourceValue, answered
 from alarm_inspection.domain.pdf_readiness import SavedSnapshot, evaluate_snapshot
 from alarm_inspection.integrations import pdf_repository as repo
-from alarm_inspection.integrations.pdf_models import PdfIntegration, PdfIntegrationVersion
+from alarm_inspection.integrations.pdf_models import PdfIntegration, PdfIntegrationVersion, PdfIntegrationAuditEntry
 from alarm_inspection.integrations.pdf_sources import definition_catalog
 from alarm_inspection.integrations.pdf_service import bounded_pdf
 
@@ -94,6 +95,11 @@ def save_mapping(store, version_id, raw, *, files, actor_id):
         if payload.source_catalog_sha256 != catalog['schema_sha256']:
             raise repo.ConflictError('Inspection fields changed. Reopen the integration to review the current fields.')
         original=files.read(base.original)
+        intake=session.query(PdfIntegrationAuditEntry).filter(
+            PdfIntegrationAuditEntry.version_id==version_id,
+            PdfIntegrationAuditEntry.action.in_(['template_intake','template_copied'])).first()
+        filename=json.loads(intake.details_json).get('filename') if intake else 'Retained original template'
+
     ident=str(uuid4())
     receipt=files.put(files.template_key(base.integration_key,ident,'original.pdf'),original)
     entries={canonical_json(SourceRef.model_validate(e['source'])):e for e in catalog['entries']}
@@ -144,6 +150,8 @@ def save_mapping(store, version_id, raw, *, files, actor_id):
         result=session.execute(update(PdfIntegration).where(PdfIntegration.key==config.integration_key,PdfIntegration.revision==payload.integration_revision)
             .values(active_version_id=ident,enabled=True,revision=payload.integration_revision+1))
         if result.rowcount!=1: raise repo.ConflictError('Integration changed before activation. Your edits are retained.')
+        repo._audit(session,config.integration_key,ident,'template_copied',actor_id,
+            {'source_version_id':version_id,'filename':filename,'sha256':receipt.sha256})
         repo._audit(session,config.integration_key,ident,'simple_mapping_saved',actor_id,{
             'previous_version_id':version_id,'mapped_fields':sum(m.disposition in {'source','constant'} for m in config.mappings),
             'scope':'Store Data, NFPA 72 and Compliance only','evidence':evidence.model_dump(mode='json')})

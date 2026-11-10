@@ -31,6 +31,12 @@ The Points List table has its own horizontal scroll area, including in Edit mode
 
 Saved shared state refreshes across active devices approximately every three seconds, including inspection details, Device Type highlights, points, checklist decisions, administration, and PDF drafts. Unsaved local edits remain private and are preserved during refresh. Pending Event History matches are shared evidence and still require explicit acceptance. Hidden browser tabs catch up when reopened; interrupted connections retry automatically.
 
+## Managed PDF templates
+
+Administrators manage NFPA 72 and Compliance under Administration → PDF Templates. Upload a blank fillable PDF (up to 40 MB), choose a retained draft or published version, and download its original. Originals live in the persistent private uploads volume, not the application container. Uploading a replacement creates a draft and leaves the published version, mappings, inspection answers and export history intact. NFPA 72 currently exports pages 1–4; Compliance exports page 1.
+
+For field-entered information, administrators add typed fields and editable defaults in Data Sections, then connect them to PDF fields. A PDF default without a mapping is fixed output; with a mapping it is a fallback for an empty saved answer. Required before export is available in the normal mapping screen. Save integration explicitly validates and publishes a new immutable version for technician preview and download. Technician answers are saved per inspection. New named form types, scanned-PDF field placement, digital signatures and offline use are not part of this release.
+
 ## Points List rules
 
 The original specification requires support for XLS, XLSX, and PDF source files with layout variation. The parser must identify point and description columns by headers/content rather than fixed letters, handle blank columns, combine descriptions rendered across multiple rows, reject unassigned and placeholder rows, and reject point addresses outside 1 through 255.

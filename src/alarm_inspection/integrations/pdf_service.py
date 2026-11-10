@@ -41,6 +41,8 @@ def intake(session, key, data, filename, *, files, actor_id):
     metadata={'filename':filename,'actor_id':actor_id,'sha256':receipt.sha256,'received_at':datetime.now(timezone.utc).isoformat()}
     try:
         inventory=bounded_pdf(data,[1,2,3,4] if key=='nfpa72' else [1],'inventory')
+        if not any(t['kind'] in {'text', 'choice', 'checkbox', 'radio'} for t in inventory['targets']):
+            raise ValueError('No fillable fields were found on the supported pages. Upload a fillable PDF; scanned forms need fields added first.')
     except (ValueError,RuntimeError,OSError):
         files.record_intake(receipt,{**metadata,'status':'quarantined','error_code':'INVENTORY_FAILED'})
         raise

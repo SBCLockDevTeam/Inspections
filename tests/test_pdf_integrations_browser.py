@@ -369,9 +369,9 @@ def test_simple_picker_save_then_export_without_manual_details(browser_app,tmp_p
                 source=page.locator('#simple-editor').get_by_role('button',name='Start Date',exact=True)
                 await playwright.expect(source).to_have_attribute('aria-pressed','true')
                 await playwright.expect(source).to_have_css('background-color','rgb(219, 234, 254)')
-                assert await page.locator('#simple-editor input[type="checkbox"], #simple-editor label, #simple-editor p').count()==0
+                await playwright.expect(page.get_by_label('Required before export',exact=True)).to_be_enabled()
                 default=page.locator(f'[data-pdf-default="{target["id"]}"]')
-                assert await page.locator('#simple-editor input').count()==0
+                assert await page.locator('#simple-editor input').count()==1
                 await default.fill('2025-01-01')
                 other=next(t for t in draft['config']['inventory']['targets'] if t['kind']=='text' and t['id']!=target['id'])
                 await page.locator(f'#simple-targets [data-target="{other["id"]}"]').click()
@@ -458,4 +458,59 @@ def test_simple_picker_save_then_export_without_manual_details(browser_app,tmp_p
                     assert saved.inspector_name!='SBC FIXED' and saved.start_date==date(2026,10,1)
                 assert not errors
             finally:await browser.close()
+    asyncio.run(check())
+
+
+def test_template_upload_defaults_and_replacement_are_admin_managed(browser_app):
+    base, client, store, inspection, old_draft = browser_app
+
+    async def check():
+        async with playwright.async_playwright() as p:
+            browser = await p.chromium.launch(headless=True, args=['--no-sandbox'])
+            page = await browser.new_page(viewport={'width': 1100, 'height': 850})
+            try:
+                await login(page, base)
+                await page.locator('#avatar-button').click(button='right')
+                await page.click('#avatar-menu-option-admin')
+                await page.get_by_role('tab', name='PDF Templates', exact=True).click()
+                card = page.locator('[data-template-key="compliance"]')
+                await card.get_by_label('Compliance Form template', exact=True).set_input_files({
+                    'name': 'field-template.pdf', 'mimeType': 'application/pdf', 'buffer': template_bytes()
+                })
+                await card.get_by_role('button', name='Upload template', exact=True).click()
+                await playwright.expect(page.locator('#simple-message')).to_contain_text('Template uploaded as a draft', timeout=30000)
+                listing = client.get('/api/admin/integrations').json()['integrations']
+                integration = next(i for i in listing if i['key'] == 'compliance')
+                assert integration['active_version_id'] is None
+                draft = next(v for v in integration['versions'] if v['template_filename'] == 'field-template.pdf')
+                target = next(t for t in draft['config']['inventory']['targets'] if t['kind'] == 'text')
+                await page.locator(f'[data-target="{target["id"]}"]').click()
+                await page.locator(f'[data-pdf-default="{target["id"]}"]').fill('Company')
+                await page.get_by_label('Required before export', exact=True).check()
+                await page.click('#simple-save')
+                await playwright.expect(page.locator('#simple-message')).to_contain_text('Integration saved and ready', timeout=30000)
+                published = next(i for i in client.get('/api/admin/integrations').json()['integrations'] if i['key'] == 'compliance')
+                active_id = published['active_version_id']
+                assert active_id
+                active = next(v for v in published['versions'] if v['id'] == active_id)
+                mapping = next(m for m in active['config']['mappings'] if m['target_id'] == target['id'])
+                assert mapping['constant'] == 'Company' and mapping['required']
+                await card.get_by_label('Compliance Form template', exact=True).set_input_files({
+                    'name': 'replacement.pdf', 'mimeType': 'application/pdf', 'buffer': template_bytes()
+                })
+                await card.get_by_role('button', name='Upload template', exact=True).click()
+                await playwright.expect(page.locator('#simple-message')).to_contain_text('Template uploaded as a draft', timeout=30000)
+                await page.reload()
+                await page.locator('#avatar-button').click(button='right')
+                await page.click('#avatar-menu-option-admin')
+                await page.get_by_role('tab', name='PDF Templates', exact=True).click()
+                current = next(i for i in client.get('/api/admin/integrations').json()['integrations'] if i['key'] == 'compliance')
+                replacement = next(v for v in current['versions'] if v['template_filename'] == 'replacement.pdf')
+                assert current['active_version_id'] == active_id
+                await card.get_by_label('Compliance Form template version', exact=True).select_option(replacement['id'])
+                await card.get_by_role('button', name='Open Compliance Form', exact=True).click()
+                await playwright.expect(page.locator('#simple-title')).to_contain_text('replacement.pdf')
+                assert await page.locator('#integration-debug-workspace').is_hidden()
+            finally:
+                await browser.close()
     asyncio.run(check())

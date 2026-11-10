@@ -211,3 +211,35 @@ def test_compact_diagnostic_vectors_cover_all_choices_and_duplicate_occurrences(
     pages=PdfReader(BytesIO(client.get('/api/admin/integrations/tests/'+result.json()['test_artifact_id']).content)).pages
     lines=[page.extract_text().splitlines() for page in pages]
     assert all(first in line and second in line for line,first,second in zip(lines,['A','B','A'],['0','1','2']))
+
+
+def test_original_download_is_admin_only_and_retained_after_new_upload(admin_api):
+    client, store, files, inspection = admin_api
+    first = uploaded(client)
+    original_url = f"/api/admin/integrations/versions/{first['id']}/original"
+    assert client.get(original_url, headers={'x-actor': 'tech'}).status_code == 403
+    assert client.get(original_url).content == template_bytes()
+    second = uploaded(client)
+    assert second['id'] != first['id']
+    assert client.get(original_url).content == template_bytes()
+    assert client.get(original_url).headers['content-disposition'].startswith('attachment;')
+    with store() as session:
+        integration = session.get(PdfIntegration, 'compliance')
+        assert not integration.enabled
+        assert integration.active_version_id is None
+        assert session.get(PdfIntegrationVersion, first['id']).status == 'draft'
+
+
+def test_upload_without_fillable_fields_is_not_a_publishable_draft(admin_api):
+    from pypdf import PdfWriter
+    client, store, files, inspection = admin_api
+    writer = PdfWriter()
+    writer.add_blank_page(width=612, height=792)
+    output = BytesIO()
+    writer.write(output)
+    response = client.post('/api/admin/integrations/compliance/templates',
+        files={'file': ('scan.pdf', output.getvalue(), 'application/pdf')})
+    assert response.status_code == 400
+    assert 'No fillable fields' in response.json()['error']
+    with store() as session:
+        assert session.query(PdfIntegrationVersion).count() == 0

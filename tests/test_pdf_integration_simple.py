@@ -260,3 +260,21 @@ def test_inspection_task_defaults_render_without_writing_answers(admin_api, kind
     with store() as session:
         assert session.query(InspectionChecklistDecision).filter_by(task_id='task').count()==0
         assert session.get(InspectionTask,'task').default_value==default
+
+
+def test_replacement_upload_preserves_published_defaults_and_original(admin_api):
+    client, store, files, inspection = admin_api
+    draft = uploaded(client)
+    target = text_target(draft)
+    response = save(client, draft, [{'target_id': target['id'], 'disposition': 'constant', 'constant': 'Company', 'reason': 'Fixed company name'}])
+    assert response.status_code == 200, response.text
+    published = response.json()
+    assert published['template_filename'] == 'synthetic.pdf'
+    replacement = uploaded(client)
+    assert replacement['status'] == 'draft'
+    with store() as session:
+        integration = session.get(PdfIntegration, 'compliance')
+        assert integration.active_version_id == published['id'] and integration.enabled
+    assert client.get(f"/api/admin/integrations/versions/{published['id']}/original").status_code == 200
+    snapshot = capture_snapshot(store, inspection, 'compliance', actor_id='tech')
+    assert evaluate_snapshot(snapshot).targets[target['id']].text == 'Company'

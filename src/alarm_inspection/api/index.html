@@ -932,6 +932,8 @@ button.inspection-menu-option {
 .table td.device-type-cell.device-event-missing input { background-color: transparent; }
 .table td.device-type-cell:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
 
+.pdf-template-upload { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border); }
+.pdf-template-upload input[type="file"] { max-width: 100%; }
 .pdf-integration-card { border: 1px solid var(--border); padding: 12px; margin-bottom: 14px; overflow-wrap: anywhere; }
 .pdf-toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 12px 0; }
 .pdf-toolbar button, .pdf-integration-card button { width: auto; }
@@ -1012,7 +1014,7 @@ button.inspection-menu-option {
 <div class="admin-tabs" role="tablist" aria-label="Administrative tasks">
 <button type="button" id="admin-tab-users" role="tab" aria-controls="admin-panel-users" aria-selected="true">Users</button>
 <button type="button" id="admin-tab-panel-types" role="tab" aria-controls="admin-panel-panel-types" aria-selected="false" tabindex="-1">Panel Types</button>
-<button type="button" id="admin-tab-integrations" role="tab" aria-controls="admin-panel-integrations" aria-selected="false" tabindex="-1">Integrations</button>
+<button type="button" id="admin-tab-integrations" role="tab" aria-controls="admin-panel-integrations" aria-selected="false" tabindex="-1">PDF Templates</button>
 <button type="button" id="admin-tab-inspection-tasks" role="tab" aria-controls="admin-panel-inspection-tasks" aria-selected="false" tabindex="-1">Data Sections</button>
 </div>
 <div id="admin-panel-users" role="tabpanel" aria-labelledby="admin-tab-users">

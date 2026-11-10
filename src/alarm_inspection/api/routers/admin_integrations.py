@@ -74,6 +74,15 @@ def create_router(store):
         data=await file.read(40*1024**2+1); await file.close()
         return run(request,lambda s,a:version(service.intake(s,key,data,file.filename,files=files,actor_id=a)))
 
+    @router.get('/versions/{ident}/original')
+    def original(ident: str, request: Request):
+        def operation(session, actor):
+            _, config = repo._version(session, ident)
+            return Response(files.read(config.original), media_type='application/pdf',
+                headers={'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff',
+                         'Content-Disposition': f'attachment; filename="{config.integration_key}-template.pdf"'})
+        return run(request, operation)
+
     @router.post('/versions/{ident}/copy')
     def copy(ident:str,request:Request): return run(request,lambda s,a:version(service.copy_draft(s,ident,files=files,actor_id=a)))
 

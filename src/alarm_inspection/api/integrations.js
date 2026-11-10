@@ -432,44 +432,61 @@
     const cards = $('cards');
     cards.replaceChildren();
     for (const integration of integrations) {
-      const card = node('section', null, {
-        class: 'pdf-integration-card'
-      });
-      card.append(node('h3', names[integration.key]), node('p', integration.enabled ? 'Ready to export after required mapped data is saved.' : 'Open to configure and save this integration.'));
-      const active = integration.versions.find(v => v.id === integration.active_version_id) || integration.versions[0];
-      button('Open ' + names[integration.key], async () => {
+      const name = names[integration.key];
+      const card = node('section', null, {class: 'pdf-integration-card', 'data-template-key': integration.key});
+      const active = integration.versions.find(v => v.id === integration.active_version_id);
+      card.append(node('h3', name), node('p', active && integration.enabled
+        ? 'Published template: ' + active.template_filename + '. Available to technicians.'
+        : 'Not published. Upload a template, set mappings/defaults, then Save integration to publish.'));
+      card.append(node('p', integration.key === 'nfpa72'
+        ? 'NFPA 72 uses pages 1–4. Upload a fillable PDF with at least four pages (maximum 40 MB).'
+        : 'Compliance uses page 1. Upload a fillable PDF (maximum 40 MB).'));
+      const versions = select(integration.versions.map(v => ({
+        value: v.id, label: (v.id === integration.active_version_id ? 'Published' : v.status === 'draft' ? 'Draft' : 'Previous version')
+          + ' · ' + v.template_filename + ' · ' + new Date(v.updated_at).toLocaleString()
+      })), active?.id || integration.versions[0]?.id);
+      versions.setAttribute('aria-label', name + ' template version');
+      versions.disabled = !integration.versions.length;
+      card.append(versions);
+      button('Open ' + name, async () => {
+        if (busy) return;
         if (dirty && !window.confirm('Discard unsaved mapping changes?')) return;
-        if (!active) throw new Error('Upload this form template first.');
+        const chosen = versions.value;
         await refreshAfterSave();
         const current = integrations.find(i => i.key === integration.key);
-        await open(current.versions.find(v => v.id === current.active_version_id) || current.versions[0], current.revision);
-      }, card, {
-        disabled: active ? 'false' : 'true'
-      }).disabled = !active;
-      const upload = node('details');
-      upload.append(node('summary', active ? 'Replace form template' : 'Upload form template'));
-      const file = node('input', null, {
-        type: 'file',
-        accept: '.pdf',
-        'aria-label': names[integration.key] + ' template'
-      });
+        const saved = current.versions.find(v => v.id === chosen);
+        if (!saved) throw new Error('Choose an uploaded template version.');
+        await open(saved, current.revision);
+      }, card).disabled = !integration.versions.length;
+      const original = node('a', 'Download original PDF', {href: api + '/versions/' + versions.value + '/original'});
+      original.hidden = !integration.versions.length;
+      versions.addEventListener('change', () => { original.href = api + '/versions/' + versions.value + '/original'; });
+      card.append(original);
+      const upload = node('div', null, {class: 'pdf-template-upload'});
+      upload.append(node('h4', integration.versions.length ? 'Upload a new template version' : 'Upload template'));
+      upload.append(node('p', 'Uploads are saved privately across deployments. A new upload is a draft; it does not replace the published form or its saved answers.'));
+      const file = node('input', null, {type: 'file', accept: '.pdf,application/pdf', 'aria-label': name + ' template'});
       upload.append(file);
-      button('Upload template', async () => {
-        if (dirty) throw new Error('Save or discard your edits before replacing the template.');
-        if (!file.files[0]) throw new Error('Choose a PDF file.');
-        const data = new FormData();
-        data.append('file', file.files[0]);
-        const response = await fetch(api + '/' + integration.key + '/templates', {
-          method: 'POST',
-          body: data
-        });
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.error || 'Upload failed.');
-        await refresh(true);
-        await open(result);
+      const uploadButton = button('Upload template', async () => {
+        if (busy) return;
+        if (dirty) throw new Error('Save or discard your edits before uploading a template.');
+        const chosen = file.files[0];
+        if (!chosen) throw new Error('Choose a PDF file.');
+        if (!chosen.name.toLowerCase().endsWith('.pdf') || chosen.size > 40 * 1024 * 1024)
+          throw new Error('Choose a PDF file no larger than 40 MB.');
+        busy = true; uploadButton.disabled = true; file.disabled = true;
+        message('Uploading and checking ' + name + ' template…');
+        try {
+          const data = new FormData(); data.append('file', chosen);
+          const response = await fetch(api + '/' + integration.key + '/templates', {method: 'POST', body: data});
+          const result = await response.json();
+          if (!response.ok) throw new Error(result.error || 'Upload failed.');
+          await refreshAfterSave();
+          await open(result);
+          message('Template uploaded as a draft. Configure defaults and field mappings, then Save integration to publish. The existing published form is unchanged.');
+        } finally { busy = false; uploadButton.disabled = false; file.disabled = false; }
       }, upload);
-      card.append(upload);
-      cards.append(card);
+      card.append(upload); cards.append(card);
     }
   }
   async function open(v, integrationRevision = integrations.find(i => i.key === v.config.integration_key).revision) {
@@ -491,7 +508,7 @@
     selected = v.config.inventory.targets[0]?.id;
     page = v.config.inventory.selected_pages[0];
     $('workspace').hidden = false;
-    $('title').textContent = names[v.key || v.config.integration_key] + ' field mapping';
+    $('title').textContent = names[v.key || v.config.integration_key] + ' field mapping — ' + v.template_filename;
     $('page').replaceChildren(...v.config.inventory.selected_pages.map(p => new Option('Page ' + p, p)));
     $('page').value = page;
     renderTargets();
@@ -555,6 +572,7 @@
           } : {...blank(t), label: previous.label};
           change(next, false);
           fieldButton.textContent = caption(next);
+          if (selected === t.id) renderEditor();
         });
         row.append(value);
       }
@@ -612,6 +630,17 @@
       check.title = 'Mark when the saved answer is';
       check.addEventListener('change', () => {m = {...m, check_on: check.value}; change(m);});
     }
+    const requiredLabel = node('label', 'Required before export ');
+    const required = input('', 'checkbox');
+    required.checked = !!m.required;
+    required.setAttribute('aria-label', 'Required before export');
+    required.disabled = !mapped(m);
+    required.addEventListener('change', () => {
+      m = {...mappings.get(t.id), required: required.checked, missing: required.checked ? 'block' : 'blank'};
+      change(m);
+    });
+    requiredLabel.append(required);
+    editor.append(requiredLabel);
     const choices = node('div', null, {class: 'pdf-source-choices', 'aria-label': 'Inspection fields'});
     editor.append(choices);
     let selectedButton = null;
@@ -681,7 +710,7 @@
     integrations = (await request('')).integrations;
     renderCards();
   }
-  root.innerHTML = `<div id="simple-message" role="status"></div><div id="simple-cards"></div><section id="simple-workspace" hidden><h3 id="simple-title"></h3><p id="simple-coverage"></p><p>Map Store Data, NFPA 72 and Compliance fields. Points Lists and Events are not used. Unmapped PDF fields stay blank.</p><div class="pdf-toolbar"><button id="simple-save" type="button">Save integration</button><button id="simple-discard" type="button">Discard changes</button><label>Page: <select id="simple-page"></select></label><label>Zoom: <select id="simple-zoom"><option value="0.5">50%</option><option value="1" selected>100%</option><option value="1.5">150%</option></select></label><label>Find PDF field: <input id="simple-search" type="search"></label></div><div class="pdf-mapping-grid"><div id="simple-targets" aria-label="PDF fields"></div><div class="pdf-page-scroll"><div id="simple-sheet" class="pdf-simple-sheet"></div></div><div id="simple-editor"></div></div></section>`;
+  root.innerHTML = `<h2>PDF Templates</h2><p>1. Upload a blank fillable PDF. 2. Set fixed values/defaults and connect inspection fields. 3. Save integration to publish for field use.</p><p>For technician-entered data, add fields and editable defaults in Administration → Data Sections, then map them here. An unmapped PDF default is fixed text; a mapped default is used only when the saved answer is empty. Saved answers take precedence. Publication retains earlier versions and downloads.</p><div id="simple-message" role="status" aria-live="polite"></div><div id="simple-cards"></div><section id="simple-workspace" hidden><h3 id="simple-title"></h3><p id="simple-coverage"></p><p>Map Store Data, NFPA 72 and Compliance fields. Points Lists and Events are not used. Unmapped PDF fields stay blank.</p><div class="pdf-toolbar"><button id="simple-save" type="button">Save integration</button><button id="simple-discard" type="button">Discard changes</button><label>Page: <select id="simple-page"></select></label><label>Zoom: <select id="simple-zoom"><option value="0.5">50%</option><option value="1" selected>100%</option><option value="1.5">150%</option></select></label><label>Find PDF field: <input id="simple-search" type="search"></label></div><div class="pdf-mapping-grid"><div id="simple-targets" aria-label="PDF fields"></div><div class="pdf-page-scroll"><div id="simple-sheet" class="pdf-simple-sheet"></div></div><div id="simple-editor"></div></div></section>`;
   $('save').addEventListener('click', () => save().catch(e => message(e.message)));
   $('discard').addEventListener('click', async () => {
     if (dirty && !window.confirm('Discard your unsaved mapping edits and load current saved mappings?')) return;
