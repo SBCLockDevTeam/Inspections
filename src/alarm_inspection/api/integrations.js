@@ -307,7 +307,7 @@
     mappings = new Map(),
     selected = null,
     page = 1,
-    zoom = 1,
+    zoom = 'fit',
     dirty = false,
     busy = false,
     openedRevision = null,
@@ -615,8 +615,9 @@
     const geometry = version.config.inventory.pages.find(p => p.number === page);
     const sheet = $('sheet');
     sheet.replaceChildren();
-    sheet.style.width = geometry.display_width * zoom + 'px';
-    sheet.style.height = geometry.display_height * zoom + 'px';
+    sheet.style.width = zoom === 'fit' ? '100%' : geometry.display_width * zoom + 'px';
+    sheet.style.height = zoom === 'fit' ? 'auto' : geometry.display_height * zoom + 'px';
+    sheet.style.aspectRatio = geometry.display_width + ' / ' + geometry.display_height;
     sheet.append(node('img', null, {
       src: api + '/versions/' + version.id + '/pages/' + page,
       alt: names[version.config.integration_key] + ' page ' + page
@@ -741,7 +742,7 @@
     integrations = (await request('')).integrations;
     renderCards();
   }
-  root.innerHTML = `<h2>PDF Templates</h2><p>1. Upload a blank fillable PDF. 2. Set fixed values/defaults and connect inspection fields. 3. Save integration to publish for field use.</p><p>For technician-entered data, add fields and editable defaults in Administration → Data Sections, then map them here. An unmapped PDF default is fixed text; a mapped default is used only when the saved answer is empty. Saved answers take precedence. Publication retains earlier versions and downloads.</p><div id="simple-message" role="status" aria-live="polite"></div><div id="simple-cards"></div><section id="simple-workspace" hidden><h3 id="simple-title"></h3><p id="simple-coverage"></p><p>Map Store Data, NFPA 72 and Compliance fields. Points Lists and Events are not used. Unmapped PDF fields stay blank.</p><div class="pdf-toolbar"><button id="simple-save" type="button">Save integration</button><button id="simple-discard" type="button">Discard changes</button><label>Page: <select id="simple-page"></select></label><label>Zoom: <select id="simple-zoom"><option value="0.5">50%</option><option value="1" selected>100%</option><option value="1.5">150%</option></select></label><label>Find PDF field: <input id="simple-search" type="search"></label></div><div class="pdf-mapping-grid"><div id="simple-targets" aria-label="PDF fields"></div><div class="pdf-page-scroll"><div id="simple-sheet" class="pdf-simple-sheet"></div></div><div id="simple-editor"></div></div></section>`;
+  root.innerHTML = `<h2>PDF Templates</h2><p>1. Upload a blank fillable PDF. 2. Set fixed values/defaults and connect inspection fields. 3. Save integration to publish for field use.</p><p>For technician-entered data, add fields and editable defaults in Administration → Data Sections, then map them here. An unmapped PDF default is fixed text; a mapped default is used only when the saved answer is empty. Saved answers take precedence. Publication retains earlier versions and downloads.</p><div id="simple-message" role="status" aria-live="polite"></div><div id="simple-cards"></div><section id="simple-workspace" hidden><h3 id="simple-title"></h3><p id="simple-coverage"></p><p>Map Store Data, NFPA 72 and Compliance fields. Points Lists and Events are not used. Unmapped PDF fields stay blank.</p><div class="pdf-toolbar"><button id="simple-save" type="button">Save integration</button><button id="simple-discard" type="button">Discard changes</button><label>Page: <select id="simple-page"></select></label><label>Zoom: <select id="simple-zoom"><option value="fit" selected>Fit width</option><option value="0.5">50%</option><option value="1">100%</option><option value="1.5">150%</option></select></label><label>Find PDF field: <input id="simple-search" type="search"></label></div><div class="pdf-mapping-grid"><div id="simple-targets" aria-label="PDF fields"></div><div class="pdf-page-scroll"><div id="simple-sheet" class="pdf-simple-sheet"></div></div><div id="simple-editor"></div></div></section>`;
   $('save').addEventListener('click', () => save().catch(e => message(e.message)));
   $('discard').addEventListener('click', async () => {
     if (dirty && !window.confirm('Discard your unsaved mapping edits and load current saved mappings?')) return;
@@ -757,7 +758,7 @@
     renderPage();
   });
   $('zoom').addEventListener('change', () => {
-    zoom = Number($('zoom').value);
+    zoom = $('zoom').value === 'fit' ? 'fit' : Number($('zoom').value);
     renderPage();
   });
   const debug = node('details', null, {
