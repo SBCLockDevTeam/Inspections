@@ -921,8 +921,6 @@
       });
       }
       act(controls,form.key==='nfpa72'?'Export NFPA 72':'Export Compliance Form',()=>openPreview(form.key), {class:'pdf-export-action',disabled:'disabled'});
-      act(controls,'Export history',()=>loadHistory(form.key));
-      card.append(node('div',null,{class:'pdf-export-history'}));
       card.append(node('p',form.export_reason,{class:'pdf-export-reason'}));
       card.append(node('ul',null,{class:'pdf-readiness-blockers'}));root.append(card);
     }
@@ -1087,25 +1085,13 @@
       confirmButton.disabled=true;status.textContent='Confirming saved data and retaining the final PDF…';
       try{
         const artifact=await post(url(inspectionId,key)+'/exports',{preview_id:preview.id,confirmation_token:preview.confirmation_token,preview_sha256:preview.sha256,request_id:requestId,confirmed:true});
-        if(artifact.status!=='ready'){status.textContent=`Export ${artifact.status}. Check Export history; retries use the same confirmation.`;return;}
+        if(artifact.status!=='ready'){status.textContent=`Export ${artifact.status}. Retry confirmation to check this export again.`;return;}
         const link=node('a','Download completed PDF',{href:url(inspectionId,key)+`/exports/${artifact.id}/download`,download:artifact.filename});status.replaceChildren(link);link.click();
-        await loadHistory(key);
       }catch(error){status.textContent=error.message+' Your inspection data is preserved.';}
       finally{confirmButton.disabled=false;}
     });
     act(dialog,'Close preview',()=>{dialog.close();dialog.remove();});document.body.append(dialog);dialog.showModal();
     dialog.addEventListener('cancel',()=>dialog.remove());message.textContent='Draft preview ready.';
-  }
-  async function loadHistory(key){
-    const inspectionId=active;const result=await read(url(inspectionId,key)+'/exports');if(active!==inspectionId)return;
-    const container=root.querySelector(`[data-form="${key}"] .pdf-export-history`);if(!container)return;container.replaceChildren(node('h4','Retained exports'));
-    for(const artifact of result.exports){
-      const row=node('p',`${artifact.created_at} · ${artifact.status} · ${artifact.filename} `);
-      if(artifact.status==='ready')row.append(node('a','Download',{href:url(inspectionId,key)+`/exports/${artifact.id}/download`,download:artifact.filename}));
-      else if(artifact.status==='pending')act(row,'Recover pending export',async()=>{await post(url(inspectionId,key)+`/exports/${artifact.id}/recover`,{});await loadHistory(key);});
-      const debug=node('details');debug.append(node('summary','Debug provenance'),node('a','View technical provenance',{href:url(inspectionId,key)+`/exports/${artifact.id}/provenance`,target:'_blank',rel:'noopener'}));row.append(debug);container.append(row);
-    }
-    if(!result.exports.length)container.append(node('p','No completed exports have been requested.'));
   }
   function backup(record,key) {
     const blob=new Blob([JSON.stringify({answers:[...record.locals].filter(([id])=>id.startsWith(key+':')).map(([id,v])=>({id,...v,saving:null})),archived:record.archive},null,2)],{type:'application/json'});

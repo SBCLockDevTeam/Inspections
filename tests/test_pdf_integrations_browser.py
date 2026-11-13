@@ -313,7 +313,8 @@ def test_technician_preview_stale_confirmation_final_download_and_history(browse
                 download=await event.value;path=tmp_path/'completed.pdf';await download.save_as(path)
                 final=PdfReader(path);text=final.pages[0].extract_text()
                 assert 'Saved negative result: No' in text and 'DRAFT PREVIEW' not in text and 'OLD PRESET' not in text
-                await playwright.expect(page.locator('[data-form="compliance"] .pdf-export-history')).to_contain_text('ready')
+                await playwright.expect(page.get_by_role('button',name='Export history',exact=True)).to_have_count(0)
+                assert client.get(f'/api/inspections/{inspection}/form-integrations/compliance/exports').json()['exports'][0]['status']=='ready'
                 assert download.suggested_filename=='PDFTEST-Norfolk,VA-Compliance Inspection-10-02-26.pdf'
                 assert not errors
             finally:await browser.close()
