@@ -999,6 +999,15 @@ button.inspection-menu-option {
     #simple-cards {display:flex;flex-wrap:wrap;gap:12px;}
     #simple-message {position:sticky;top:0;background:#fff;z-index:3;padding:8px;}
     @media (max-width:1000px) {#simple-targets {max-height:220px;}}
+#inspection-export-dialog {width:min(720px,95vw);}
+.download-form-row {display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+.download-form-row label {margin:0;}
+.download-form-row select {width:auto;flex:1;min-width:150px;}
+.download-form-row button, .download-form-footer button {width:auto;margin:0;}
+.download-form-footer {display:flex;justify-content:center;margin-top:20px;}
+#inspection-export-dialog .pdf-form-card {border:0;padding:0;margin:0;}
+#inspection-export-dialog .pdf-form-card > h3, #inspection-export-dialog .pdf-export-action {display:none;}
+#form-details-message:empty, #inspection-export-dialog .pdf-readiness-blockers:empty {display:none;}
 </style></head>
 <body><div class="page-header"><h1>Inspections</h1><div id="user-bar" class="hidden"><span id="active-user-label"></span><span id="live-sync-status" role="status" style="font-size:0.8rem;color:var(--muted)">Live updates on</span><div id="avatar-wrap"><button type="button" id="avatar-button" class="secondary" title="Account menu">JP</button><div id="avatar-menu" class="hidden"><div id="avatar-menu-option-admin" class="avatar-menu-option hidden" role="menuitem" tabindex="0">Administration</div><div id="avatar-menu-option-logout" class="avatar-menu-option" role="menuitem" tabindex="0">Logout</div></div></div></div></div>
 
@@ -1139,7 +1148,13 @@ button.inspection-menu-option {
 <div id="delete-inspection-modal" class="modal"><div class="modal-card"><button class="close" id="close-delete-inspection">Close</button><h2>Delete Inspection</h2><div class="form-field"><label for="delete-inspection-selector">Select inspection:</label><select id="delete-inspection-selector"></select></div><div class="delete-actions"><button type="button" id="confirm-delete-inspection" class="danger">Delete</button><button type="button" id="cancel-delete-inspection" class="secondary">Cancel</button></div></div></div>
 
 <div id="preview-modal" class="modal"><div class="modal-card"><button class="close" id="close-preview">Close</button><h2>Points List Review</h2><div class="form-field"><label for="preview-list-selector">Points List:</label><select id="preview-list-selector"></select></div><p id="preview-summary"></p><p>Edit descriptions and use each row's status button to toggle Accept or Review. Rows remain visible until you delete them.</p><div class="nav"><button type="button" class="delete-review-action">Delete all Review rows</button><button type="button" class="save-review-action">Save Decisions</button></div><table class="table"><thead><tr><th>Point</th><th>Description</th><th>Status</th></tr></thead><tbody id="preview-body"></tbody></table></div></div>
-<dialog id="inspection-export-dialog" class="pdf-form-tools-dialog" aria-label="Export Forms"><button type="button" id="close-inspection-exports" class="secondary">Close</button><h2>Download PDF</h2><label>Form: <select id="download-form-type"><option value="initiating">Initiating Devices</option><option value="nfpa72">NFPA 72</option><option value="compliance">Compliance</option></select></label><div id="download-initiating"><p>Downloads the selected Points List after all required event mappings and review decisions are complete.</p><button type="button" id="download-initiating-pdf">Download Initiating Devices</button></div><p id="form-details-message" role="status"></p><div id="form-details-integrations"></div></dialog>
+<dialog id="inspection-export-dialog" class="pdf-form-tools-dialog" aria-label="Download PDF">
+<h2>Download PDF</h2>
+<div class="download-form-row"><label for="download-form-type">Form:</label><select id="download-form-type"><option value="initiating">Initiating Devices</option><option value="nfpa72">NFPA 72</option><option value="compliance">Compliance</option></select><button type="button" id="download-selected-pdf">Download</button></div>
+<div id="download-initiating"><p>Downloads the selected Points List after all required event mappings and review decisions are complete.</p><button type="button" id="download-initiating-pdf" hidden>Download Initiating Devices</button></div>
+<p id="form-details-message" role="status"></p><div id="form-details-integrations"></div>
+<div class="download-form-footer"><button type="button" id="close-inspection-exports" class="secondary">Close</button></div>
+</dialog>
 <script src="/integrations.js"></script>
 <script src="/review.js"></script>
 </body></html>

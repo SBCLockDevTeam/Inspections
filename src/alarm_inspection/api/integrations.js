@@ -824,9 +824,16 @@
     document.getElementById('download-initiating').hidden = key !== 'initiating';
     root.hidden = key === 'initiating';
     for (const card of root.querySelectorAll('[data-form]')) card.hidden = card.dataset.form !== key;
+    const action = root.querySelector(`[data-form="${key}"] .pdf-export-action`);
+    document.getElementById('download-selected-pdf').disabled = key !== 'initiating' && (!action || action.disabled);
   }
   formChoice.addEventListener('change', showChosenForm);
-  new MutationObserver(showChosenForm).observe(root, {childList:true});
+  new MutationObserver(showChosenForm).observe(root, {childList:true,subtree:true,attributes:true,attributeFilter:['disabled']});
+  document.getElementById('download-selected-pdf').addEventListener('click', () => {
+    const key = formChoice.value;
+    if (key === 'initiating') document.getElementById('download-initiating-pdf').click();
+    else root.querySelector(`[data-form="${key}"] .pdf-export-action`)?.click();
+  });
   document.getElementById('inspection-menu-option-export-pdf')?.addEventListener('click', () => {
     document.getElementById('inspection-menu').classList.add('hidden');
     if (active) { showChosenForm(); exportDialog.showModal(); refresh(); }
