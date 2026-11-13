@@ -278,3 +278,42 @@ def test_replacement_upload_preserves_published_defaults_and_original(admin_api)
     assert client.get(f"/api/admin/integrations/versions/{published['id']}/original").status_code == 200
     snapshot = capture_snapshot(store, inspection, 'compliance', actor_id='tech')
     assert evaluate_snapshot(snapshot).targets[target['id']].text == 'Company'
+
+
+def test_defaults_and_mappings_persist_across_store_restart_and_inspections(admin_api):
+    from alarm_inspection.storage import open_store
+    client,store,files,inspection=admin_api
+    draft=uploaded(client)
+    targets=[t for t in draft['config']['inventory']['targets'] if t['kind']=='text']
+    fixed,fallback=targets[:2]
+    mappings=[
+        {'target_id':fixed['id'],'disposition':'constant','constant':'SHARED','reason':'Shared company default.'},
+        {'target_id':fallback['id'],'disposition':'source','source':{'kind':'inspection','field':'inspector_name'},'default_value':'DEFAULT'},
+    ]
+    response=save(client,draft,mappings)
+    assert response.status_code==200,response.text
+    published=response.json()
+    other=str(uuid4())
+    with store.begin() as session:
+        session.add(Inspection(id=other,store_number='OTHER',city='Test',state='VA',address='',
+            start_date=date(2026,10,1),completion_date=date(2026,10,2),created_at=datetime.now(timezone.utc)))
+    restarted=open_store()
+    for ident in (inspection,other):
+        result=evaluate_snapshot(capture_snapshot(restarted,ident,'compliance',actor_id='tech'))
+        assert result.ready
+        assert result.targets[fixed['id']].text=='SHARED'
+        assert result.targets[fallback['id']].text=='DEFAULT'
+    # A saved inspection answer wins without changing the shared configuration.
+    with restarted.begin() as session:session.get(Inspection,other).inspector_name='FIELD'
+    result=evaluate_snapshot(capture_snapshot(restarted,other,'compliance',actor_id='tech'))
+    assert result.targets[fallback['id']].text=='FIELD'
+    with restarted() as session:
+        assert session.get(PdfIntegration,'compliance').active_version_id==published['id']
+        before=session.get(PdfIntegrationVersion,published['id']).payload_json
+    updated=save(client,published,[{**mappings[0],'constant':'CHANGED'},mappings[1]],revision=2)
+    assert updated.status_code==200,updated.text
+    for ident in (inspection,other):
+        result=evaluate_snapshot(capture_snapshot(restarted,ident,'compliance',actor_id='tech'))
+        assert result.targets[fixed['id']].text=='CHANGED'
+    with restarted() as session:assert session.get(PdfIntegrationVersion,published['id']).payload_json==before
+    restarted.kw['bind'].dispose()

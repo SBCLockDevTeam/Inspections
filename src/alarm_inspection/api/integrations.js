@@ -310,6 +310,7 @@
     zoom = 'fit',
     dirty = false,
     busy = false,
+    editSerial = 0,
     openedRevision = null,
     sourceCatalogHash = null;
   const $ = id => root.querySelector('#simple-' + id);
@@ -372,7 +373,9 @@
 
   function change(m, refreshTargets = true) {
     mappings.set(m.target_id, m);
+    editSerial++;
     dirty = true;
+    $('save-state').textContent = 'Unsaved changes — Save integration to apply to all inspections.';
     message('Unsaved changes. Save integration to use this mapping on inspections.');
     if (refreshTargets) renderTargets();
     updateSummary();
@@ -520,6 +523,10 @@
       if (mappings.has(id)) mappings.get(id).label = label;
     }
     dirty = false;
+    const integration = integrations.find(i => i.key === v.config.integration_key);
+    $('save-state').textContent = integration?.enabled && integration.active_version_id === v.id
+      ? 'Saved for all inspections. Mappings and defaults persist until changed.'
+      : 'Inactive version — Save integration to apply these settings to all inspections.';
     selected = v.config.inventory.targets[0]?.id;
     page = v.config.inventory.selected_pages[0];
     const section = root.querySelector('[data-template-key="' + v.config.integration_key + '"]');
@@ -720,6 +727,8 @@
     if (!version || busy) return;
     busy = true;
     $('save').disabled = true;
+    const savingSerial = editSerial;
+    $('save-state').textContent = 'Saving mappings and defaults for all inspections…';
     message('Validating mappings and preparing the integration…');
     try {
       const revision = openedRevision;
@@ -729,10 +738,24 @@
         source_catalog_sha256: sourceCatalogHash,
         mappings: [...mappings.values()]
       });
-      dirty = false;
+      // The proof request can take seconds. Keep edits made after its snapshot;
+      // advance their base to the saved version so the next save is conflict-safe.
+      version = structuredClone(saved);
+      openedRevision = revision + 1;
+      dirty = editSerial !== savingSerial;
+      if (!dirty) {
+        mappings = new Map(saved.config.mappings.map(m => [m.target_id, structuredClone(m)]));
+        renderTargets(); renderEditor(); updateSummary();
+      }
+      $('save-state').textContent = dirty
+        ? 'Unsaved changes — earlier settings saved; save again to include your latest edits.'
+        : 'Saved for all inspections. Mappings and defaults persist until changed.';
+      message(dirty ? 'Earlier settings saved. Your newer edits are retained; Save integration again to publish them.'
+        : 'Integration saved and ready for all inspections. Mappings and defaults persist until changed.');
       await refreshAfterSave();
-      await open(saved);
-      message('Integration saved and ready. Open an inspection, save its Store Data, NFPA 72 and Compliance answers, then export ' + names[saved.key] + '.');
+    } catch (error) {
+      $('save-state').textContent = dirty ? 'Unsaved changes retained — save did not finish. See the error above.' : 'Saved settings retained. Refresh failed; reopen to check the current version.';
+      throw error;
     } finally {
       busy = false;
       $('save').disabled = false;
@@ -742,9 +765,10 @@
     integrations = (await request('')).integrations;
     renderCards();
   }
-  root.innerHTML = `<h2>PDF Templates</h2><p>1. Upload a blank fillable PDF. 2. Set fixed values/defaults and connect inspection fields. 3. Save integration to publish for field use.</p><p>For technician-entered data, add fields and editable defaults in Administration → Data Sections, then map them here. An unmapped PDF default is fixed text; a mapped default is used only when the saved answer is empty. Saved answers take precedence. Publication retains earlier versions and downloads.</p><div id="simple-message" role="status" aria-live="polite"></div><div id="simple-cards"></div><section id="simple-workspace" hidden><h3 id="simple-title"></h3><p id="simple-coverage"></p><p>Map Store Data, NFPA 72 and Compliance fields. Points Lists and Events are not used. Unmapped PDF fields stay blank.</p><div class="pdf-toolbar"><button id="simple-save" type="button">Save integration</button><button id="simple-discard" type="button">Discard changes</button><label>Page: <select id="simple-page"></select></label><label>Zoom: <select id="simple-zoom"><option value="fit" selected>Fit width</option><option value="0.5">50%</option><option value="1">100%</option><option value="1.5">150%</option></select></label><label>Find PDF field: <input id="simple-search" type="search"></label></div><div class="pdf-mapping-grid"><div id="simple-targets" aria-label="PDF fields"></div><div class="pdf-page-scroll"><div id="simple-sheet" class="pdf-simple-sheet"></div></div><div id="simple-editor"></div></div></section>`;
+  root.innerHTML = `<h2>PDF Templates</h2><p>1. Upload a blank fillable PDF. 2. Set fixed values/defaults and connect inspection fields. 3. Save integration to publish for field use.</p><p>For technician-entered data, add fields and editable defaults in Administration → Data Sections, then map them here. An unmapped PDF default is fixed text; a mapped default is used only when the saved answer is empty. Saved answers take precedence. Publication retains earlier versions and downloads.</p><div id="simple-message" role="status" aria-live="polite"></div><div id="simple-cards"></div><section id="simple-workspace" hidden><h3 id="simple-title"></h3><p id="simple-coverage"></p><p>Map Store Data, NFPA 72 and Compliance fields. Points Lists and Events are not used. Unmapped PDF fields stay blank.</p><div class="pdf-toolbar"><button id="simple-save" type="button">Save integration</button><button id="simple-discard" type="button">Discard changes</button><span id="simple-save-state" role="status" aria-live="polite"></span><label>Page: <select id="simple-page"></select></label><label>Zoom: <select id="simple-zoom"><option value="fit" selected>Fit width</option><option value="0.5">50%</option><option value="1">100%</option><option value="1.5">150%</option></select></label><label>Find PDF field: <input id="simple-search" type="search"></label></div><div class="pdf-mapping-grid"><div id="simple-targets" aria-label="PDF fields"></div><div class="pdf-page-scroll"><div id="simple-sheet" class="pdf-simple-sheet"></div></div><div id="simple-editor"></div></div></section>`;
   $('save').addEventListener('click', () => save().catch(e => message(e.message)));
   $('discard').addEventListener('click', async () => {
+    if (busy) return;
     if (dirty && !window.confirm('Discard your unsaved mapping edits and load current saved mappings?')) return;
     try {
       await refreshAfterSave();

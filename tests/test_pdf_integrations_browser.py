@@ -155,11 +155,11 @@ def test_technician_two_devices_private_edits_failure_recovery_and_readiness(bro
                     await playwright.expect(page.locator('[data-form="compliance"] [data-answer]')).to_have_count(3)
                 selector='#form-detail-compliance-remarks-inspection'
                 await a.fill(selector,'Private device A draft')
-                await b.fill(selector,'Saved on B');await b.locator('[data-form="compliance"] h3').click()
+                await b.fill(selector,'Saved on B');await b.locator('#inspection-export-dialog h2').click()
                 await playwright.expect(b.locator('#form-details-message')).to_contain_text('saved')
                 await a.wait_for_timeout(3300)
                 assert await a.input_value(selector)=='Private device A draft'
-                await a.locator('[data-form="compliance"] h3').click()
+                await a.locator('#inspection-export-dialog h2').click()
                 await playwright.expect(a.locator('#form-details-message')).to_contain_text('Conflict')
                 assert await a.input_value(selector)=='Private device A draft'
                 a.once('dialog',lambda d:d.accept())
@@ -167,17 +167,17 @@ def test_technician_two_devices_private_edits_failure_recovery_and_readiness(bro
                 await playwright.expect(a.locator(selector)).to_have_value('Saved on B')
                 # A failed save retains the text; retry succeeds after recovery.
                 await a.route('**/form-integrations/compliance/answers',lambda route:route.fulfill(status=503,content_type='application/json',body='{"error":"Synthetic save failure"}'))
-                await a.fill(selector,'Retained during failure');await a.locator('[data-form="compliance"] h3').click()
+                await a.fill(selector,'Retained during failure');await a.locator('#inspection-export-dialog h2').click()
                 await playwright.expect(a.locator('#form-details-message')).to_contain_text('Synthetic save failure')
                 await a.wait_for_timeout(3300)
                 assert await a.input_value(selector)=='Retained during failure'
                 await a.unroute('**/form-integrations/compliance/answers')
                 await a.get_by_role('button',name='Save / confirm Remarks',exact=True).click()
                 await playwright.expect(a.locator('#form-details-message')).to_contain_text('saved')
-                await b.locator('[data-form="compliance"] h3').click()
+                await b.locator('#inspection-export-dialog h2').click()
                 await playwright.expect(b.locator(selector)).to_have_value('Retained during failure',timeout=12000)
                 await a.fill('#form-detail-compliance-quantity-inspection','0')
-                await a.locator('[data-form="compliance"] h3').click()
+                await a.locator('#inspection-export-dialog h2').click()
                 await a.select_option('#form-detail-compliance-outcome-inspection','No')
                 await playwright.expect(a.locator('[data-form="compliance"] .pdf-form-summary')).to_contain_text('Saved data ready',timeout=12000)
                 assert await a.locator('[data-form="compliance"] .pdf-export-action').is_disabled()
@@ -601,4 +601,53 @@ def test_download_menu_offers_all_three_forms(browser_app):
                 await page.click('#download-selected-pdf')
                 await playwright.expect(page.locator('#inspection-message')).to_contain_text('Select a Points List first')
             finally: await browser.close()
+    asyncio.run(check())
+
+
+def test_mapping_edits_during_save_survive_and_persist_after_reopening(browser_app):
+    base,client,store,inspection,draft=browser_app
+    async def check():
+        async with playwright.async_playwright() as p:
+            browser=await p.chromium.launch(headless=True,args=['--no-sandbox'])
+            page=await browser.new_page()
+            saved=asyncio.Event();release=asyncio.Event()
+            async def delay_response(route):
+                response=await route.fetch()
+                saved.set()
+                await release.wait()
+                await route.fulfill(response=response)
+            try:
+                await login(page,base)
+                await page.locator('#avatar-button').click(button='right')
+                await page.click('#avatar-menu-option-admin');await page.click('#admin-tab-integrations')
+                await page.locator('[data-template-key="compliance"] > summary').click()
+                await page.get_by_role('button',name='Open Compliance Form',exact=True).click()
+                target=next(t for t in draft['config']['inventory']['targets'] if t['kind']=='text')
+                control=page.locator(f'[data-pdf-default="{target["id"]}"]')
+                await control.fill('FIRST')
+                await page.route('**/save-integration',delay_response)
+                await page.click('#simple-save')
+                await asyncio.wait_for(saved.wait(),timeout=30)
+                await control.fill('LATER')
+                source=page.locator('#simple-editor').get_by_role('button',name='City',exact=True)
+                await source.click()
+                release.set()
+                await playwright.expect(page.locator('#simple-save')).to_be_enabled(timeout=30000)
+                await playwright.expect(control).to_have_value('LATER')
+                await playwright.expect(source).to_have_attribute('aria-pressed','true')
+                await playwright.expect(page.locator('#simple-save-state')).to_contain_text('Unsaved')
+                await page.unroute('**/save-integration',delay_response)
+                await page.click('#simple-save')
+                await playwright.expect(page.locator('#simple-save-state')).to_contain_text('Saved for all inspections',timeout=30000)
+                await page.reload()
+                await page.locator('#avatar-button').click(button='right')
+                await page.click('#avatar-menu-option-admin');await page.click('#admin-tab-integrations')
+                await page.locator('[data-template-key="compliance"] > summary').click()
+                await page.get_by_role('button',name='Open Compliance Form',exact=True).click()
+                await playwright.expect(control).to_have_value('LATER')
+                await page.locator(f'#simple-targets [data-target="{target["id"]}"]').click()
+                await playwright.expect(source).to_have_attribute('aria-pressed','true')
+            finally:
+                release.set()
+                await browser.close()
     asyncio.run(check())

@@ -125,3 +125,17 @@ PDF label correction: text and choice labels are extracted from the nearest prin
 ## Unified PDF download selector
 
 The inspection hamburger menu → Download PDF opens a selector for Initiating Devices, NFPA 72, and Compliance. Initiating Devices uses the selected Points List and retains all existing review/event completeness checks. NFPA 72 and Compliance use their published mapping versions, saved inspection answers, effective task defaults, fixed PDF defaults, and mapped empty-answer fallbacks through the existing preview/confirmation/download pipeline. Unpublished or disabled templates and missing required data remain blocked with the form's readiness explanation. Save pending inspection edits before previewing. Unmapped destinations without a default remain blank; the application never invents missing answers. The existing Export Forms menu opens the same dialog with NFPA 72 selected.
+
+
+## Mapping/default persistence
+
+Published PDF mappings and defaults are shared by all existing and new inspections.
+They are stored in immutable database versions and survive application restarts and
+deployments. Inspection answers take precedence over mapped fallback defaults;
+fixed PDF values remain global. Changing the shared settings requires Save integration.
+
+The mapper shows save status beside Save integration. Edits made while a save is
+rendering proofs remain local and visibly unsaved when that request completes;
+save again to publish those newer edits. A failed save retains edits. Reopening
+the mapper defaults to the active published version. Older versions remain available
+for review, and uploading a replacement does not replace published settings.
