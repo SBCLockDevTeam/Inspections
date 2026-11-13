@@ -2567,7 +2567,8 @@
     }
   });
 
-  inspectionMenuExportPdfOption?.addEventListener('click', async () => {
+  document.querySelector('#download-initiating-pdf')?.addEventListener('click', async () => {
+    document.querySelector('#inspection-export-dialog').close();
     closeInspectionMenu();
     if (!currentInspectionId) {
       inspectionMessage.textContent = 'No inspection selected.';

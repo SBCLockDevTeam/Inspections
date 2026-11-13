@@ -151,7 +151,7 @@ def test_technician_two_devices_private_edits_failure_recovery_and_readiness(bro
                 for page in (a,b):
                     page.on('pageerror',lambda e:errors.append(str(e)));await login(page,base)
                     await page.select_option('#inspection-picker',inspection);await page.click('#open-inspection')
-                    await page.click('#inspection-menu-button');await page.click('#inspection-menu-option-form-exports')
+                    await page.click('#inspection-menu-button');await page.click('#inspection-menu-option-export-pdf');await page.select_option('#download-form-type','compliance')
                     await playwright.expect(page.locator('[data-form="compliance"] [data-answer]')).to_have_count(3)
                 selector='#form-detail-compliance-remarks-inspection'
                 await a.fill(selector,'Private device A draft')
@@ -217,7 +217,7 @@ def test_technician_explicit_scope_navigation_and_definition_changes(browser_app
             browser=await p.chromium.launch(headless=True,args=['--no-sandbox']);page=await browser.new_page()
             try:
                 await login(page,base);await page.select_option('#inspection-picker',inspection);await page.click('#open-inspection')
-                await page.click('#inspection-menu-button');await page.click('#inspection-menu-option-form-exports')
+                await page.click('#inspection-menu-button');await page.click('#inspection-menu-option-export-pdf');await page.select_option('#download-form-type','compliance')
                 card=page.locator('[data-form="compliance"]')
                 await playwright.expect(card.locator('[data-answer]')).to_have_count(0)
                 await card.locator('[data-scope-panel="explicit-panel"]').check()
@@ -231,7 +231,7 @@ def test_technician_explicit_scope_navigation_and_definition_changes(browser_app
                 await page.click('#close-inspection-exports')
                 await page.click('#home-link-from-inspection')
                 await page.select_option('#inspection-picker',inspection);await page.click('#open-inspection')
-                await page.click('#inspection-menu-button');await page.click('#inspection-menu-option-form-exports')
+                await page.click('#inspection-menu-button');await page.click('#inspection-menu-option-export-pdf');await page.select_option('#download-form-type','compliance')
                 await playwright.expect(card.get_by_label('Override reason for Remarks')).to_have_value('Private reason, not submitted')
                 # Publish a different question under the same stable ID; earlier decisions survive.
                 copied=client.post('/api/admin/integrations/versions/'+draft['id']+'/copy').json()
@@ -293,7 +293,7 @@ def test_technician_preview_stale_confirmation_final_download_and_history(browse
             try:
                 await page.add_init_script("Object.defineProperty(window.crypto,'randomUUID',{value:undefined})")
                 await login(page,base);await page.select_option('#inspection-picker',inspection);await page.click('#open-inspection')
-                await page.click('#inspection-menu-button');await page.click('#inspection-menu-option-form-exports')
+                await page.click('#inspection-menu-button');await page.click('#inspection-menu-option-export-pdf');await page.select_option('#download-form-type','compliance')
                 await page.fill('#form-detail-compliance-remarks-inspection','Saved negative result: No')
                 await page.locator('[data-form="compliance"] h3').click()
                 export=page.get_by_role('button',name='Export Compliance Form',exact=True)
@@ -400,7 +400,8 @@ def test_simple_picker_save_then_export_without_manual_details(browser_app,tmp_p
                 original_data=(original_data[0],saved_data()[1],original_data[2])
                 rect=page.locator(f'#simple-sheet [data-preview-target="{target["id"]}"]')
                 box=await rect.bounding_box();sheet=await page.locator('#simple-sheet').bounding_box()
-                assert abs((box['x']-sheet['x'])-target['preview_rect'][0])<2
+                scale=sheet['width']/draft['config']['inventory']['pages'][0]['display_width']
+                assert abs((box['x']-sheet['x'])-target['preview_rect'][0]*scale)<2
                 await page.click('#simple-save')
                 await playwright.expect(page.locator('#simple-message')).to_contain_text('Integration saved and ready',timeout=30000)
                 await page.locator(f'#simple-targets [data-target="{target["id"]}"]').click()
@@ -440,7 +441,7 @@ def test_simple_picker_save_then_export_without_manual_details(browser_app,tmp_p
                 await page.select_option('#inspection-picker',inspection)
                 await page.click('#open-inspection')
                 await playwright.expect(page.locator('#inspection-screen')).to_be_visible()
-                await page.click('#inspection-menu-button');await page.click('#inspection-menu-option-form-exports')
+                await page.click('#inspection-menu-button');await page.click('#inspection-menu-option-export-pdf');await page.select_option('#download-form-type','compliance')
                 card=page.locator('[data-form="compliance"]')
                 await playwright.expect(card.locator('[data-answer]')).to_have_count(0)
                 await playwright.expect(card.get_by_role('button',name='Export Compliance Form',exact=True)).to_be_enabled()
@@ -575,5 +576,28 @@ def test_pdf_dropdown_options_and_scroll_survive_selection_and_refresh(browser_a
                 assert await combo.input_value()=='Custom property'
                 await dropdown.select_option('storage')
                 assert await dropdown.input_value()=='storage'
+            finally: await browser.close()
+    asyncio.run(check())
+
+
+def test_download_menu_offers_all_three_forms(browser_app):
+    base,client,store,inspection,draft=browser_app
+    async def check():
+        async with playwright.async_playwright() as p:
+            browser=await p.chromium.launch(headless=True,args=['--no-sandbox'])
+            page=await browser.new_page()
+            try:
+                await login(page,base);await page.select_option('#inspection-picker',inspection);await page.click('#open-inspection')
+                await page.click('#inspection-menu-button');await page.click('#inspection-menu-option-export-pdf')
+                await playwright.expect(page.locator('#inspection-export-dialog')).to_be_visible()
+                assert await page.locator('#download-form-type option').all_text_contents()==['Initiating Devices','NFPA 72','Compliance']
+                await playwright.expect(page.locator('#download-initiating-pdf')).to_be_visible()
+                for key in ('nfpa72','compliance'):
+                    await page.select_option('#download-form-type',key)
+                    await playwright.expect(page.locator(f'[data-form="{key}"]')).to_be_visible()
+                    await playwright.expect(page.locator('#download-initiating')).to_be_hidden()
+                await page.select_option('#download-form-type','initiating')
+                await page.click('#download-initiating-pdf')
+                await playwright.expect(page.locator('#inspection-message')).to_contain_text('Select a Points List first')
             finally: await browser.close()
     asyncio.run(check())

@@ -815,9 +815,23 @@
   const exportDialog = document.getElementById('inspection-export-dialog');
   document.getElementById('inspection-menu-option-form-exports')?.addEventListener('click', () => {
     document.getElementById('inspection-menu').classList.add('hidden');
-    if (active) { exportDialog.showModal(); refresh(); }
+    if (active) { formChoice.value = 'nfpa72'; showChosenForm(); exportDialog.showModal(); refresh(); }
   });
   document.getElementById('close-inspection-exports')?.addEventListener('click', () => exportDialog.close());
+  const formChoice = document.getElementById('download-form-type');
+  function showChosenForm() {
+    const key = formChoice.value;
+    document.getElementById('download-initiating').hidden = key !== 'initiating';
+    root.hidden = key === 'initiating';
+    for (const card of root.querySelectorAll('[data-form]')) card.hidden = card.dataset.form !== key;
+  }
+  formChoice.addEventListener('change', showChosenForm);
+  new MutationObserver(showChosenForm).observe(root, {childList:true});
+  document.getElementById('inspection-menu-option-export-pdf')?.addEventListener('click', () => {
+    document.getElementById('inspection-menu').classList.add('hidden');
+    if (active) { showChosenForm(); exportDialog.showModal(); refresh(); }
+  });
+
   const records = new Map();
   let active = null, epoch = 0, reading = false, controller = null;
   const fieldKey = field => `${field.definition.id}:${field.panel_id || ''}`;
@@ -872,7 +886,7 @@
     } catch (error) {
       if (active===id && epoch===version) {
         message.textContent='Form Details unavailable: '+error.message+' Existing inspection actions remain available. Retrying automatically.';
-        if(!state(id).forms.length){root.replaceChildren();for(const key of ['nfpa72','compliance']){const card=node('section',null,{class:'pdf-form-card'});card.append(node('h3',names[key]),node('p','Integration disabled or unavailable.'));card.append(node('button',key==='nfpa72'?'Export NFPA 72':'Export Compliance Form',{type:'button',disabled:'disabled'}));root.append(card);}}
+        if(!state(id).forms.length){root.replaceChildren();for(const key of ['nfpa72','compliance']){const card=node('section',null,{class:'pdf-form-card','data-form':key});card.append(node('h3',names[key]),node('p','Integration disabled or unavailable.'));card.append(node('button',key==='nfpa72'?'Export NFPA 72':'Export Compliance Form',{type:'button',disabled:'disabled'}));root.append(card);}}
       }
     } finally { clearTimeout(timeout);if (epoch===version) reading=false; }
   }
