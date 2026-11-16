@@ -12,7 +12,7 @@ This online application turns alarm Points Lists and Event History files into re
 4. Parse the files and show a review modal before committing the inspection.
 5. Edit descriptions, change each record between Accept and Review, and delete all remaining Review rows.
 6. Explicitly approve the reviewed Points Lists. Loading a file is not approval.
-7. Upload Event History repeatedly as testing proceeds.
+7. Upload Event History repeatedly as testing proceeds. Review each upload: keep existing accepted times and add pending matches, explicitly clear this Points List’s accepted/pending times and use the upload, or reject the upload without changing results.
 8. Retain successful point-to-time mappings across uploads until every required point is mapped.
 9. Resolve missing, duplicate, conflicting, or malformed mappings.
 10. Generate the final PDF only after all required results and mappings are complete.

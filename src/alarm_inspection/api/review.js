@@ -2301,6 +2301,51 @@
     message.textContent = 'Use Preview Points List and Save Decisions to add the Points List to this inspection.';
   });
 
+  const eventUploadReview = document.querySelector('#event-upload-review');
+  let eventUploadCandidate = null;
+  eventUploadReview.addEventListener('cancel', event => event.preventDefault());
+  for (const action of ['keep', 'clear', 'reject']) {
+    document.querySelector('#event-upload-' + action).addEventListener('click', async () => {
+      const candidate = eventUploadCandidate;
+      if (!candidate) return;
+      if (action === 'clear' && !window.confirm('Clear all accepted and pending times for this Points List and use this upload? Previous times remain in the audit history.')) return;
+      const status = document.querySelector('#event-upload-message');
+      const buttons = [...eventUploadReview.querySelectorAll('button')];
+      buttons.forEach(button => {button.disabled = true;});
+      status.textContent = 'Applying your choice…';
+      try {
+        const response = await fetch(`/api/inspections/${candidate.inspectionId}/event-history/${candidate.upload_id}/review`, {
+          method: 'POST', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({point_list_id: candidate.point_list_id, action, confirmed: action === 'clear'})
+        });
+        const result = await response.json();
+        if (!response.ok || result.error) throw new Error(result.error || result.detail || 'Unable to review upload.');
+        eventUploadCandidate = null;
+        eventUploadReview.close();
+        if (currentInspectionId === candidate.inspectionId && currentPointListId === candidate.point_list_id) {
+          if (action !== 'reject') {
+            if (action === 'clear') {
+              for (const point of inspectionPoints) {
+                point.event_date = '';
+                point.editableEventDate = '';
+              }
+            }
+            pendingEventDates = new Map((result.pending_matches || []).map(match => [Number(match.point), match.timestamp]));
+            for (const status of result.device_statuses || []) {
+              const point = inspectionPoints.find(item => item.id === status.id);
+              if (point) Object.assign(point, status);
+            }
+            renderVisibleAcceptedPoints();
+          }
+          inspectionMessage.textContent = action === 'reject' ? 'Upload rejected. Existing times are unchanged.'
+            : action === 'clear' ? 'Previous times cleared. Review the new matches, then click Accept Results.'
+            : 'Existing accepted times retained. Review the added matches, then click Accept Results.';
+        }
+      } catch (error) { status.textContent = error.message; }
+      finally { buttons.forEach(button => {button.disabled = false;}); }
+    });
+  }
+
   async function uploadSelectedEventHistory() {
     if (!currentInspectionId) {
       inspectionMessage.textContent = 'No inspection selected.';
@@ -2320,6 +2365,8 @@
     const data = new FormData();
     data.append('point_list_id', currentPointListId);
     data.append('event_file', file);
+    data.append('review_required', 'true');
+    const uploadInspectionId = currentInspectionId;
     try {
       const response = await fetch(`/api/inspections/${currentInspectionId}/event-history`, {
         method: 'POST',
@@ -2331,32 +2378,16 @@
         return;
       }
 
-      const persistedPoints = new Set(
-        (inspectionPoints || [])
-          .filter((point) => point.event_date && point.address !== null && point.address !== undefined)
-          .map((point) => Number(point.address))
-          .filter((value) => Number.isFinite(value))
-      );
-      for (const match of result.pending_matches || []) {
-        const point = Number(match.point);
-        const timestamp = match.timestamp;
-        if (!Number.isFinite(point) || !timestamp || persistedPoints.has(point)) {
-          continue;
-        }
-        const existingPending = pendingEventDates.get(point);
-        if (!existingPending || timestamp < existingPending) {
-          pendingEventDates.set(point, timestamp);
-        }
-      }
-
-      for (const status of result.device_statuses || []) {
-        const point = inspectionPoints.find((item) => item.id === status.id);
-        if (point) Object.assign(point, status);
-      }
       eventHistoryForm.reset();
       setEventFileName();
-      renderVisibleAcceptedPoints();
-      inspectionMessage.textContent = `Event History uploaded: ${result.filename}. Pending matches: ${pendingEventDates.size}. Click Accept Results to persist.`;
+      eventUploadCandidate = {...result, inspectionId: uploadInspectionId};
+      document.querySelector('#event-upload-summary').textContent =
+        `${result.filename}: ${result.matched_points} matching points. This Points List currently has ${result.accepted_times} accepted times and ${result.pending_times} pending times. No times have been changed.`;
+      document.querySelector('#event-upload-message').textContent = '';
+      eventUploadReview.showModal();
+      inspectionMessage.textContent = 'Choose how to handle the uploaded events.';
+    } catch (error) {
+      inspectionMessage.textContent = 'Event History upload failed: ' + error.message;
     } finally {
       setInspectionBusy(false);
     }

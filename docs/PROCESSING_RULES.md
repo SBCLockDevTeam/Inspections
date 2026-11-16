@@ -34,7 +34,8 @@ These rules are the executable interpretation of the inspection specification. I
 6. Preserve all candidate events in the audit trail.
 7. Flag malformed timestamps, missing addresses, duplicate point definitions, and points without a qualifying event.
 8. Treat every Event History upload as an additional evidence batch.
-9. Keep prior successful mappings. A later batch may fill an unmapped point but must not replace a successful mapping without an explicit correction action and audit entry.
+9. The upload review stages the original file without changing times. Reject retains the original and an audit decision without applying its matches. Clear-and-use requires explicit confirmation, audits previous accepted and pending times for the selected Points List, and stages the new matches for separate acceptance.
+10. Keep prior successful mappings. A later batch may fill an unmapped point but must not replace a successful mapping without an explicit correction action and audit entry.
 
 ## Completion and PDF export
 

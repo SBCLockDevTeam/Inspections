@@ -26,11 +26,41 @@ from alarm_inspection.storage import (
 )
 
 
+def _merge_events(session, inspection_id, point_list_id, extracted, filename):
+    existing = session.query(PointListEventDate).filter_by(inspection_id=inspection_id, point_list_id=point_list_id).all()
+    existing_points = {item.point_address for item in existing}
+    decisions = session.query(PointListDecision).filter_by(inspection_id=inspection_id, point_list_id=point_list_id, accepted=True, deleted=False).all()
+    allowed_points = {item.address for item in decisions if item.address is not None}
+    pending = {item.point_address: item for item in session.query(PointListPendingEventDate).filter_by(inspection_id=inspection_id, point_list_id=point_list_id).all()}
+    for point, timestamp in extracted.items():
+        if point in existing_points or point not in allowed_points:
+            continue
+        previous = pending.get(point)
+        if previous is None:
+            previous = PointListPendingEventDate(inspection_id=inspection_id, point_list_id=point_list_id,
+                point_address=point, event_timestamp=timestamp, source_filename=filename)
+            session.add(previous)
+            pending[point] = previous
+        elif timestamp.replace(tzinfo=None) < previous.event_timestamp.replace(tzinfo=None):
+            previous.event_timestamp = timestamp
+            previous.source_filename = filename
+    pending_points = set(pending) - existing_points
+    for decision in decisions:
+        decision.device_event_missing = missing_event_for_marked_device(
+            decision.device_highlighted, decision.address, pending_points, existing_points)
+    pending_matches = [{"point": point, "timestamp": format_event_date(pending[point].event_timestamp)} for point in sorted(pending_points & allowed_points)]
+    device_statuses = [{"id": item.id, "device_highlighted": bool(item.device_highlighted),
+                        "device_event_missing": bool(item.device_event_missing)} for item in decisions]
+    return pending_matches, device_statuses, existing_points
+
+
 def register_event_routes(router, store) -> None:
     @router.post("/{inspection_id}/event-history")
     async def add_event_history(
         inspection_id: str,
+        request: Request,
         point_list_id: str = Form(...),
+        review_required: bool = Form(False),
         event_file: UploadFile = File(...),
     ) -> dict:
         with store() as session:
@@ -64,30 +94,22 @@ def register_event_routes(router, store) -> None:
             panel = session.query(PointList).filter_by(id=point_list_id, inspection_id=inspection_id).with_for_update().one()
             if panel.deleted_at is not None:
                 raise HTTPException(status_code=404, detail="Points List not found.")
-            existing = session.query(PointListEventDate).filter_by(inspection_id=inspection_id, point_list_id=point_list_id).all()
-            existing_points = {item.point_address for item in existing}
-            decisions = session.query(PointListDecision).filter_by(inspection_id=inspection_id, point_list_id=point_list_id, accepted=True, deleted=False).all()
-            allowed_points = {item.address for item in decisions if item.address is not None}
-            pending = {item.point_address: item for item in session.query(PointListPendingEventDate).filter_by(inspection_id=inspection_id, point_list_id=point_list_id).all()}
-            for point, timestamp in extracted.items():
-                if point in existing_points or point not in allowed_points:
-                    continue
-                previous = pending.get(point)
-                if previous is None:
-                    previous = PointListPendingEventDate(inspection_id=inspection_id, point_list_id=point_list_id,
-                        point_address=point, event_timestamp=timestamp, source_filename=filename)
-                    session.add(previous)
-                    pending[point] = previous
-                elif timestamp.replace(tzinfo=None) < previous.event_timestamp.replace(tzinfo=None):
-                    previous.event_timestamp = timestamp
-                    previous.source_filename = filename
-            pending_points = set(pending) - existing_points
-            for decision in decisions:
-                decision.device_event_missing = missing_event_for_marked_device(
-                    decision.device_highlighted, decision.address, pending_points, existing_points)
-            pending_matches = [{"point": point, "timestamp": format_event_date(pending[point].event_timestamp)} for point in sorted(pending_points & allowed_points)]
-            device_statuses = [{"id": item.id, "device_highlighted": bool(item.device_highlighted),
-                                "device_event_missing": bool(item.device_event_missing)} for item in decisions]
+            if review_required:
+                upload_id = str(uuid4())
+                session.add(SourceFile(id=upload_id, inspection_id=inspection_id, filename=filename,
+                    path=str(destination), kind="er:" + point_list_id.replace("-", "")))
+                allowed = {row.address for row in session.query(PointListDecision).filter_by(
+                    inspection_id=inspection_id, point_list_id=point_list_id, accepted=True, deleted=False)}
+                record_decision(session, request, inspection_id, point_list_id, "event_upload_review_requested",
+                    {"upload_id": upload_id, "filename": filename, "matches": extracted})
+                return {"status": "review_required", "upload_id": upload_id, "filename": filename,
+                    "point_list_id": point_list_id, "matched_points": len(allowed & extracted.keys()),
+                    "accepted_times": session.query(PointListEventDate).filter_by(
+                        inspection_id=inspection_id, point_list_id=point_list_id).count(),
+                    "pending_times": session.query(PointListPendingEventDate).filter_by(
+                        inspection_id=inspection_id, point_list_id=point_list_id).count()}
+            pending_matches, device_statuses, existing_points = _merge_events(
+                session, inspection_id, point_list_id, extracted, filename)
             session.add(SourceFile(id=str(uuid4()), inspection_id=inspection_id, filename=filename,
                                    path=str(destination), kind=event_history_kind(point_list_id)))
         return {
@@ -100,6 +122,42 @@ def register_event_routes(router, store) -> None:
             "device_statuses": device_statuses,
             "ignored_existing": sum(point in existing_points for point in extracted),
         }
+
+    @router.post("/{inspection_id}/event-history/{upload_id}/review")
+    def review_event_history(inspection_id: str, upload_id: str, request: Request, payload: dict = Body(...)):
+        action = payload.get("action")
+        point_list_id = str(payload.get("point_list_id") or "")
+        if action not in {"keep", "clear", "reject"}:
+            raise HTTPException(status_code=400, detail="Choose keep, clear, or reject.")
+        if action == "clear" and payload.get("confirmed") is not True:
+            raise HTTPException(status_code=400, detail="Confirm clearing this Points List's accepted and pending times.")
+        with store.begin() as session:
+            panel = session.query(PointList).filter_by(id=point_list_id, inspection_id=inspection_id).with_for_update().first()
+            if panel is None or panel.deleted_at is not None:
+                raise HTTPException(status_code=404, detail="Points List not found.")
+            source = session.query(SourceFile).filter_by(id=upload_id, inspection_id=inspection_id).with_for_update().first()
+            if source is None or source.kind != "er:" + point_list_id.replace("-", ""):
+                raise HTTPException(status_code=409, detail="This upload is no longer awaiting review for this Points List.")
+            if action == "reject":
+                source.kind = "ex:" + point_list_id.replace("-", "")
+                record_decision(session, request, inspection_id, point_list_id, "event_upload_rejected",
+                    {"upload_id": upload_id, "filename": source.filename})
+                return {"status": "rejected"}
+            extracted = parse_event_history_xlsx(Path(source.path))
+            if action == "clear":
+                previous = []
+                for model, state in ((PointListEventDate, "accepted"), (PointListPendingEventDate, "pending")):
+                    rows = session.query(model).filter_by(inspection_id=inspection_id, point_list_id=point_list_id)
+                    previous.extend({"point": row.point_address, "timestamp": row.event_timestamp,
+                        "source_filename": row.source_filename, "state": state} for row in rows.all())
+                    rows.delete(synchronize_session=False)
+                record_decision(session, request, inspection_id, point_list_id, "event_results_cleared",
+                    {"upload_id": upload_id, "previous": previous})
+            matches, statuses, existing = _merge_events(session, inspection_id, point_list_id, extracted, source.filename)
+            source.kind = event_history_kind(point_list_id)
+            record_decision(session, request, inspection_id, point_list_id, "event_upload_applied",
+                {"upload_id": upload_id, "action": action, "filename": source.filename})
+            return {"status": "matched", "pending_matches": matches, "device_statuses": statuses}
 
     @router.post("/{inspection_id}/event-dates/save")
     def save_event_dates(inspection_id: str, request: Request, payload: dict = Body(default={})) -> dict:

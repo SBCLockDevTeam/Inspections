@@ -1148,6 +1148,16 @@ button.inspection-menu-option {
 <div id="delete-inspection-modal" class="modal"><div class="modal-card"><button class="close" id="close-delete-inspection">Close</button><h2>Delete Inspection</h2><div class="form-field"><label for="delete-inspection-selector">Select inspection:</label><select id="delete-inspection-selector"></select></div><div class="delete-actions"><button type="button" id="confirm-delete-inspection" class="danger">Delete</button><button type="button" id="cancel-delete-inspection" class="secondary">Cancel</button></div></div></div>
 
 <div id="preview-modal" class="modal"><div class="modal-card"><button class="close" id="close-preview">Close</button><h2>Points List Review</h2><div class="form-field"><label for="preview-list-selector">Points List:</label><select id="preview-list-selector"></select></div><p id="preview-summary"></p><p>Edit descriptions and use each row's status button to toggle Accept or Review. Rows remain visible until you delete them.</p><div class="nav"><button type="button" class="delete-review-action">Delete all Review rows</button><button type="button" class="save-review-action">Save Decisions</button></div><table class="table"><thead><tr><th>Point</th><th>Description</th><th>Status</th></tr></thead><tbody id="preview-body"></tbody></table></div></div>
+<dialog id="event-upload-review" class="pdf-form-tools-dialog" aria-labelledby="event-upload-title">
+<h2 id="event-upload-title">Review Event Upload</h2>
+<p id="event-upload-summary"></p>
+<p>Keep existing accepted times and add matches, or clear accepted and pending times for this Points List and use this upload. New matches still require Accept Results.</p>
+<div class="download-form-row">
+<button type="button" id="event-upload-keep">Keep times and add matches</button>
+<button type="button" id="event-upload-clear" class="secondary">Clear times and use upload</button>
+<button type="button" id="event-upload-reject" class="danger">Reject upload</button>
+</div><p id="event-upload-message" role="status"></p>
+</dialog>
 <dialog id="inspection-export-dialog" class="pdf-form-tools-dialog" aria-label="Download PDF">
 <h2>Download PDF</h2>
 <div class="download-form-row"><label for="download-form-type">Form:</label><select id="download-form-type"><option value="initiating">Initiating Devices</option><option value="nfpa72">NFPA 72</option><option value="compliance">Compliance</option></select><button type="button" id="download-selected-pdf">Download</button></div>
