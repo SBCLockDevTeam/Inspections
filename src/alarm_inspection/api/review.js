@@ -269,13 +269,17 @@
           for (const point of inspectionPoints) {
             const remote = points.find((item) => item.id === point.id);
             if (!remote || point.highlightSaving) continue;
+            point.event_date = remote.event_date || '';
             point.device_highlighted = remote.device_highlighted;
             point.device_event_missing = remote.device_event_missing;
             const cell = [...acceptedPointsBody.querySelectorAll('.device-type-cell')].find((item) => item.dataset.pointId === point.id);
-            if (cell) updateDeviceCellStatus(cell, point);
+            if (cell) {
+              updateDeviceCellStatus(cell, point);
+              updateAcceptedTimeCell(cell.parentElement.querySelector('.accepted-time-cell'), point);
+            }
             const fields = [['text', 'editableText'], ['address', 'editableAddress'], ['location', 'location'], ['event_date', 'editableEventDate']];
             fields.forEach(([key, localKey], index) => {
-              const control = cell?.parentElement.cells[index]?.querySelector('input');
+              const control = cell?.parentElement.cells[index + 1]?.querySelector('input');
               if (control === document.activeElement) return;
               if (String(point[localKey] ?? '') !== String(point.serverValues?.[key] ?? '')) return;
               point[localKey] = remote[key] ?? '';
@@ -1231,6 +1235,15 @@
     }
   });
 
+  function updateAcceptedTimeCell(cell, point) {
+    if (!cell) return;
+    const accepted = Boolean(String(point.event_date || '').trim());
+    cell.textContent = accepted ? '✓' : '';
+    const label = accepted ? 'Accepted test time recorded' : 'No accepted test time';
+    cell.setAttribute('aria-label', label);
+    cell.title = label;
+  }
+
   function renderVisibleAcceptedPoints() {
     const scrollRegion = document.querySelector('#points-table-scroll');
     const previousScroll = scrollRegion.scrollLeft;
@@ -1248,7 +1261,7 @@
     if (!pointsToRender.length) {
       const row = document.createElement('tr');
       const cell = document.createElement('td');
-      cell.colSpan = tableEditable ? 5 : 4;
+      cell.colSpan = tableEditable ? 6 : 5;
       cell.textContent = showMissingOnly
         ? 'All accepted points currently have dates. Click Show All Points to view every point.'
         : 'No accepted points recorded yet.';
@@ -1363,7 +1376,10 @@
         eventDate.textContent = eventValue;
       }
 
-      row.append(text, address, locationCell, eventDate);
+      const acceptedTimeCell = document.createElement('td');
+      acceptedTimeCell.className = 'accepted-time-cell';
+      updateAcceptedTimeCell(acceptedTimeCell, point);
+      row.append(acceptedTimeCell, text, address, locationCell, eventDate);
       if (tableEditable) {
         const deleteCell = document.createElement('td');
         const deleteButton = document.createElement('button');

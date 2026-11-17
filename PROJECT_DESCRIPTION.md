@@ -29,6 +29,8 @@ The inspection form contains independently collapsible Store Data, NFPA 72, Comp
 
 Accepted Points rows have a red X in Edit mode. Clicking it opens a confirmation modal; Cancel leaves the row unchanged. Confirmed deletion removes the row from the working list and future exports while retaining the original decision, uploads, event evidence, and an audit record of who deleted it and when. Other unsaved row edits remain intact.
 
+The far-left Points List column shows a green check only for a saved, accepted test time. Pending times and unsaved edits do not create a check. The indicator stays visible during horizontal scrolling on phones, updates with shared saved results, and is omitted from browser printing and PDF reports.
+
 The Points List table has its own horizontal scroll area, including in Edit mode, so the Test Result column and its full input remain reachable on narrow screens.
 
 Saved shared state refreshes across active devices approximately every three seconds, including inspection details, Device Type highlights, points, checklist decisions, administration, and PDF drafts. Unsaved local edits remain private and are preserved during refresh. Pending Event History matches are shared evidence and still require explicit acceptance. Hidden browser tabs catch up when reopened; interrupted connections retry automatically.
