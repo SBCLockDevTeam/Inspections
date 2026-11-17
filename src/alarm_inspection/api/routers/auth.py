@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import os
 import secrets
 from uuid import uuid4
 
@@ -44,7 +45,7 @@ def create_router(store) -> APIRouter:
                 value=token,
                 httponly=True,
                 samesite="lax",
-                secure=False,
+                secure=os.getenv("INSPECTIONS_COOKIE_SECURE", "false").lower() in {"1", "true", "yes"},
                 max_age=60 * 60 * 24,
             )
             return response

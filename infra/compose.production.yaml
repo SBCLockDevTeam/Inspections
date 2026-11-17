@@ -6,7 +6,7 @@ services:
     volumes:
       - inspections_uploads:/tmp/alarm-inspection-uploads
     ports:
-      - "18080:8000"
+      - "${INSPECTIONS_HTTP_BIND:-0.0.0.0}:18080:8000"
     depends_on:
       - db
       - redis
@@ -15,6 +15,18 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
+  https:
+    image: caddy:2-alpine
+    profiles: ["https"]
+    restart: unless-stopped
+    ports:
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - inspections_caddy_data:/data
+      - inspections_caddy_config:/config
+    depends_on:
+      - api
   db:
     image: postgres:16-alpine
     restart: unless-stopped
@@ -28,3 +40,5 @@ services:
 volumes:
   inspections_postgres:
   inspections_uploads:
+  inspections_caddy_data:
+  inspections_caddy_config:

@@ -79,7 +79,7 @@ The first release must work without an AI API key. Parsing, validation, matching
 
 ## Technical and deployment boundary
 
-The application uses FastAPI, PostgreSQL, persistent private file storage, and Docker Compose. It is deployed as a separate `inspections` project on the same DigitalOcean server as `Work_Order`, currently exposed temporarily on port 18080. It must not reuse the existing application's database, volumes, environment files, containers, ports, or deployment directory.
+The application uses FastAPI, PostgreSQL, persistent private file storage, and Docker Compose. It is deployed as a separate `inspections` project on the same DigitalOcean server as `Work_Order`, with optional HTTPS at `inspections.securitybuildingcontrols.com` through its own Caddy service on port 443. The temporary HTTP port 18080 can be restricted to loopback after HTTPS verification. It must not reuse the existing application's database, volumes, environment files, containers, ports, or deployment directory.
 
 ## Current implementation and remaining work
 

@@ -1,0 +1,15 @@
+{
+	# Port 80 belongs to the separate serviceflow application.
+	auto_https disable_redirects
+}
+
+https://inspections.securitybuildingcontrols.com {
+	tls {
+		issuer acme {
+			dir https://acme-v02.api.letsencrypt.org/directory
+			disable_http_challenge
+		}
+	}
+	header Strict-Transport-Security "max-age=31536000"
+	reverse_proxy api:8000
+}

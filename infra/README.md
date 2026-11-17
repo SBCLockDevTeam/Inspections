@@ -80,3 +80,38 @@ remain readable. Back up both PostgreSQL and the uploads volume; do not use Comp
 ## Rollback
 
 Set `INSPECTIONS_IMAGE` to the previous image tag and run `docker compose -p inspections ... up -d`. Never roll back by changing or restarting the Work_Order Compose project.
+
+## Inspection HTTPS hostname
+
+`https://inspections.securitybuildingcontrols.com` uses the optional `https`
+service in the **inspections** Compose project. Caddy manages and renews its
+Let's Encrypt certificate using TLS-ALPN validation on TCP 443. DNS must have
+an A record named `inspections` pointing to `167.172.18.72`, and TCP 443 must be
+reachable. Do not add an AAAA record unless IPv6 is separately configured.
+
+Port 80 belongs to the separate serviceflow application. This configuration
+neither binds port 80 nor installs HTTP-to-HTTPS redirects there. Use and bookmark
+the full HTTPS URL. Do not edit or restart the `infra` project.
+
+After DNS resolves correctly, enable `COMPOSE_PROFILES=https` in the server's
+private `.env.inspections` and start `https`. Validate the certificate and HTTPS
+health endpoint before making the final cutover. Then set these additional
+values in that same private file and recreate the inspections API:
+
+```text
+INSPECTIONS_HTTP_BIND=127.0.0.1
+INSPECTIONS_COOKIE_SECURE=true
+```
+
+The old public IP:18080 URL then stops accepting connections. The health endpoint
+remains available on `http://127.0.0.1:18080/health` on the server. Secure session
+cookies are sent only over HTTPS; no passwords are stored in browser local storage.
+Password saving/autofill remains a browser/password-manager setting.
+
+Use the normal production Compose command; its `--env-file .env.inspections`
+also retains the HTTPS profile on future deployments. Caddy certificate keys and
+ACME state persist in `inspections_caddy_data`; never commit them or delete the
+volume. Verify HTTPS health, the served page, a trusted certificate, and unchanged
+serviceflow container IDs after deployment. To roll back the cutover, restore the
+previous bind/cookie values in the private environment and recreate only the
+inspections API; do not remove its database or uploads volumes.
