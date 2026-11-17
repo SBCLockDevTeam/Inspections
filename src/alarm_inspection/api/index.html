@@ -1161,7 +1161,7 @@ button.inspection-menu-option {
 <dialog id="inspection-export-dialog" class="pdf-form-tools-dialog" aria-label="Download PDF">
 <h2>Download PDF</h2>
 <div class="download-form-row"><label for="download-form-type">Form:</label><select id="download-form-type"><option value="initiating">Initiating Devices</option><option value="nfpa72">NFPA 72</option><option value="compliance">Compliance</option></select><button type="button" id="download-selected-pdf">Download</button></div>
-<div id="download-initiating"><p>Downloads the selected Points List after all required event mappings and review decisions are complete.</p><button type="button" id="download-initiating-pdf" hidden>Download Initiating Devices</button></div>
+<div id="download-initiating"><p>Downloads the selected Points List after all required event mappings and review decisions are complete.</p><p id="initiating-download-message" role="status" aria-live="polite"></p><button type="button" id="download-initiating-pdf" hidden>Download Initiating Devices</button></div>
 <p id="form-details-message" role="status"></p><div id="form-details-integrations"></div>
 <div class="download-form-footer"><button type="button" id="close-inspection-exports" class="secondary">Close</button></div>
 </dialog>

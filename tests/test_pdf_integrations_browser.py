@@ -599,7 +599,8 @@ def test_download_menu_offers_all_three_forms(browser_app):
                     await playwright.expect(page.locator('#download-initiating')).to_be_hidden()
                 await page.select_option('#download-form-type','initiating')
                 await page.click('#download-selected-pdf')
-                await playwright.expect(page.locator('#inspection-message')).to_contain_text('Select a Points List first')
+                await playwright.expect(page.locator('#initiating-download-message')).to_contain_text('Select a Points List first')
+                await playwright.expect(page.locator('#initiating-download-message')).to_be_visible()
             finally: await browser.close()
     asyncio.run(check())
 

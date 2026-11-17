@@ -849,7 +849,7 @@
     root.hidden = key === 'initiating';
     for (const card of root.querySelectorAll('[data-form]')) card.hidden = card.dataset.form !== key;
     const action = root.querySelector(`[data-form="${key}"] .pdf-export-action`);
-    document.getElementById('download-selected-pdf').disabled = key !== 'initiating' && (!action || action.disabled);
+    document.getElementById('download-selected-pdf').disabled = document.getElementById('download-selected-pdf').dataset.busy === 'true' || (key !== 'initiating' && (!action || action.disabled));
   }
   formChoice.addEventListener('change', showChosenForm);
   new MutationObserver(showChosenForm).observe(root, {childList:true,subtree:true,attributes:true,attributeFilter:['disabled']});

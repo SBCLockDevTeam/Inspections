@@ -2599,94 +2599,110 @@
   });
 
   document.querySelector('#download-initiating-pdf')?.addEventListener('click', async () => {
-    document.querySelector('#inspection-export-dialog').close();
     closeInspectionMenu();
-    if (!currentInspectionId) {
-      inspectionMessage.textContent = 'No inspection selected.';
-      return;
-    }
-    if (!currentPointListId) {
-      inspectionMessage.textContent = 'Select a Points List first.';
-      return;
-    }
-    const rows = (inspectionPoints || []).map((point) => ({
-      id: String(point.id ?? ''),
-      text: String(point.editableText ?? point.text ?? '').trim(),
-      address: String(point.editableAddress ?? point.address ?? '').trim(),
-      location: String(point.location ?? '').trim(),
-      event_date: String(point.editableEventDate ?? point.event_date ?? '').trim(),
-    }));
-
-    const persisted = await persistAcceptedPoints(rows);
-    if (persisted.error) {
-      inspectionMessage.textContent = persisted.error;
-      return;
-    }
-
-    inspectionMessage.textContent = 'Generating PDF...';
-
-    const response = await fetch(`/api/inspections/${currentInspectionId}/export-pdf`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        point_list_id: currentPointListId,
-        rows,
-      }),
-    });
-
-    const contentType = (response.headers.get('Content-Type') || '').toLowerCase();
-
-    if (!response.ok || !contentType.includes('application/pdf')) {
-      let details = 'PDF export failed.';
-      try {
-        const errorResult = await response.json();
-        details = errorResult.error || errorResult.detail || details;
-      } catch {
-        if (!response.ok) {
-          details = `PDF export failed (${response.status}).`;
-        } else {
-          details = 'Export did not return a valid PDF file.';
-        }
-      }
-      inspectionMessage.textContent = details;
-      return;
-    }
-
-    const blob = await response.blob();
-    if (!blob || blob.size <= 0) {
-      inspectionMessage.textContent = 'Export returned an empty PDF payload.';
-      return;
-    }
-    const isPdf = await blobLooksLikePdf(blob);
-    if (!isPdf) {
-      inspectionMessage.textContent = 'Export returned an invalid PDF payload.';
-      return;
-    }
-    const disposition = response.headers.get('Content-Disposition') || '';
-    const match = disposition.match(/filename="?([^\"]+)"?/i);
-    const filename = match ? match[1] : 'initiating-devices.pdf';
-
+    const downloadMessage = document.querySelector('#initiating-download-message');
+    const button = document.querySelector('#download-selected-pdf');
+    if (button.dataset.busy === 'true') return;
+    button.dataset.busy = 'true';
+    button.disabled = true;
+    const report = (text) => {
+      downloadMessage.textContent = text;
+      inspectionMessage.textContent = text;
+    };
+    report('Preparing download...');
     try {
-      const outcome = await savePdfWithDialog(blob, filename);
-      if (outcome === 'saved') {
-        inspectionMessage.textContent = `PDF saved: ${filename} (${blob.size} bytes)`;
-      } else {
-        inspectionMessage.textContent = `PDF downloaded: ${filename} (${blob.size} bytes). Enable browser "Ask where to save" to always show Save As.`;
-      }
-    } catch (error) {
-      if (error && error.name === 'AbortError') {
-        inspectionMessage.textContent = 'Export canceled.';
+      if (!currentInspectionId) {
+        report('No inspection selected.');
         return;
       }
-      const fallbackUrl = URL.createObjectURL(blob);
-      const fallbackAnchor = document.createElement('a');
-      fallbackAnchor.href = fallbackUrl;
-      fallbackAnchor.download = filename;
-      document.body.append(fallbackAnchor);
-      fallbackAnchor.click();
-      fallbackAnchor.remove();
-      URL.revokeObjectURL(fallbackUrl);
-      inspectionMessage.textContent = `Save As failed (${error?.message || 'unknown error'}). Downloaded ${filename} instead (${blob.size} bytes).`;
+      if (!currentPointListId) {
+        report('Select a Points List first.');
+        return;
+      }
+      const rows = (inspectionPoints || []).map((point) => ({
+        id: String(point.id ?? ''),
+        text: String(point.editableText ?? point.text ?? '').trim(),
+        address: String(point.editableAddress ?? point.address ?? '').trim(),
+        location: String(point.location ?? '').trim(),
+        event_date: String(point.editableEventDate ?? point.event_date ?? '').trim(),
+      }));
+
+      const persisted = await persistAcceptedPoints(rows);
+      if (persisted.error) {
+        report(persisted.error);
+        return;
+      }
+
+      report('Generating PDF...');
+
+      const response = await fetch(`/api/inspections/${currentInspectionId}/export-pdf`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          point_list_id: currentPointListId,
+          rows,
+        }),
+      });
+
+      const contentType = (response.headers.get('Content-Type') || '').toLowerCase();
+
+      if (!response.ok || !contentType.includes('application/pdf')) {
+        let details = 'PDF export failed.';
+        try {
+          const errorResult = await response.json();
+          details = errorResult.error || errorResult.detail || details;
+        } catch {
+          if (!response.ok) {
+            details = `PDF export failed (${response.status}).`;
+          } else {
+            details = 'Export did not return a valid PDF file.';
+          }
+        }
+        report(details);
+        return;
+      }
+
+      const blob = await response.blob();
+      if (!blob || blob.size <= 0) {
+        report('Export returned an empty PDF payload.');
+        return;
+      }
+      const isPdf = await blobLooksLikePdf(blob);
+      if (!isPdf) {
+        report('Export returned an invalid PDF payload.');
+        return;
+      }
+      const disposition = response.headers.get('Content-Disposition') || '';
+      const match = disposition.match(/filename="?([^\"]+)"?/i);
+      const filename = match ? match[1] : 'initiating-devices.pdf';
+
+      try {
+        const outcome = await savePdfWithDialog(blob, filename);
+        if (outcome === 'saved') {
+          report(`PDF saved: ${filename} (${blob.size} bytes)`);
+        } else {
+          report(`PDF downloaded: ${filename} (${blob.size} bytes). Enable browser "Ask where to save" to always show Save As.`);
+        }
+      } catch (error) {
+        if (error && error.name === 'AbortError') {
+          report('Export canceled.');
+          return;
+        }
+        const fallbackUrl = URL.createObjectURL(blob);
+        const fallbackAnchor = document.createElement('a');
+        fallbackAnchor.href = fallbackUrl;
+        fallbackAnchor.download = filename;
+        document.body.append(fallbackAnchor);
+        fallbackAnchor.click();
+        fallbackAnchor.remove();
+        URL.revokeObjectURL(fallbackUrl);
+        report(`Save As failed (${error?.message || 'unknown error'}). Downloaded ${filename} instead (${blob.size} bytes).`);
+      }
+    } catch (error) {
+      report(`PDF download failed: ${error?.message || 'Connection interrupted'}. Please try again.`);
+    } finally {
+      delete button.dataset.busy;
+      button.disabled = false;
     }
   });
 
