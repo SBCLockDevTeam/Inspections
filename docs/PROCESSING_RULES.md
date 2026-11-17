@@ -15,6 +15,7 @@ These rules are the executable interpretation of the inspection specification. I
 9. Store each uploaded Points List as a separate panel source with category `Fire`, `Burglar`, `Combo`, or `Gas Station`.
 10. Once accepted, do not silently replace or mutate a Points List.
 11. Loading is not approval. Require explicit technician approval after the parsed preview is reviewed.
+12. After approval, a technician may delete an individual row from Edit mode only after explicit modal confirmation. Mark the row deleted and record the actor, time, and prior row data; retain the original upload, decision, and event mappings. Deleted rows are excluded from the working list and reports, and stale saves cannot restore them.
 
 ## Initiating Devices
 

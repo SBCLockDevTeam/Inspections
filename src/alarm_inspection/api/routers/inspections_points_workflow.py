@@ -26,7 +26,36 @@ class DeviceHighlightUpdate(BaseModel):
     highlighted: StrictBool
 
 
+class PointDeletion(BaseModel):
+    confirmed: StrictBool
+
+
 def register_point_workflow_routes(router, store) -> None:
+    @router.delete("/{inspection_id}/point-lists/{point_list_id}/points/{point_id}")
+    def delete_accepted_point(inspection_id: str, point_list_id: str, point_id: str,
+                              request: Request, payload: PointDeletion) -> dict:
+        if not payload.confirmed:
+            raise HTTPException(status_code=400, detail="Confirm row deletion first.")
+        with store.begin() as session:
+            inspection = session.get(Inspection, inspection_id)
+            panel = session.query(PointList).filter_by(
+                id=point_list_id, inspection_id=inspection_id, deleted_at=None,
+            ).with_for_update().first()
+            point = session.query(PointListDecision).filter_by(
+                id=point_id, inspection_id=inspection_id, point_list_id=point_list_id,
+                accepted=True, deleted=False,
+            ).first()
+            if inspection is None or inspection.status == "deleted" or panel is None or point is None:
+                raise HTTPException(status_code=404, detail="Accepted point not found.")
+            record_decision(session, request, inspection_id, point_list_id, "point_deleted", {
+                "point_id": point.id, "address": point.address, "text": point.text,
+                "location": point.location, "accepted": point.accepted,
+                "reason": point.reason, "device_highlighted": point.device_highlighted,
+            })
+            # Retain the original decision and all accepted/pending evidence for audit.
+            point.deleted = True
+        return {"id": point_id, "status": "deleted"}
+
     @router.patch("/{inspection_id}/point-lists/{point_list_id}/points/{point_id}/highlight")
     def highlight_device(inspection_id: str, point_list_id: str, point_id: str, payload: DeviceHighlightUpdate) -> dict:
         with store.begin() as session:

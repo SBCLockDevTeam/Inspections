@@ -303,9 +303,11 @@ button:active {
 .table-scroll { overflow-x: auto; max-width: 100%; min-width: 0; }
 #points-table-scroll { width: 100%; margin-top: 12px; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; }
 #points-table-scroll .table { min-width: 760px; margin-top: 0; }
-#points-table-scroll .table td:last-child,
-#points-table-scroll .table th:last-child { min-width: 280px; }
-#points-table-scroll .table-editing { min-width: 980px; }
+#points-table-scroll .table td:nth-child(4),
+#points-table-scroll .table th:nth-child(4) { min-width: 280px; }
+#points-table-scroll .table-editing { min-width: 1040px; }
+.delete-point-button { color: #b91c1c; background: white; border: 1px solid #b91c1c; font-weight: bold; width: 36px; min-height: 36px; margin: 0; }
+.delete-point-button:hover { background: #fee2e2; }
 #points-table-scroll:focus-visible { outline: 2px solid var(--ring); }
 .admin-task-text { min-width: 240px; }
 .admin-task-active { width: auto; }
@@ -1137,7 +1139,7 @@ button.inspection-menu-option {
 </div>
 
 <div class="accepted-header-row"><h3>Accepted Points</h3><div class="user-actions"><button type="button" id="edit-table" class="ghost">Edit</button><button type="button" id="save-table" class="ghost">Save</button><button type="button" id="save-event-dates" class="ghost">Accept Results</button></div></div>
-<div id="points-table-scroll" class="table-scroll" role="region" aria-label="Points List table, scroll horizontally to see all columns" tabindex="0"><table class="table"><thead><tr><th>Device Type</th><th>Address</th><th>Location</th><th>Test Result</th></tr></thead><tbody id="accepted-points-body"></tbody></table></div>
+<div id="points-table-scroll" class="table-scroll" role="region" aria-label="Points List table, scroll horizontally to see all columns" tabindex="0"><table class="table"><thead><tr><th>Device Type</th><th>Address</th><th>Location</th><th>Test Result</th><th id="accepted-point-delete-heading" hidden>Delete</th></tr></thead><tbody id="accepted-points-body"></tbody></table></div>
 </div></details>
 <div id="inspection-message"></div>
 <div id="inspection-busy-overlay" class="inspection-busy-overlay hidden"><div class="inspection-busy-card"><div class="inspection-busy-spinner" aria-hidden="true"></div><div id="inspection-busy-text" class="inspection-busy-text">Working...</div></div></div>
@@ -1157,6 +1159,13 @@ button.inspection-menu-option {
 <button type="button" id="event-upload-clear" class="secondary">Clear times and use upload</button>
 <button type="button" id="event-upload-reject" class="danger">Reject upload</button>
 </div><p id="event-upload-message" role="status"></p>
+</dialog>
+<dialog id="delete-point-dialog" aria-labelledby="delete-point-title">
+<h2 id="delete-point-title">Delete accepted row?</h2>
+<p id="delete-point-description"></p>
+<p>This removes the row from this Points List and future reports. The original upload and saved event evidence remain in the audit history.</p>
+<div class="delete-actions"><button type="button" id="cancel-delete-point" class="secondary">Cancel</button><button type="button" id="confirm-delete-point" class="danger">Delete row</button></div>
+<p id="delete-point-message" role="status"></p>
 </dialog>
 <dialog id="inspection-export-dialog" class="pdf-form-tools-dialog" aria-label="Download PDF">
 <h2>Download PDF</h2>

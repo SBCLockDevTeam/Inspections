@@ -1191,10 +1191,51 @@
     cell.title = `${missing ? 'No pending or accepted event time. ' : ''}Double-click to toggle the highlight. Keyboard: Enter or Space.`;
   }
 
+  const deletePointDialog = document.querySelector('#delete-point-dialog');
+  const confirmDeletePoint = document.querySelector('#confirm-delete-point');
+  const cancelDeletePoint = document.querySelector('#cancel-delete-point');
+  const deletePointMessage = document.querySelector('#delete-point-message');
+  let pointDeletion = null;
+  cancelDeletePoint.addEventListener('click', () => deletePointDialog.close());
+  deletePointDialog.addEventListener('close', () => { pointDeletion = null; });
+  deletePointDialog.addEventListener('cancel', (event) => {
+    if (confirmDeletePoint.disabled) event.preventDefault();
+  });
+  confirmDeletePoint.addEventListener('click', async () => {
+    if (!pointDeletion || confirmDeletePoint.disabled) return;
+    const target = pointDeletion;
+    confirmDeletePoint.disabled = cancelDeletePoint.disabled = true;
+    deletePointMessage.textContent = 'Deleting row...';
+    try {
+      const response = await fetch(`/api/inspections/${target.inspectionId}/point-lists/${target.pointListId}/points/${target.id}`, {
+        method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirmed: true }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.detail || 'Deleting row failed.');
+      if (currentInspectionId === target.inspectionId && currentPointListId === target.pointListId) {
+        viewVersion++;
+        inspectionPoints = inspectionPoints.filter((point) => point.id !== target.id);
+        for (const address of pendingEventDates.keys()) {
+          if (!inspectionPoints.some((point) => Number(point.address) === address)) pendingEventDates.delete(address);
+        }
+        liveSnapshots.delete('accepted-points');
+        renderVisibleAcceptedPoints();
+        inspectionMessage.textContent = 'Row deleted. Other row edits are unchanged.';
+      }
+      deletePointDialog.close();
+    } catch (error) {
+      deletePointMessage.textContent = `${error.message || 'Connection interrupted.'} Please try again.`;
+    } finally {
+      confirmDeletePoint.disabled = cancelDeletePoint.disabled = false;
+    }
+  });
+
   function renderVisibleAcceptedPoints() {
     const scrollRegion = document.querySelector('#points-table-scroll');
     const previousScroll = scrollRegion.scrollLeft;
     acceptedPointsBody.closest('table').classList.toggle('table-editing', tableEditable);
+    document.querySelector('#accepted-point-delete-heading').hidden = !tableEditable;
     acceptedPointsBody.replaceChildren();
     const pointsToRender = showMissingOnly
       ? inspectionPoints.filter((point) => {
@@ -1207,7 +1248,7 @@
     if (!pointsToRender.length) {
       const row = document.createElement('tr');
       const cell = document.createElement('td');
-      cell.colSpan = 4;
+      cell.colSpan = tableEditable ? 5 : 4;
       cell.textContent = showMissingOnly
         ? 'All accepted points currently have dates. Click Show All Points to view every point.'
         : 'No accepted points recorded yet.';
@@ -1323,6 +1364,23 @@
       }
 
       row.append(text, address, locationCell, eventDate);
+      if (tableEditable) {
+        const deleteCell = document.createElement('td');
+        const deleteButton = document.createElement('button');
+        deleteButton.type = 'button';
+        deleteButton.className = 'delete-point-button';
+        deleteButton.textContent = 'X';
+        deleteButton.setAttribute('aria-label', `Delete point ${point.address}`);
+        deleteButton.addEventListener('click', () => {
+          pointDeletion = { id: point.id, inspectionId, pointListId };
+          document.querySelector('#delete-point-description').textContent = `Point ${point.address}: ${point.editableText ?? point.text}`;
+          deletePointMessage.textContent = '';
+          deletePointDialog.showModal();
+          cancelDeletePoint.focus();
+        });
+        deleteCell.append(deleteButton);
+        row.append(deleteCell);
+      }
       acceptedPointsBody.append(row);
     }
     scrollRegion.scrollLeft = previousScroll;
