@@ -46,6 +46,8 @@ class User(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    username: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    username_key: Mapped[str | None] = mapped_column(String(1024), nullable=True, unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(600))
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
     force_password_reset: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -211,6 +213,7 @@ def open_store():
         try:
             engine = create_engine(url, pool_pre_ping=True)
             Base.metadata.create_all(engine)
+            _ensure_user_columns(engine)
             _ensure_inspection_columns(engine)
             _ensure_point_list_decision_columns(engine)
             _ensure_checklist_columns(engine)
@@ -323,3 +326,17 @@ def _ensure_point_list_columns(engine) -> None:
                                  ("deleted_by", "VARCHAR(36)")):
             if name not in existing:
                 connection.execute(text(f"ALTER TABLE point_lists ADD COLUMN {name} {definition}"))
+
+
+def _ensure_user_columns(engine) -> None:
+    """Add login IDs without changing stable user IDs, passwords, or sessions."""
+    columns = {column["name"] for column in inspect(engine).get_columns("users")}
+    with engine.begin() as connection:
+        for name, length in (("username", 255), ("username_key", 1024)):
+            if name not in columns:
+                connection.execute(text(f"ALTER TABLE users ADD COLUMN {name} VARCHAR({length})"))
+        for row in connection.execute(text("SELECT id, email, username FROM users WHERE username_key IS NULL")).mappings().all():
+            username = row["username"] or row["email"]
+            connection.execute(text("UPDATE users SET username=:username, username_key=:key WHERE id=:id"),
+                               {"username": username, "key": username.strip().casefold(), "id": row["id"]})
+        connection.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_users_username_key ON users (username_key)"))

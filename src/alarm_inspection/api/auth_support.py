@@ -16,6 +16,8 @@ def serialize_user(user: User) -> dict[str, Any]:
     return {
         "id": user.id,
         "email": user.email,
+        "username": user.username or user.email,
+        "is_active": bool(user.is_active),
         "is_admin": bool(user.is_admin),
         "force_password_reset": bool(user.force_password_reset),
     }
@@ -97,6 +99,8 @@ def seed_initial_admin(store) -> None:
             User(
                 id=str(uuid4()),
                 email=admin_email,
+                username=admin_email,
+                username_key=admin_email.casefold(),
                 password_hash=password_record(_bootstrap_password()),
                 is_admin=True,
                 force_password_reset=True,

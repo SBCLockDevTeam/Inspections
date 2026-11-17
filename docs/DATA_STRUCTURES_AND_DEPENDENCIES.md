@@ -18,6 +18,8 @@ Defined in `src/alarm_inspection/storage.py`.
 
 These models are the persistence contract and should be treated as stable unless a migration plan is included.
 
+User accounts add nullable `username` and unique `username_key` columns. Startup backfills existing email-based logins into these columns without changing the stable `User.id`, email, password hash, or session records. `username_key` is the trimmed, case-folded login ID; administrator changes preserve the entered display case. Legacy rows without a login ID retain email login compatibility until migrated. New accounts require both a User ID and a valid email. Locks reuse `is_active=False` and revoke the user's sessions. Password resets use the existing configured default, force a change at next login, and revoke sessions. Unlocking does not revive old sessions. Username changes preserve inspection/audit references, which continue to use the stable UUID. User ID and email uniqueness are enforced at the database boundary; failed self-lock/self-demotion requests do not mutate the account.
+
 ## Optional PDF integration records (P2)
 
 P3 adds read-only snapshot/catalog and compiled readiness types, not database tables/columns. Published payload integrity is checked against persisted JSON, preserving historical hashes when optional contract fields are added. Source/override compatibility uses stable IDs and definition/source fingerprints. See [P3 data and transaction behavior](PDF_INTEGRATION_P3_REPORT.md).

@@ -18,7 +18,9 @@ from alarm_inspection.api.common import as_bool
 from alarm_inspection.api.security import password_record
 from alarm_inspection.storage import User, UserSession, PanelType
 from alarm_inspection.api.panel_types import clean_panel_type_name
+from sqlalchemy import or_, and_, func
 from sqlalchemy.exc import IntegrityError
+from alarm_inspection.domain.user_accounts import clean_user_id, clean_email
 
 
 def create_router(store) -> APIRouter:
@@ -62,6 +64,7 @@ def create_router(store) -> APIRouter:
                         {
                             "id": user.id,
                             "email": user.email,
+                            "username": user.username or user.email,
                             "is_admin": bool(user.is_admin),
                             "force_password_reset": bool(user.force_password_reset),
                             "is_active": bool(user.is_active),
@@ -117,28 +120,27 @@ def create_router(store) -> APIRouter:
         except PermissionError as exc:
             return JSONResponse(status_code=403, content={"error": str(exc)})
 
-        email = str(payload.get("email") or "").strip().lower()
-        is_admin = as_bool(payload.get("is_admin"), default=False)
-        if not email:
-            return JSONResponse(status_code=400, content={"error": "Email is required."})
-
-        with store.begin() as session:
-            existing = session.query(User).filter(User.email == email).first()
-            if existing is not None:
-                return JSONResponse(status_code=400, content={"error": "User already exists."})
-            default_password = get_default_password(session)
-            force_password_reset_default = get_force_password_reset_default(session)
-            new_user = User(
-                id=str(uuid4()),
-                email=email,
-                password_hash=password_record(default_password),
-                is_admin=is_admin,
-                force_password_reset=force_password_reset_default,
-                is_active=True,
-                created_at=datetime.now(timezone.utc),
-            )
-            session.add(new_user)
-            return JSONResponse(content={"status": "created", "user": serialize_user(new_user)})
+        try:
+            username, username_key = clean_user_id(payload.get("username"))
+            email = clean_email(payload.get("email"))
+        except ValueError as exc:
+            return JSONResponse(status_code=400, content={"error": str(exc)})
+        try:
+            with store.begin() as session:
+                if session.query(User).filter(or_(User.email == email, User.username_key == username_key,
+                        and_(User.username_key.is_(None), func.lower(User.email) == username_key))).first():
+                    return JSONResponse(status_code=409, content={"error": "User ID or email already exists."})
+                new_user = User(id=str(uuid4()), email=email, username=username, username_key=username_key,
+                    password_hash=password_record(get_default_password(session)),
+                    is_admin=as_bool(payload.get("is_admin"), default=False),
+                    force_password_reset=get_force_password_reset_default(session), is_active=True,
+                    created_at=datetime.now(timezone.utc))
+                session.add(new_user)
+                session.flush()
+                result = serialize_user(new_user)
+        except IntegrityError:
+            return JSONResponse(status_code=409, content={"error": "User ID or email already exists."})
+        return JSONResponse(content={"status": "created", "user": result})
 
     @router.patch("/users/{user_id}")
     def admin_update_user(user_id: str, request: Request, payload: dict = Body(default={})) -> Response:
@@ -146,25 +148,44 @@ def create_router(store) -> APIRouter:
             admin_user = require_admin(request)
         except PermissionError as exc:
             return JSONResponse(status_code=403, content={"error": str(exc)})
-
-        with store.begin() as session:
-            target = session.get(User, user_id)
-            if target is None:
-                return JSONResponse(status_code=404, content={"error": "User not found."})
-            if "is_admin" in payload:
-                target.is_admin = as_bool(payload.get("is_admin"), default=bool(target.is_admin))
-            if "force_password_reset" in payload:
-                target.force_password_reset = as_bool(
-                    payload.get("force_password_reset"),
-                    default=bool(target.force_password_reset),
-                )
-            if as_bool(payload.get("reset_password"), default=False):
-                default_password = get_default_password(session)
-                target.password_hash = password_record(default_password)
-                target.force_password_reset = True
-            if user_id == admin_user.id and not target.is_admin:
+        try:
+            username = clean_user_id(payload["username"]) if "username" in payload else None
+        except ValueError as exc:
+            return JSONResponse(status_code=400, content={"error": str(exc)})
+        if "is_active" in payload and not isinstance(payload["is_active"], bool):
+            return JSONResponse(status_code=400, content={"error": "Account lock must be true or false."})
+        if user_id == admin_user.id:
+            if "is_admin" in payload and not as_bool(payload["is_admin"], default=True):
                 return JSONResponse(status_code=400, content={"error": "You cannot remove your own admin access."})
-            return JSONResponse(content={"status": "updated", "user": serialize_user(target)})
+            if payload.get("is_active") is False:
+                return JSONResponse(status_code=400, content={"error": "You cannot lock your own account."})
+        try:
+            with store.begin() as session:
+                target = session.query(User).filter_by(id=user_id).with_for_update().first()
+                if target is None:
+                    return JSONResponse(status_code=404, content={"error": "User not found."})
+                if username:
+                    if session.query(User).filter(User.id != user_id, or_(User.username_key == username[1],
+                            and_(User.username_key.is_(None), func.lower(User.email) == username[1]))).first():
+                        return JSONResponse(status_code=409, content={"error": "User ID already exists."})
+                    target.username, target.username_key = username
+                if "is_admin" in payload:
+                    target.is_admin = as_bool(payload["is_admin"], default=bool(target.is_admin))
+                if "force_password_reset" in payload:
+                    target.force_password_reset = as_bool(payload["force_password_reset"], default=bool(target.force_password_reset))
+                if "is_active" in payload:
+                    target.is_active = payload["is_active"]
+                reset = as_bool(payload.get("reset_password"), default=False)
+                if reset:
+                    target.password_hash = password_record(get_default_password(session))
+                    target.force_password_reset = True
+                if reset or not target.is_active:
+                    session.query(UserSession).filter_by(user_id=user_id).delete(synchronize_session=False)
+                session.flush()
+                result = serialize_user(target)
+        except IntegrityError:
+            return JSONResponse(status_code=409, content={"error": "User ID already exists."})
+        return JSONResponse(content={"status": "updated", "user": result})
 
     @router.delete("/users/{user_id}")
     def admin_delete_user(user_id: str, request: Request) -> Response:

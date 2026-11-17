@@ -300,6 +300,16 @@ button:active {
 .task-dragging { opacity: .45; }
 .show-inactive-tasks { display: inline-flex; align-items: center; gap: 8px; }
 .show-inactive-tasks input { width: auto; margin: 0; }
+#admin-user-table { table-layout: fixed; min-width: 950px; }
+#admin-user-table .user-id-column { width: 24%; }
+#admin-user-table .user-email-column { width: 27%; }
+#admin-user-table .user-toggle-column { width: 7%; }
+#admin-user-table .user-actions-column { width: 35%; }
+#admin-user-table td { overflow-wrap: anywhere; }
+#admin-user-table input[type="text"] { width: 100%; min-width: 0; margin: 0; }
+#admin-user-table input[type="checkbox"] { width: auto; margin: 0; }
+#admin-user-table .user-actions { gap: 6px; flex-wrap: wrap; }
+#admin-user-table .user-actions button { padding: 7px 9px; font-size: 13px; }
 .table-scroll { overflow-x: auto; max-width: 100%; min-width: 0; }
 #points-table-scroll { width: 100%; margin-top: 12px; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; }
 #points-table-scroll .table { min-width: 760px; margin-top: 0; }
@@ -1019,7 +1029,7 @@ button.inspection-menu-option {
 <div id="login-screen" class="card auth-card">
 <h2>Login</h2>
 <form id="login-form">
-<div class="form-field"><label for="login-email">Email or username:</label><input id="login-email" type="text" autocomplete="username" required></div>
+<div class="form-field"><label for="login-email">User ID:</label><input id="login-email" type="text" autocomplete="username" required></div>
 <div class="form-field"><label for="login-password">Password:</label><input id="login-password" type="password" autocomplete="current-password" required></div>
 <button type="submit">Sign In</button>
 </form>
@@ -1053,8 +1063,8 @@ button.inspection-menu-option {
 <div id="admin-panel-users" role="tabpanel" aria-labelledby="admin-tab-users">
 <div class="admin-grid">
 <div class="admin-list-header"><h3>User List</h3><button type="button" id="open-admin-add-user" class="secondary add-user-button">Add User</button></div>
-<table class="table"><thead><tr><th>Email</th><th>Admin</th><th>Actions</th></tr></thead><tbody id="admin-users-body"></tbody></table>
-<div class="settings-row"><div class="settings-field"><div class="form-field"><label for="admin-default-password">Default Password:</label><input id="admin-default-password" type="text" required></div></div><label for="admin-force-reset-default" class="checkbox-inline"><input id="admin-force-reset-default" type="checkbox">Force Reset</label><button type="button" id="save-admin-settings">Save Settings</button><div class="inline-note">Default Password and Force Reset are global and apply to newly created users and reset actions.</div></div>
+<div class="table-scroll"><table id="admin-user-table" class="table"><colgroup><col class="user-id-column"><col class="user-email-column"><col class="user-toggle-column"><col class="user-toggle-column"><col class="user-actions-column"></colgroup><thead><tr><th>User ID</th><th>Email</th><th>Admin</th><th>Locked</th><th>Actions</th></tr></thead><tbody id="admin-users-body"></tbody></table></div>
+<div class="settings-row"><div class="settings-field"><div class="form-field"><label for="admin-default-password">Default Password:</label><input id="admin-default-password" type="text" required></div></div><label for="admin-force-reset-default" class="checkbox-inline"><input id="admin-force-reset-default" type="checkbox">Force Reset</label><button type="button" id="save-admin-settings">Save Settings</button><div class="inline-note">Default Password applies to new users and password resets. Force Reset controls new users; password resets always require a new password at next login.</div></div>
 </div>
 <div id="admin-message" role="status"></div>
 </div>
@@ -1074,7 +1084,7 @@ button.inspection-menu-option {
 </div>
 </div>
 
-<div id="admin-add-user-modal" class="modal"><div class="modal-card"><button class="close" id="close-admin-add-user">Close</button><h2>Add User</h2><form id="admin-add-user-form"><div class="form-field"><label for="admin-add-user-email">Email:</label><input id="admin-add-user-email" type="email" placeholder="user@example.com" required></div><div class="delete-actions"><button type="submit" id="confirm-admin-add-user" class="primary">OK</button><button type="button" id="cancel-admin-add-user" class="secondary">Cancel</button></div></form></div></div>
+<div id="admin-add-user-modal" class="modal"><div class="modal-card"><button class="close" id="close-admin-add-user">Close</button><h2>Add User</h2><form id="admin-add-user-form"><div class="form-field"><label for="admin-add-user-id">User ID:</label><input id="admin-add-user-id" type="text" maxlength="255" autocomplete="off" required></div><div class="form-field"><label for="admin-add-user-email">Email:</label><input id="admin-add-user-email" type="email" placeholder="user@example.com" required></div><div class="delete-actions"><button type="submit" id="confirm-admin-add-user" class="primary">OK</button><button type="button" id="cancel-admin-add-user" class="secondary">Cancel</button></div><p id="admin-add-user-message" role="status"></p></form></div></div>
 
 <div id="new-inspection-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="new-inspection-title"><div class="modal-card">
 <h2 id="new-inspection-title">Create New Inspection</h2>

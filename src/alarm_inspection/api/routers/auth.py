@@ -5,6 +5,8 @@ import os
 import secrets
 from uuid import uuid4
 
+from sqlalchemy import and_, or_, func
+
 from fastapi import APIRouter, Body, Request
 from fastapi.responses import JSONResponse, Response
 
@@ -18,13 +20,16 @@ def create_router(store) -> APIRouter:
 
     @router.post("/login")
     def login(payload: dict = Body(default={})) -> Response:
-        email = str(payload.get("email") or "").strip().lower()
+        login_id = str(payload.get("username") or payload.get("email") or "").strip()
         password = str(payload.get("password") or "")
-        if not email or not password:
-            return JSONResponse(status_code=400, content={"error": "Email and password are required."})
+        if not login_id or not password:
+            return JSONResponse(status_code=400, content={"error": "User ID and password are required."})
 
         with store.begin() as session:
-            user = session.query(User).filter(User.email == email).first()
+            user = session.query(User).filter(or_(
+                User.username_key == login_id.casefold(),
+                and_(User.username_key.is_(None), func.lower(User.email) == login_id.lower()),
+            )).with_for_update().first()
             if user is None or not user.is_active or not verify_password(password, user.password_hash):
                 return JSONResponse(status_code=401, content={"error": "Invalid credentials."})
 

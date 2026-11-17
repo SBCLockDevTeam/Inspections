@@ -41,6 +41,8 @@
   const adminMessage = document.querySelector('#admin-message');
   const adminAddUserModal = document.querySelector('#admin-add-user-modal');
   const adminAddUserForm = document.querySelector('#admin-add-user-form');
+  const adminAddUserId = document.querySelector('#admin-add-user-id');
+  const adminAddUserMessage = document.querySelector('#admin-add-user-message');
   const adminAddUserEmail = document.querySelector('#admin-add-user-email');
   const closeAdminAddUserButton = document.querySelector('#close-admin-add-user');
   const cancelAdminAddUserButton = document.querySelector('#cancel-admin-add-user');
@@ -933,58 +935,110 @@
   }
 
   function renderAdminUsers(users) {
-    if (!adminUsersBody) {
-      return;
-    }
+    if (!adminUsersBody) return;
     adminUsersBody.replaceChildren();
     for (const user of users) {
       const row = document.createElement('tr');
+      row.dataset.userId = user.id;
+      const idCell = document.createElement('td');
+      const idInput = document.createElement('input');
+      idInput.type = 'text';
+      idInput.maxLength = 255;
+      idInput.value = user.username || user.email;
+      idInput.setAttribute('aria-label', `User ID for ${user.email}`);
+      idInput.autocomplete = 'off';
+      idCell.append(idInput);
       const email = document.createElement('td');
       email.textContent = user.email;
       const admin = document.createElement('td');
-      const adminCheckbox = document.createElement('input');
-      adminCheckbox.type = 'checkbox';
-      adminCheckbox.checked = Boolean(user.is_admin);
-      adminCheckbox.addEventListener('change', async () => {
-        const response = await fetch(`/api/admin/users/${user.id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ is_admin: adminCheckbox.checked }),
-        });
-        const result = await response.json();
-        if (!response.ok || result.error) {
-          adminMessage.textContent = result.error || result.detail || 'Updating user failed.';
-          adminCheckbox.checked = !adminCheckbox.checked;
-          return;
-        }
-        adminMessage.textContent = `Updated ${user.email}.`;
-        await loadAdminUsers();
-      });
-      admin.append(adminCheckbox);
+      const locked = document.createElement('td');
       const actions = document.createElement('td');
       const wrapper = document.createElement('div');
       wrapper.className = 'user-actions';
-
+      const patch = async (payload) => {
+        try {
+          const response = await fetch(`/api/admin/users/${user.id}`, {
+            method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+          });
+          const result = await response.json();
+          if (!response.ok || result.error) throw new Error(result.error || result.detail || 'Updating user failed.');
+          Object.assign(user, result.user);
+          return true;
+        } catch (error) {
+          adminMessage.textContent = error.message || 'Unable to reach server. Please try again.';
+          return false;
+        }
+      };
+      const adminCheckbox = document.createElement('input');
+      adminCheckbox.type = 'checkbox';
+      adminCheckbox.checked = Boolean(user.is_admin);
+      adminCheckbox.disabled = user.id === currentUser?.id;
+      adminCheckbox.setAttribute('aria-label', `Admin access for ${user.email}`);
+      adminCheckbox.addEventListener('change', async () => {
+        adminCheckbox.disabled = true;
+        if (await patch({ is_admin: adminCheckbox.checked })) adminMessage.textContent = `Updated ${user.username}.`;
+        adminCheckbox.checked = Boolean(user.is_admin);
+        fieldBaselines.set(adminCheckbox, adminCheckbox.checked);
+        adminCheckbox.disabled = user.id === currentUser?.id;
+      });
+      admin.append(adminCheckbox);
+      const lockCheckbox = document.createElement('input');
+      lockCheckbox.type = 'checkbox';
+      lockCheckbox.checked = !user.is_active;
+      lockCheckbox.disabled = user.id === currentUser?.id;
+      lockCheckbox.setAttribute('aria-label', `Lock account for ${user.email}`);
+      lockCheckbox.addEventListener('change', async () => {
+        lockCheckbox.disabled = true;
+        if (await patch({ is_active: !lockCheckbox.checked })) {
+          adminMessage.textContent = `${user.username} ${user.is_active ? 'unlocked' : 'locked and signed out'}.`;
+        }
+        lockCheckbox.checked = !user.is_active;
+        fieldBaselines.set(lockCheckbox, lockCheckbox.checked);
+        lockCheckbox.disabled = user.id === currentUser?.id;
+      });
+      locked.append(lockCheckbox);
+      const saveId = document.createElement('button');
+      saveId.type = 'button';
+      saveId.textContent = 'Save ID';
+      saveId.addEventListener('click', async () => {
+        saveId.disabled = true;
+        const submitted = idInput.value;
+        if (await patch({ username: submitted })) {
+          if (idInput.value === submitted) idInput.value = user.username;
+          fieldBaselines.set(idInput, user.username);
+          adminMessage.textContent = `User ID saved: ${user.username}.`;
+        }
+        saveId.disabled = false;
+      });
+      const resetPassword = document.createElement('button');
+      resetPassword.type = 'button';
+      resetPassword.textContent = 'Reset Password';
+      resetPassword.addEventListener('click', async () => {
+        if (!window.confirm(`Reset the password for ${user.username} to the current default password? This signs the user out and requires a new password at the next login.`)) return;
+        resetPassword.disabled = true;
+        if (await patch({ reset_password: true })) {
+          adminMessage.textContent = `Password reset for ${user.username}. Use the current default password; a new password is required at next login.`;
+          if (user.id === currentUser?.id) await ensureSession();
+        }
+        resetPassword.disabled = false;
+      });
       const removeUser = document.createElement('button');
       removeUser.type = 'button';
       removeUser.textContent = 'Remove User';
+      removeUser.disabled = user.id === currentUser?.id;
       removeUser.addEventListener('click', async () => {
-        if (!window.confirm(`Remove user ${user.email}?`)) {
-          return;
-        }
-        const response = await fetch(`/api/admin/users/${user.id}`, { method: 'DELETE' });
-        const result = await response.json();
-        if (!response.ok || result.error) {
-          adminMessage.textContent = result.error || result.detail || 'Removing user failed.';
-          return;
-        }
-        adminMessage.textContent = `Removed ${user.email}.`;
-        await loadAdminUsers();
+        if (!window.confirm(`Remove user ${user.username}?`)) return;
+        try {
+          const response = await fetch(`/api/admin/users/${user.id}`, { method: 'DELETE' });
+          const result = await response.json();
+          if (!response.ok || result.error) throw new Error(result.error || result.detail || 'Removing user failed.');
+          adminMessage.textContent = `Removed ${user.username}.`;
+          await loadAdminUsers();
+        } catch (error) { adminMessage.textContent = error.message; }
       });
-
-      wrapper.append(removeUser);
+      wrapper.append(saveId, resetPassword, removeUser);
       actions.append(wrapper);
-      row.append(email, admin, actions);
+      row.append(idCell, email, admin, locked, actions);
       adminUsersBody.append(row);
     }
   }
@@ -1045,9 +1099,11 @@
     if (!adminAddUserModal || !adminAddUserEmail) {
       return;
     }
+    adminAddUserId.value = '';
+    adminAddUserMessage.textContent = '';
     adminAddUserEmail.value = '';
     adminAddUserModal.classList.add('open');
-    adminAddUserEmail.focus();
+    adminAddUserId.focus();
   }
 
   function closeAdminAddUserModal() {
@@ -2071,17 +2127,18 @@
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        username: adminAddUserId?.value || '',
         email: adminAddUserEmail?.value || '',
       }),
     });
     const result = await response.json();
     if (!response.ok || result.error) {
-      adminMessage.textContent = result.error || result.detail || 'User creation failed.';
+      adminAddUserMessage.textContent = result.error || result.detail || 'User creation failed.';
       return;
     }
     adminAddUserForm.reset();
     closeAdminAddUserModal();
-    adminMessage.textContent = `Created ${result.user?.email || 'user'} using current global admin settings.`;
+    adminMessage.textContent = `Created ${result.user?.username || 'user'} using current global admin settings.`;
     await loadAdminUsers();
   });
 
