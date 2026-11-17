@@ -837,10 +837,6 @@
   const message = document.querySelector('#form-details-message');
   const names = {nfpa72:'NFPA 72',compliance:'Compliance inspection'};
   const exportDialog = document.getElementById('inspection-export-dialog');
-  document.getElementById('inspection-menu-option-form-exports')?.addEventListener('click', () => {
-    document.getElementById('inspection-menu').classList.add('hidden');
-    if (active) { formChoice.value = 'nfpa72'; showChosenForm(); exportDialog.showModal(); refresh(); }
-  });
   document.getElementById('close-inspection-exports')?.addEventListener('click', () => exportDialog.close());
   const formChoice = document.getElementById('download-form-type');
   function showChosenForm() {
