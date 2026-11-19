@@ -121,3 +121,16 @@ def test_required_reset_without_old_password_revokes_other_sessions(accounts):
     assert other.post('/api/auth/login', json={'username': user['username'], 'password': 'PersonalPassword42!'}).status_code == 200
     # An ordinary password change still verifies the current password.
     assert other.post('/api/auth/reset-password', json={'new_password': 'AnotherPassword42!'}).status_code == 400
+
+
+def test_admin_default_password_reset_survives_restart_without_bootstrap(accounts, monkeypatch):
+    client, store = accounts
+    client.patch('/api/admin/settings', json={'default_password': 'password'})
+    admin = client.get('/api/auth/me').json()['user']
+    assert client.patch('/api/admin/users/'+admin['id'], json={'reset_password': True}).status_code == 200
+    monkeypatch.delenv('INSPECTIONS_BOOTSTRAP_ADMIN_PASSWORD', raising=False)
+    from alarm_inspection.api.app import create_app
+    restarted = TestClient(create_app())
+    response = restarted.post('/api/auth/login', json={'username': admin['username'], 'password': 'password'})
+    assert response.status_code == 200 and response.json()['user']['force_password_reset']
+    assert restarted.post('/api/auth/reset-password', json={'new_password': 'RecoveredPassword42!'}).status_code == 200

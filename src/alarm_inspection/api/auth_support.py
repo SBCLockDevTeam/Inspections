@@ -87,8 +87,9 @@ def seed_initial_admin(store) -> None:
         set_force_password_reset_default(session, get_force_password_reset_default(session))
         existing = session.query(User).filter(User.email == admin_email).first()
         if existing is not None:
-            # Retire the original predictable bootstrap credential on existing installations too.
-            if verify_password(DEFAULT_PASSWORD_FALLBACK, existing.password_hash):
+            # A required reset may intentionally use the administrator-configured default.
+            # Preserve that reset; retire only a legacy credential usable without a reset.
+            if not existing.force_password_reset and verify_password(DEFAULT_PASSWORD_FALLBACK, existing.password_hash):
                 existing.password_hash = password_record(_bootstrap_password())
                 existing.force_password_reset = True
                 session.query(UserSession).filter_by(user_id=existing.id).delete(synchronize_session=False)
