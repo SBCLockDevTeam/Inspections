@@ -1134,7 +1134,7 @@ button.inspection-menu-option {
 <details id="points-events-section" class="inspection-section" open><summary>Points Lists &amp; Events</summary><div class="inspection-section-body">
 <div class="inspection-actions-row">
   <div class="compact-field points-list-picker">
-    <div class="form-field"><label for="inspection-point-list-selector">Points List:</label><select id="inspection-point-list-selector"></select></div>
+    <div class="form-field"><label for="inspection-point-list-selector">Points List:</label><select id="inspection-point-list-selector"></select><button type="button" id="change-panel-type" class="secondary" disabled>Change Type</button></div>
   </div>
 
   <form id="event-history-form" class="inline-form">
@@ -1188,5 +1188,14 @@ button.inspection-menu-option {
 <div class="download-form-footer"><button type="button" id="close-inspection-exports" class="secondary">Close</button></div>
 </dialog>
 <script src="/integrations.js"></script>
+<dialog id="change-panel-type-dialog" aria-labelledby="change-panel-type-title">
+<h2 id="change-panel-type-title">Change Points List Type</h2>
+<p id="change-panel-type-description"></p>
+<p>Points and accepted test times will be preserved. Future reports will use the saved type.</p>
+<div class="form-field"><label for="saved-panel-category">Security Panel Type:</label><select id="saved-panel-category"></select></div>
+<p id="change-panel-type-message" role="status"></p>
+<button type="button" id="save-panel-type">Save Type</button>
+<button type="button" id="cancel-panel-type" class="secondary">Cancel</button>
+</dialog>
 <script src="/review.js"></script>
 </body></html>

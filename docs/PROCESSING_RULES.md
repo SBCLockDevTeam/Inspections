@@ -13,7 +13,7 @@ These rules are the executable interpretation of the inspection specification. I
 7. Keep only the normalized point address and point text for the point-processing output.
 8. Preserve raw values and a decision reason in the audit record.
 9. Store each uploaded Points List as a separate panel source with category `Fire`, `Burglar`, `Combo`, or `Gas Station`.
-10. Once accepted, do not silently replace or mutate a Points List.
+10. Once accepted, do not silently replace or mutate a Points List. Explicit category corrections use a configured panel type and retain an audit record of actor, time, and old/new types without altering uploads, points, or event mappings. Reject stale category changes.
 11. Loading is not approval. Require explicit technician approval after the parsed preview is reviewed.
 12. After approval, a technician may delete an individual row from Edit mode only after explicit modal confirmation. Mark the row deleted and record the actor, time, and prior row data; retain the original upload, decision, and event mappings. Deleted rows are excluded from the working list and reports, and stale saves cannot restore them.
 

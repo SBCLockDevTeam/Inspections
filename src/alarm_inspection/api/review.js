@@ -1764,7 +1764,62 @@
     return `${item.category || 'Panel'} (${filename})`;
   }
 
+  let displayedPointLists = [];
+  const changePanelType = document.querySelector('#change-panel-type');
+  const categoryDialog = document.querySelector('#change-panel-type-dialog');
+  const categorySelect = document.querySelector('#saved-panel-category');
+  const categoryMessage = document.querySelector('#change-panel-type-message');
+  const saveCategory = document.querySelector('#save-panel-type');
+  const cancelCategory = document.querySelector('#cancel-panel-type');
+  let categoryTarget = null;
+  changePanelType.addEventListener('click', async () => {
+    const panel = displayedPointLists.find(item => item.id === currentPointListId);
+    if (!panel) return;
+    categoryTarget = { inspectionId: currentInspectionId, ...panel };
+    const target = categoryTarget;
+    categoryMessage.textContent = 'Loading types...';
+    categorySelect.replaceChildren();
+    saveCategory.disabled = true;
+    document.querySelector('#change-panel-type-description').textContent = formatPointListLabel(panel);
+    categoryDialog.showModal();
+    try {
+      const types = await loadPanelTypes();
+      if (categoryTarget !== target || !categoryDialog.open) return;
+      for (const item of types) categorySelect.add(new Option(item.name, item.name));
+      categorySelect.value = panel.category;
+      categoryMessage.textContent = '';
+      saveCategory.disabled = false;
+    } catch (error) { if (categoryTarget === target && categoryDialog.open) categoryMessage.textContent = error.message; }
+  });
+  cancelCategory.addEventListener('click', () => categoryDialog.close());
+  categoryDialog.addEventListener('cancel', event => {
+    if (cancelCategory.disabled) event.preventDefault();
+  });
+  saveCategory.addEventListener('click', async () => {
+    if (!categoryTarget || saveCategory.disabled) return;
+    const target = categoryTarget;
+    saveCategory.disabled = cancelCategory.disabled = true;
+    try {
+      const response = await fetch(`/api/inspections/${target.inspectionId}/point-lists/${target.id}/category`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ category: categorySelect.value, expected_category: target.category }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.detail || 'Saving type failed.');
+      if (currentInspectionId === target.inspectionId) {
+        viewVersion++;
+        displayedPointLists = displayedPointLists.map(item => item.id === target.id ? {...item, category: result.category} : item);
+        renderInspectionPointListSelector(displayedPointLists, currentPointListId);
+        inspectionMessage.textContent = `Points List type saved: ${result.category}.`;
+      }
+      categoryDialog.close();
+    } catch (error) { categoryMessage.textContent = error.message || 'Connection interrupted. Please try again.'; }
+    finally { saveCategory.disabled = cancelCategory.disabled = false; }
+  });
+
   function renderInspectionPointListSelector(pointLists, selectedPointListId) {
+    displayedPointLists = pointLists || [];
+    changePanelType.disabled = !displayedPointLists.some(item => item.id === selectedPointListId);
     if (!inspectionPointListSelector) {
       return;
     }

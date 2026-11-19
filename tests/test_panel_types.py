@@ -114,3 +114,35 @@ def test_startup_preserves_legacy_categories(panel_app):
     with store() as session:
         assert session.get(PointList, "legacy").filename == "original.xlsx"
         assert session.get(PointList, "legacy").category == "Elevator Alarm"
+
+
+def test_change_category_preserves_evidence_and_audits(panel_app):
+    from alarm_inspection.storage import PointListDecision, PointListEventDate, InspectionAuditEntry
+    client, store = panel_app
+    inspection = client.post("/api/inspections/blank", json=inspection_payload()).json()["id"]
+    panel = client.post(f"/api/inspections/{inspection}/point-lists", data={
+        "point_list_category": "Combo", "point_decisions": json.dumps([dict(address=1, text="Door", accepted=True)])
+    }, files={"points_file": ("points.xlsx", workbook_bytes())}).json()["point_list_id"]
+    timestamp = datetime(2026, 10, 1, 12)
+    with store.begin() as session:
+        session.add(PointListEventDate(id="mapping", inspection_id=inspection, point_list_id=panel,
+                                      point_address=1, event_timestamp=timestamp, source_filename="events.xlsx"))
+        original = session.get(PointList, panel).path
+    url = f"/api/inspections/{inspection}/point-lists/{panel}/category"
+    for before, after in [("Combo", "Fire"), ("Fire", "Burglar")]:
+        response = client.patch(url, json={"category": after, "expected_category": before})
+        assert response.status_code == 200, response.text
+        assert client.get(f"/api/inspections/{inspection}").json()["point_lists"][0]["category"] == after
+    assert client.patch(url, json={"category": "Fire", "expected_category": "Combo"}).status_code == 409
+    assert client.patch(url, json={"category": "Unknown", "expected_category": "Burglar"}).status_code == 400
+    with store() as session:
+        assert session.get(PointList, panel).path == original
+        assert session.query(PointListDecision).one().text == "Door"
+        assert session.get(PointListEventDate, "mapping").event_timestamp == timestamp
+        audits = session.query(InspectionAuditEntry).filter_by(action="panel_category_changed").all()
+        assert len(audits) == 2
+        assert {json.loads(a.details_json)["after"] for a in audits} == {"Fire", "Burglar"}
+        assert all(a.decided_by and a.decided_at for a in audits)
+    assert client.patch(url.replace(inspection, "other"), json={"category": "Fire", "expected_category": "Burglar"}).status_code == 404
+    client.delete(f"/api/inspections/{inspection}/point-lists/{panel}")
+    assert client.patch(url, json={"category": "Fire", "expected_category": "Burglar"}).status_code == 404

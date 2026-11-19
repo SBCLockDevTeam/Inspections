@@ -6,7 +6,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from fastapi import Body, File, Form, HTTPException, Request, UploadFile
-from pydantic import BaseModel, StrictBool
+from pydantic import BaseModel, StrictBool, StrictStr
 
 from alarm_inspection.api.audit import record_decision
 from alarm_inspection.api.common import as_bool, ensure_inspection_upload_dir, parse_saved_timestamp
@@ -30,7 +30,34 @@ class PointDeletion(BaseModel):
     confirmed: StrictBool
 
 
+class PanelCategoryUpdate(BaseModel):
+    category: StrictStr
+    expected_category: StrictStr
+
+
 def register_point_workflow_routes(router, store) -> None:
+    @router.patch("/{inspection_id}/point-lists/{point_list_id}/category")
+    def change_panel_category(inspection_id: str, point_list_id: str,
+                              request: Request, payload: PanelCategoryUpdate) -> dict:
+        with store.begin() as session:
+            inspection = session.get(Inspection, inspection_id)
+            panel = session.query(PointList).filter_by(
+                id=point_list_id, inspection_id=inspection_id, deleted_at=None,
+            ).with_for_update().first()
+            if inspection is None or inspection.status == "deleted" or panel is None:
+                raise HTTPException(status_code=404, detail="Points List not found.")
+            if panel.category != payload.expected_category:
+                raise HTTPException(status_code=409, detail="The type changed on another device. Close and reopen Change Type.")
+            try:
+                category = resolve_panel_type(session, payload.category)
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+            if category != panel.category:
+                record_decision(session, request, inspection_id, point_list_id, "panel_category_changed",
+                                {"before": panel.category, "after": category})
+                panel.category = category
+        return {"point_list_id": point_list_id, "category": category, "status": "saved"}
+
     @router.delete("/{inspection_id}/point-lists/{point_list_id}/points/{point_id}")
     def delete_accepted_point(inspection_id: str, point_list_id: str, point_id: str,
                               request: Request, payload: PointDeletion) -> dict:
