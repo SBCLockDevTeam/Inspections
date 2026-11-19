@@ -924,6 +924,38 @@ button.inspection-menu-option {
 .compact-field .form-field {
   grid-template-columns: minmax(0, 6.5rem) minmax(0, 1fr);
 }
+/* Keep the Points List and Event History controls on one compact line. */
+.inspection-actions-row {
+  grid-template-columns: minmax(340px, 1.2fr) minmax(220px, 1fr);
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+}
+.points-list-picker { min-width: 0; }
+.points-list-picker .form-field {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 6px;
+}
+.points-list-picker label,
+#change-panel-type { white-space: nowrap; }
+#change-panel-type { padding: 8px 10px; margin: 0; }
+.inspection-actions-row #event-history-form {
+  display: flex;
+  min-width: 0;
+  padding: 6px 8px;
+  margin: 0;
+}
+#event-history-form .upload-row,
+#event-history-form .file-control,
+#event-history-form .file-left { min-width: 0; width: 100%; }
+#event-history-form .file-left { flex-wrap: nowrap; gap: 6px; }
+#event-history-form .file-trigger { flex: 0 0 auto; padding: 8px 10px; }
+#event-history-form .file-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .nfpa-template-controls > .form-field {
   flex: 1;
 }
