@@ -17,7 +17,7 @@
   const loginPassword = document.querySelector('#login-password');
   const loginMessage = document.querySelector('#login-message');
   const passwordResetForm = document.querySelector('#password-reset-form');
-  const resetCurrentPassword = document.querySelector('#reset-current-password');
+  const resetConfirmPassword = document.querySelector('#reset-confirm-password');
   const resetNewPassword = document.querySelector('#reset-new-password');
 
   const inspectionTasksBody = document.querySelector('#inspection-tasks-body');
@@ -384,10 +384,10 @@
     }
     userBar?.classList.remove('hidden');
     if (activeUserLabel) {
-      activeUserLabel.textContent = `${currentUser.email}${currentUser.is_admin ? ' (Admin)' : ''}`;
+      activeUserLabel.textContent = `${currentUser.username || currentUser.email}${currentUser.is_admin ? ' (Admin)' : ''}`;
     }
     if (avatarButton) {
-      const id = (currentUser.email || '').slice(0, 2).replace(/[^a-zA-Z]/g, '').toUpperCase();
+      const id = (currentUser.username || currentUser.email || '').slice(0, 2).replace(/[^a-zA-Z]/g, '').toUpperCase();
       avatarButton.textContent = id || 'U';
     }
     adminMenuOption?.classList.toggle('hidden', !currentUser.is_admin);
@@ -2127,7 +2127,7 @@
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        email: loginEmail?.value || '',
+        username: loginEmail?.value || '',
         password: loginPassword?.value || '',
       }),
     });
@@ -2152,12 +2152,15 @@
 
   passwordResetForm?.addEventListener('submit', async (event) => {
     event.preventDefault();
+    if (resetNewPassword.value !== resetConfirmPassword.value) {
+      loginMessage.textContent = 'New passwords must match.';
+      return;
+    }
     loginMessage.textContent = 'Resetting password...';
     const response = await fetch('/api/auth/reset-password', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        current_password: resetCurrentPassword?.value || '',
         new_password: resetNewPassword?.value || '',
       }),
     });

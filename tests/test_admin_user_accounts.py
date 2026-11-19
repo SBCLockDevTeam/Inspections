@@ -99,3 +99,25 @@ def test_legacy_login_migration_is_idempotent(tmp_path, monkeypatch):
     with open_store()() as session:
         old = session.get(User, 'legacy')
         assert old.username == 'New ID' and old.email == ADMIN
+
+
+def test_required_reset_without_old_password_revokes_other_sessions(accounts):
+    client, store = accounts
+    user = create_user(client)
+    client.patch('/api/admin/users/'+user['id'], json={'reset_password': True})
+    tech = TestClient(client.app)
+    other = TestClient(client.app)
+    for session in (tech, other):
+        assert session.post('/api/auth/login', json={'username': user['username'], 'password': TEMP}).status_code == 200
+    assert tech.post('/api/auth/reset-password', json={'new_password': 'short'}).status_code == 400
+    response = tech.post('/api/auth/reset-password', json={'new_password': 'PersonalPassword42!'})
+    assert response.status_code == 200
+    assert response.json()['user']['username'] == 'Tech 42'
+    assert not response.json()['user']['force_password_reset']
+    assert tech.get('/api/auth/me').json()['authenticated']
+    assert not other.get('/api/auth/me').json()['authenticated']
+    assert TestClient(client.app).post('/api/auth/reset-password', json={'new_password': 'AttackPassword42!'}).status_code == 401
+    assert other.post('/api/auth/login', json={'username': user['username'], 'password': TEMP}).status_code == 401
+    assert other.post('/api/auth/login', json={'username': user['username'], 'password': 'PersonalPassword42!'}).status_code == 200
+    # An ordinary password change still verifies the current password.
+    assert other.post('/api/auth/reset-password', json={'new_password': 'AnotherPassword42!'}).status_code == 400

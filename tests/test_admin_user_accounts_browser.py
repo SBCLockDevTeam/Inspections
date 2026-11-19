@@ -4,13 +4,15 @@ import os
 
 import pytest
 from playwright import async_api as playwright
-from test_pdf_integrations_browser import browser_app, login
+from test_pdf_integrations_browser import login
+from test_panel_category_browser import category_browser_app, panel_app
 
 pytestmark = pytest.mark.skipif(os.getenv('INSPECTIONS_RUN_BROWSER_TESTS') != '1', reason='Opt-in real browser tests')
 
 
-def test_admin_user_controls_and_login(browser_app):
-    base, client, store, inspection, draft = browser_app
+def test_admin_user_controls_and_login(category_browser_app, panel_app):
+    base, inspection, store = category_browser_app
+    client, _ = panel_app
     assert client.patch('/api/admin/settings', json={'default_password': 'TemporaryPassword42!', 'force_password_reset_default': False}).status_code == 200
     async def check():
         async with playwright.async_playwright() as p:
@@ -54,8 +56,13 @@ def test_admin_user_controls_and_login(browser_app):
                 await tech.fill('#login-password', 'TemporaryPassword42!')
                 await tech.locator('#login-form button').click()
                 await playwright.expect(tech.locator('#password-reset-form')).to_be_visible()
-                await tech.fill('#reset-current-password', 'TemporaryPassword42!')
+                await playwright.expect(tech.locator('#reset-current-password')).to_have_count(0)
+                await playwright.expect(tech.locator('#active-user-label')).to_contain_text('Inspector-007')
                 await tech.fill('#reset-new-password', 'NewPersonalPassword42!')
+                await tech.fill('#reset-confirm-password', 'DifferentPassword42!')
+                await tech.locator('#password-reset-form button').click()
+                await playwright.expect(tech.locator('#login-message')).to_contain_text('must match')
+                await tech.fill('#reset-confirm-password', 'NewPersonalPassword42!')
                 await tech.locator('#password-reset-form button').click()
                 await playwright.expect(tech.locator('#home-screen')).to_be_visible()
             finally:

@@ -80,17 +80,24 @@ def create_router(store) -> APIRouter:
 
         current_password = str(payload.get("current_password") or "")
         new_password = str(payload.get("new_password") or "")
-        if not current_password or not new_password:
-            return JSONResponse(status_code=400, content={"error": "Current and new passwords are required."})
+        if not new_password:
+            return JSONResponse(status_code=400, content={"error": "New password is required."})
         if len(new_password) < 8:
             return JSONResponse(status_code=400, content={"error": "New password must be at least 8 characters."})
 
         with store.begin() as session:
-            db_user = session.get(User, user.id)
-            if db_user is None or not verify_password(current_password, db_user.password_hash):
+            db_user = session.query(User).filter_by(id=user.id).with_for_update().first()
+            token = request.cookies.get(SESSION_COOKIE)
+            active_session = session.query(UserSession).filter_by(user_id=user.id, session_token=token).first()
+            if db_user is None or not db_user.is_active or active_session is None:
+                return JSONResponse(status_code=401, content={"error": "Authentication required."})
+            # Required resets follow a successful sign-in with the temporary password.
+            if not db_user.force_password_reset and not verify_password(current_password, db_user.password_hash):
                 return JSONResponse(status_code=400, content={"error": "Current password is incorrect."})
             db_user.password_hash = password_record(new_password)
             db_user.force_password_reset = False
+            session.query(UserSession).filter(UserSession.user_id == db_user.id,
+                                             UserSession.session_token != token).delete(synchronize_session=False)
             return JSONResponse(content={"status": "password_reset", "user": serialize_user(db_user)})
 
     return router

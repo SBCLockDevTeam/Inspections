@@ -1069,8 +1069,8 @@ button.inspection-menu-option {
 <button type="submit">Sign In</button>
 </form>
 <form id="password-reset-form" class="hidden">
-<div class="form-field"><label for="reset-current-password">Current password:</label><input id="reset-current-password" type="password" autocomplete="current-password" required></div>
-<div class="form-field"><label for="reset-new-password">New password:</label><input id="reset-new-password" type="password" autocomplete="new-password" required></div>
+<div class="form-field"><label for="reset-new-password">New password:</label><input id="reset-new-password" type="password" autocomplete="new-password" minlength="8" required></div>
+<div class="form-field"><label for="reset-confirm-password">Confirm new password:</label><input id="reset-confirm-password" type="password" autocomplete="new-password" minlength="8" required></div>
 <button type="submit">Reset Password</button>
 </form>
 <div id="login-message"></div>
