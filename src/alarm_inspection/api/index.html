@@ -264,6 +264,9 @@ button:active {
   margin-top: 20px;
   box-shadow: var(--shadow);
 }
+#inspection-name { overflow-wrap: anywhere; }
+.inspection-title-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+#rename-inspection { margin: 0; }
 #inspection-name { font-size: calc(1.5rem - 2px); }
 .inspection-section { border: 1px solid var(--border); border-radius: 12px; margin-top: 14px; overflow: hidden; }
 .inspection-section > summary { padding: 14px 16px; font-weight: 600; cursor: pointer; background: var(--panel-alt); }
@@ -1144,7 +1147,7 @@ button.inspection-menu-option {
 <div id="inspection-screen" class="card hidden">
 <div class="inspection-breadcrumb-row"><div class="inspection-breadcrumb"><a href="#" id="home-link-from-inspection" class="inspection-breadcrumb-link">Home</a></div><div class="inspection-header-actions"><button type="button" id="save-all-inspection" class="secondary">Save</button><div id="inspection-menu-wrap" class="inspection-menu-wrap"><button type="button" id="inspection-menu-button" class="secondary" title="Inspection menu">☰</button><div id="inspection-menu" class="hidden"><div id="inspection-menu-option-open-another" class="inspection-menu-option disabled" role="menuitem" aria-disabled="true" tabindex="-1" title="Not ready yet">Open Another Inspection (coming soon)</div><div id="inspection-menu-option-add-point-list" class="inspection-menu-option" role="menuitem" tabindex="0">Add New Points List</div><div id="inspection-menu-option-delete-point-list" class="inspection-menu-option" role="menuitem" tabindex="0">Delete Points List</div><div id="inspection-menu-option-edit-nfpa" class="inspection-menu-option" role="menuitem" tabindex="0">Edit NFPA PDF</div><div id="inspection-menu-option-toggle-missing" class="inspection-menu-option" role="menuitem" tabindex="0">Show Missing Points Only</div><div id="inspection-menu-option-export-pdf" class="inspection-menu-option" role="menuitem" tabindex="0">Download PDF</div><div id="inspection-menu-option-clear-dates" class="inspection-menu-option" role="menuitem" tabindex="0">Clear Dates</div><button type="button" id="delete-open-inspection" class="inspection-menu-option" role="menuitem">Delete Inspection</button></div></div></div></div>
 
-<h2 id="inspection-name"></h2>
+<div class="inspection-title-row"><h2 id="inspection-name"></h2><button type="button" id="rename-inspection" class="secondary hidden">Rename Inspection</button></div>
 <div id="inspection-checklist">
 <details id="store-data-section" class="inspection-section" open><summary>Store Data <span id="store-data-progress"></span></summary><div class="inspection-section-body">
 <div id="store-data-fields" class="inspection-details inspection-data-grid">
@@ -1228,6 +1231,15 @@ button.inspection-menu-option {
 <p id="change-panel-type-message" role="status"></p>
 <button type="button" id="save-panel-type">Save Type</button>
 <button type="button" id="cancel-panel-type" class="secondary">Cancel</button>
+</dialog>
+<dialog id="rename-inspection-dialog" aria-labelledby="rename-inspection-title">
+<h2 id="rename-inspection-title">Rename Inspection</h2>
+<form id="rename-inspection-form">
+<div class="form-field"><label for="inspection-custom-name">Inspection Name:</label><input id="inspection-custom-name" type="text" maxlength="200" required></div>
+<p id="rename-inspection-message" role="status"></p>
+<button type="submit" id="save-inspection-name">Save Name</button>
+<button type="button" id="cancel-inspection-name" class="secondary">Cancel</button>
+</form>
 </dialog>
 <script src="/review.js"></script>
 </body></html>

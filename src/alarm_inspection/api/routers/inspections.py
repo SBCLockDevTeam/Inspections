@@ -5,8 +5,8 @@ import json
 from pathlib import Path
 from uuid import uuid4
 
-from fastapi import APIRouter, Body, File, Form, HTTPException, Query, UploadFile
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from fastapi import APIRouter, Body, File, Form, HTTPException, Query, Request, UploadFile
+from pydantic import BaseModel, StrictStr, ConfigDict, Field, field_validator, model_validator
 from alarm_inspection.api.common import (
     UPLOAD_ROOT,
     as_bool,
@@ -32,6 +32,19 @@ from alarm_inspection.storage import (
     PointListPendingEventDate,
     SourceFile,
 )
+
+
+class InspectionRename(BaseModel):
+    name: StrictStr = Field(min_length=1, max_length=200)
+    expected_name: StrictStr
+
+    @field_validator("name")
+    @classmethod
+    def clean_name(cls, value):
+        value = " ".join(value.split())
+        if not value:
+            raise ValueError("Inspection name cannot be blank.")
+        return value
 
 
 class NewInspection(BaseModel):
@@ -347,6 +360,26 @@ def create_router(store) -> APIRouter:
                 "selected_point_list_id": selected_point_list_id,
                 "event_history_files": [file.filename for file in event_history_files],
             }
+
+    @router.patch("/{inspection_id}/name")
+    def rename_inspection(inspection_id: str, request: Request, payload: InspectionRename) -> dict:
+        from alarm_inspection.api.auth_support import require_admin
+        from alarm_inspection.api.audit import record_decision
+        try:
+            require_admin(request)
+        except PermissionError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        with store.begin() as session:
+            inspection = session.query(Inspection).filter_by(id=inspection_id).with_for_update().first()
+            if inspection is None or inspection.status == "deleted":
+                raise HTTPException(status_code=404, detail="Inspection not found.")
+            if inspection.name != payload.expected_name:
+                raise HTTPException(status_code=409, detail="The inspection name changed. Close and reopen Rename Inspection.")
+            if inspection.name != payload.name:
+                record_decision(session, request, inspection_id, "", "inspection_renamed",
+                                {"before": inspection.name, "after": payload.name})
+                inspection.custom_name = payload.name
+            return {"id": inspection.id, "name": inspection.name}
 
     @router.patch("/{inspection_id}")
     def update_inspection_details(inspection_id: str, payload: dict = Body(default={})) -> dict:

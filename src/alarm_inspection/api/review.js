@@ -364,6 +364,7 @@
   }
 
   function updateUserChrome() {
+    document.querySelector("#rename-inspection").classList.toggle("hidden", !currentUser?.is_admin);
     if (adminTaskActor !== (currentUser?.id || null)) {
       // Private definition edits must not survive an account/session change.
       inspectionTasksBody.querySelectorAll('tbody').forEach(body => body.replaceChildren());
@@ -1763,6 +1764,45 @@
     const filename = (item.filename || '').replace(/^\d{14}-/, '');
     return `${item.category || 'Panel'} (${filename})`;
   }
+
+  const renameDialog = document.querySelector('#rename-inspection-dialog');
+  const renameInput = document.querySelector('#inspection-custom-name');
+  const renameMessage = document.querySelector('#rename-inspection-message');
+  const saveName = document.querySelector('#save-inspection-name');
+  const cancelName = document.querySelector('#cancel-inspection-name');
+  let renameTarget = null;
+  document.querySelector('#rename-inspection').addEventListener('click', () => {
+    if (!currentUser?.is_admin || !currentInspectionId) return;
+    renameTarget = {id: currentInspectionId, name: inspectionName.textContent};
+    renameInput.value = renameTarget.name;
+    renameMessage.textContent = '';
+    renameDialog.showModal();
+    renameInput.focus();
+  });
+  cancelName.addEventListener('click', () => renameDialog.close());
+  renameDialog.addEventListener('cancel', event => { if (saveName.disabled) event.preventDefault(); });
+  document.querySelector('#rename-inspection-form').addEventListener('submit', async event => {
+    event.preventDefault();
+    if (!renameTarget || saveName.disabled) return;
+    const target = renameTarget;
+    saveName.disabled = cancelName.disabled = true;
+    try {
+      const response = await fetch(`/api/inspections/${target.id}/name`, {
+        method: 'PATCH', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({name: renameInput.value, expected_name: target.name}),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(typeof result.detail === 'string' ? result.detail : 'Enter an inspection name between 1 and 200 characters.');
+      if (currentInspectionId === target.id) {
+        viewVersion++;
+        inspectionName.textContent = result.name;
+        inspectionMessage.textContent = 'Inspection name saved.';
+      }
+      renameDialog.close();
+      await loadInspections();
+    } catch (error) { renameMessage.textContent = error.message || 'Saving the name failed. Please try again.'; }
+    finally { saveName.disabled = cancelName.disabled = false; }
+  });
 
   let displayedPointLists = [];
   const changePanelType = document.querySelector('#change-panel-type');

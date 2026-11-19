@@ -24,6 +24,7 @@ class Inspection(Base):
     __tablename__ = "inspections"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    custom_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     store_number: Mapped[str] = mapped_column(String(100))
     store_type: Mapped[str] = mapped_column(String(80), default="Walmart - Supercenter")
     address: Mapped[str] = mapped_column(String(500))
@@ -38,7 +39,7 @@ class Inspection(Base):
 
     @property
     def name(self) -> str:
-        return build_inspection_name(self.store_number, self.city or "", self.state or "", self.start_date)
+        return self.custom_name or build_inspection_name(self.store_number, self.city or "", self.state or "", self.start_date)
 
 
 class User(Base):
@@ -248,6 +249,8 @@ def _ensure_inspection_columns(engine) -> None:
         for column in inspect(engine).get_columns("inspections")
     }
     statements: list[str] = []
+    if "custom_name" not in existing_columns:
+        statements.append("ALTER TABLE inspections ADD COLUMN custom_name VARCHAR(200)")
     if "due_date" not in existing_columns:
         statements.append("ALTER TABLE inspections ADD COLUMN due_date DATE")
     if "store_type" not in existing_columns:
