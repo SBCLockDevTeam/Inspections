@@ -9,12 +9,17 @@ from alarm_inspection.integrations import pdf_details
 from alarm_inspection.integrations.pdf_repository import ConflictError
 
 
-def create_router(store):
+def create_router(store, multiple=False):
     files=PrivatePdfFiles(UPLOAD_ROOT)
-    router=APIRouter(prefix='/api/inspections/{inspection_id}/form-integrations',tags=['form-details'])
+    router=APIRouter(prefix=('/api/inspections/{inspection_id}/nfpa-forms/{form_id}/form-integrations' if multiple else '/api/inspections/{inspection_id}/form-integrations'),tags=['form-details'])
 
     def run(request,operation):
+        from alarm_inspection.nfpa_forms import selected_form, validate_form
+        token = selected_form.set(request.path_params.get('form_id', ''))
         try:
+            if selected_form.get():
+                with store() as session:
+                    validate_form(session, request.path_params['inspection_id'], selected_form.get())
             actor=getattr(request.state,'current_user',None)
             if actor is None: raise PermissionError('Authentication required.')
             result=operation(actor.id)
@@ -24,6 +29,9 @@ def create_router(store):
         except ConflictError as exc:return JSONResponse({'error':str(exc),'code':'CONFLICT'},status_code=409)
         except (ValueError,TypeError,KeyError) as exc:return JSONResponse({'error':str(exc)},status_code=400)
         except (RuntimeError,OSError,SQLAlchemyError):return JSONResponse({'error':'Form integrations are disabled or temporarily unavailable.'},status_code=503)
+
+        finally:
+            selected_form.reset(token)
 
     def key_check(key):
         if key not in {'nfpa72','compliance'}:raise ValueError('Unknown integration.')

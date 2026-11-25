@@ -864,6 +864,7 @@
   const fieldKey = field => `${field.definition.id}:${field.panel_id || ''}`;
   const localKey = (key,field) => `${key}:${fieldKey(field)}`;
   const state = id => {
+    id = id + ':' + (window.selectedNfpaForm?.() || '');
     if (!records.has(id)) records.set(id,{forms:[],locals:new Map(),scopes:new Map(),archive:[]});
     return records.get(id);
   };
@@ -878,7 +879,12 @@
     if (!response.ok) throw new Error((response.status===409 ? 'Conflict: your answer is retained. ' : '')+(value.error || value.detail || 'Unable to save Form Details.'));
     return value;
   }
-  const url=(id,key='') => `/api/inspections/${encodeURIComponent(id)}/form-integrations${key ? '/'+key : ''}`;
+  const url=(id,key='') => `/api/inspections/${encodeURIComponent(id)}${window.selectedNfpaForm?.() ? '/nfpa-forms/'+encodeURIComponent(window.selectedNfpaForm()) : ''}/form-integrations${key ? '/'+key : ''}`;
+  document.addEventListener('nfpa-form-changed', () => {
+    epoch++;controller?.abort();reading=false;root.replaceChildren();
+    previewDialog?.close();previewDialog?.remove();previewDialog=null;
+    refresh();
+  });
   const put=(path,value) => read(path,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(value)});
   function act(parent,text,fn,attrs={}) {
     const button=node('button',text,{type:'button',...attrs});
@@ -1101,7 +1107,7 @@
     const preview=await post(url(inspectionId,key)+'/preview',{expected_version_id:form.version_id,expected_source_fingerprint:form.readiness.source_fingerprint});
     if(active!==inspectionId)return;
     previewDialog?.remove();const dialog=node('dialog',null,{class:'pdf-export-dialog','aria-label':'Review completed form preview'});previewDialog=dialog;
-    dialog.append(node('h3',names[key]+' — Draft preview'),node('p',`Version ${preview.version_id}. Scope: ${preview.panel_ids.join(', ')||'reviewed no-panel policy'}. Signatures remain blank for later signing.`));
+    dialog.append(node('h3',names[key]+(key==='nfpa72' ? ' — '+document.getElementById('nfpa-form-selector').selectedOptions[0]?.textContent : '')+' — Draft preview'),node('p',`Version ${preview.version_id}. Scope: ${preview.panel_ids.join(', ')||'reviewed no-panel policy'}. Signatures remain blank for later signing.`));
     const blanks=node('details');blanks.append(node('summary','Deliberately blank destinations'));
     for(const blank of preview.deliberately_blank)blanks.append(node('p',`${blank.label||blank.target_id}: ${blank.reason}`));dialog.append(blanks);
     const frame=node('iframe',null,{title:'Watermarked form preview',src:url(inspectionId,key)+`/exports/${preview.id}/download`});dialog.append(frame);
@@ -1129,5 +1135,6 @@
   window.addEventListener('beforeunload',event=>{if([...records.values()].some(r=>[...r.locals.values()].some(v=>v.dirty)||[...r.scopes.values()].some(s=>s.dirty))){event.preventDefault();event.returnValue='';}});
   let owner=null;
   const setActor=id=>{if(!id){setInspection(null);return;}if(owner && owner!==id){setInspection(null);records.clear();window.PdfIntegrations.resetAdmin();}owner=id;};
-  Object.assign(window.PdfIntegrations,{setInspection,refreshDetails:refresh,saveDetails,setActor});
+  Object.assign(window.PdfIntegrations,{setInspection,refreshDetails:refresh,saveDetails,setActor,
+    hasPendingFormSaves: () => [...records.values()].some(r => [...r.locals.values()].some(v => v.saving))});
 })();

@@ -29,6 +29,15 @@ from alarm_inspection.storage import Inspection, InspectionPdfTemplateDraft, Sou
 
 
 def register_template_routes(router, store) -> None:
+    def draft_key(inspection_id, template_key, nfpa_form_id):
+        from alarm_inspection.nfpa_forms import validate_form
+        with store() as session:
+            try:
+                validate_form(session, inspection_id, nfpa_form_id)
+            except ValueError as exc:
+                raise HTTPException(404, str(exc)) from exc
+        return template_key + (":" + nfpa_form_id if template_key == "nfpa72" and nfpa_form_id else "")
+
     @router.get("/{inspection_id}/nfpa-template/status")
     def get_nfpa_template_status(inspection_id: str) -> dict:
         with store() as session:
@@ -173,7 +182,8 @@ def register_template_routes(router, store) -> None:
             return {"inspection_id": inspection_id, "templates": templates}
 
     @router.get("/{inspection_id}/pdf-templates/{template_key}")
-    def get_pdf_template_draft(inspection_id: str, template_key: str) -> dict:
+    def get_pdf_template_draft(inspection_id: str, template_key: str, nfpa_form_id: str = "") -> dict:
+        storage_key = draft_key(inspection_id, template_key, nfpa_form_id)
         meta = template_meta(template_key)
         if meta is None:
             raise HTTPException(status_code=404, detail="Unknown PDF template key.")
@@ -195,12 +205,12 @@ def register_template_routes(router, store) -> None:
 
         with store() as session:
             field_names = extract_template_fields(template_path)
-            values = load_template_draft_values(session, inspection_id, template_key, field_names)
+            values = load_template_draft_values(session, inspection_id, storage_key, field_names)
             draft_row = (
                 session.query(InspectionPdfTemplateDraft)
                 .filter(
                     InspectionPdfTemplateDraft.inspection_id == inspection_id,
-                    InspectionPdfTemplateDraft.template_key == template_key,
+                    InspectionPdfTemplateDraft.template_key == storage_key,
                 )
                 .first()
             )
@@ -216,7 +226,8 @@ def register_template_routes(router, store) -> None:
         }
 
     @router.put("/{inspection_id}/pdf-templates/{template_key}")
-    def save_pdf_template_draft(inspection_id: str, template_key: str, payload: dict = Body(default={})) -> dict:
+    def save_pdf_template_draft(inspection_id: str, template_key: str, payload: dict = Body(default={}), nfpa_form_id: str = "") -> dict:
+        storage_key = draft_key(inspection_id, template_key, nfpa_form_id)
         meta = template_meta(template_key)
         if meta is None:
             raise HTTPException(status_code=404, detail="Unknown PDF template key.")
@@ -244,7 +255,7 @@ def register_template_routes(router, store) -> None:
                 session.query(InspectionPdfTemplateDraft)
                 .filter(
                     InspectionPdfTemplateDraft.inspection_id == inspection_id,
-                    InspectionPdfTemplateDraft.template_key == template_key,
+                    InspectionPdfTemplateDraft.template_key == storage_key,
                 )
                 .first()
             )
@@ -253,7 +264,7 @@ def register_template_routes(router, store) -> None:
             if row is None:
                 row = InspectionPdfTemplateDraft(
                     inspection_id=inspection_id,
-                    template_key=template_key,
+                    template_key=storage_key,
                     fields_json=serialized,
                     updated_at=now,
                 )
@@ -271,7 +282,8 @@ def register_template_routes(router, store) -> None:
             }
 
     @router.get("/{inspection_id}/pdf-templates/{template_key}/preview")
-    def preview_pdf_template_draft(inspection_id: str, template_key: str):
+    def preview_pdf_template_draft(inspection_id: str, template_key: str, nfpa_form_id: str = ""):
+        storage_key = draft_key(inspection_id, template_key, nfpa_form_id)
         meta = template_meta(template_key)
         if meta is None:
             raise HTTPException(status_code=404, detail="Unknown PDF template key.")
@@ -290,14 +302,15 @@ def register_template_routes(router, store) -> None:
                     ),
                 )
             field_names = extract_template_fields(template_path)
-            values = load_template_draft_values(session, inspection_id, template_key, field_names)
+            values = load_template_draft_values(session, inspection_id, storage_key, field_names)
 
         pdf_bytes = fill_template_pdf(template_path, values)
         headers = {"Content-Disposition": f'inline; filename="{template_path.name}"'}
         return StreamingResponse(BytesIO(pdf_bytes), media_type="application/pdf", headers=headers)
 
     @router.get("/{inspection_id}/pdf-templates/{template_key}/download")
-    def download_pdf_template_draft(inspection_id: str, template_key: str):
+    def download_pdf_template_draft(inspection_id: str, template_key: str, nfpa_form_id: str = ""):
+        storage_key = draft_key(inspection_id, template_key, nfpa_form_id)
         meta = template_meta(template_key)
         if meta is None:
             raise HTTPException(status_code=404, detail="Unknown PDF template key.")
@@ -316,9 +329,11 @@ def register_template_routes(router, store) -> None:
                     ),
                 )
             field_names = extract_template_fields(template_path)
-            values = load_template_draft_values(session, inspection_id, template_key, field_names)
+            values = load_template_draft_values(session, inspection_id, storage_key, field_names)
 
         pdf_bytes = fill_template_pdf(template_path, values)
         filename = default_template_download_name(template_key, inspection.store_number)
+        if template_key == "nfpa72" and nfpa_form_id:
+            filename = filename.removesuffix(".pdf") + "-" + nfpa_form_id + ".pdf"
         headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
         return StreamingResponse(BytesIO(pdf_bytes), media_type="application/pdf", headers=headers)

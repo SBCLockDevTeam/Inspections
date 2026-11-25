@@ -79,11 +79,16 @@ def create_app():
     app.include_router(create_integrations_router(store))
     from alarm_inspection.api.routers.inspection_form_integrations import create_router as create_form_details_router
     app.include_router(create_form_details_router(store))
+    app.include_router(create_form_details_router(store, multiple=True))
+    from alarm_inspection.api.routers.nfpa_forms import create_router as create_nfpa_forms_router
+    app.include_router(create_nfpa_forms_router(store))
     app.include_router(create_ui_router())
     app.include_router(create_auth_router(store))
     app.include_router(create_admin_router(store))
     app.include_router(create_tasks_admin_router(store))
     app.include_router(create_checklist_router(store))
+    from alarm_inspection.api.routers.field_help import create_router as create_help_router
+    app.include_router(create_help_router(store))
     app.include_router(create_inspections_router(store))
     app.include_router(create_point_lists_router(store))
     return app

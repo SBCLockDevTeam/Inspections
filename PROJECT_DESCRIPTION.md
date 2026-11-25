@@ -93,3 +93,9 @@ Before production use, complete and test approval-state transitions, review ever
 
 The original requirements are documented in `inspection spec.docx`; this description incorporates that document and all scope decisions made afterward.
 
+
+## Multiple NFPA 72 forms and field help (November 25, 2026)
+
+An inspection can have multiple named NFPA 72 forms. Add NFPA 72 creates another form only when needed; Name / Type edits the selected form's name and its mapping to a configured Points List Type. A type does not automatically create a second form. Existing NFPA answers remain in the original form. Store Data and Compliance stay shared, while NFPA checklist answers, embedded PDF draft values, additional Form Details, preview readiness and final export history are scoped to the selected form. Named-form downloads include the form name/type and an identifier to distinguish outputs. Adding or changing a form records the actor and prior metadata.
+
+Administration → Help Administration lists native and custom inspection fields by Store Data, NFPA 72 and Compliance, plus Points Lists & Events inputs. Each row has an activation checkbox and Configure help action. Administrators can save plain-text instructions, multiple pictures and one video. Uploads accept PNG/JPEG/WebP pictures and MP4/WebM video, up to 50 MB each and 20 attachments per field. Help buttons open an accessible, scrollable dialog with responsive pictures and inline video controls. Closing returns to the same inspection without clearing its inputs. Help is shared across inspections and restricted to signed-in users; only administrators can edit it. Changes use revision checks to prevent overwriting another administrator's update. Media removed from an entry remains privately stored.

@@ -24,7 +24,8 @@ def populated_baseline(tmp_path, monkeypatch):
     store = open_store()
     now = datetime(2026, 10, 1, 12, tzinfo=timezone.utc)
     with store.begin() as session:
-        session.add(User(id='technician', email='synthetic@example.invalid', password_hash='not-a-real-hash',
+        session.add(User(id='technician', email='synthetic@example.invalid', username='synthetic@example.invalid',
+                         username_key='synthetic@example.invalid', password_hash='not-a-real-hash',
                          is_admin=False, force_password_reset=False, is_active=True, created_at=now))
         for ident, status in [('active', 'pending_event_history'), ('deleted', 'deleted')]:
             session.add(Inspection(id=ident, store_number='SYNTHETIC', store_type='Test Store',

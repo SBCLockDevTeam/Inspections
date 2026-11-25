@@ -214,17 +214,25 @@ def create_checklist_router(store):
             raise HTTPException(status_code=404, detail="Inspection not found.")
 
     @router.get("")
-    def get_checklist(inspection_id: str):
+    def get_checklist(inspection_id: str, nfpa_form_id: str = ""):
+        from alarm_inspection.nfpa_forms import validate_form
         with store() as session:
             check_inspection(session, inspection_id)
+            try:
+                validate_form(session, inspection_id, nfpa_form_id)
+            except ValueError as exc:
+                raise HTTPException(404, str(exc)) from exc
             tasks = session.query(InspectionTask).filter(InspectionTask.active.is_(True)).order_by(
                 InspectionTask.position, InspectionTask.created_at, InspectionTask.id).all()
             decisions = session.query(InspectionChecklistDecision).filter(
                 InspectionChecklistDecision.inspection_id == inspection_id).order_by(
                 InspectionChecklistDecision.decided_at.desc(), InspectionChecklistDecision.id.desc()).all()
             latest = {}
+            by_id = {task.id: task for task in tasks}
             for decision in decisions:
-                latest.setdefault(decision.task_id, decision)
+                task = by_id.get(decision.task_id)
+                if task and decision.nfpa_form_id == (nfpa_form_id if task.section == "nfpa72" else ""):
+                    latest.setdefault(decision.task_id, decision)
             rows = []
             for task in tasks:
                 decision = latest.get(task.id)
@@ -238,12 +246,17 @@ def create_checklist_router(store):
             return {"tasks": rows, "builtin_fields": native_fields(session), "completed_count": sum(row["completed"] for row in rows), "total_count": len(rows)}
 
     @router.patch("/{task_id}")
-    def update_checklist(inspection_id: str, task_id: str, payload: ChecklistUpdate, request: Request):
+    def update_checklist(inspection_id: str, task_id: str, payload: ChecklistUpdate, request: Request, nfpa_form_id: str = ""):
+        from alarm_inspection.nfpa_forms import validate_form
         with store.begin() as session:
             check_inspection(session, inspection_id)
             task = session.get(InspectionTask, task_id)
             if task is None or not task.active:
                 raise HTTPException(status_code=404, detail="Active task not found.")
+            try:
+                validate_form(session, inspection_id, nfpa_form_id)
+            except ValueError as exc:
+                raise HTTPException(404, str(exc)) from exc
             options = json.loads(task.options_json or "[]")
             try:
                 completed, value = validate_answer(task.input_type, payload.completed, payload.value, options)
@@ -251,6 +264,7 @@ def create_checklist_router(store):
                 raise HTTPException(status_code=422, detail=str(exc)) from exc
             session.add(InspectionChecklistDecision(
                 id=str(uuid4()), inspection_id=inspection_id, task_id=task.id, task_text=task.text,
+                nfpa_form_id=nfpa_form_id if task.section == "nfpa72" else "",
                 input_type=task.input_type, value=value,
                 options_json=json.dumps(CHECKBOX_CHOICES) if task.input_type == "checkbox" else task.options_json,
                 completed=completed, decided_by=request.state.current_user.id,

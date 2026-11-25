@@ -42,3 +42,9 @@
 - Added synthetic PDF fixtures/tests and a disposable populated-database preservation/backup-restore baseline.
 - Reconciled the supplied NFPA first four pages (196 widgets) and Compliance page (283 widgets); private proofs demonstrate duplicate-name isolation and clearing original presets.
 - See [part 1 evidence](PDF_INTEGRATION_PART1_REPORT.md) and [decision register](PDF_INTEGRATION_DECISIONS.md) for verification and limits. Published mappings, UI, production exports/storage, upload isolation, and browser/physical-print acceptance remain future work.
+
+## 2026-11-25 — Named NFPA 72 forms and Help Administration
+
+- Added optional additional NFPA 72 forms with independent names, configured Points List Types, answers, PDF draft data, readiness, exports and history; retained all original-form data.
+- Added grouped Help Administration with activation toggles, revision-checked configuration, private picture/video uploads and responsive help dialogs.
+- Added API, frozen PDF export isolation and phone viewport interaction regression coverage.

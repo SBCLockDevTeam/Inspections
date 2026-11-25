@@ -6,7 +6,8 @@ from alarm_inspection.domain.pdf_readiness import evaluate_snapshot
 from alarm_inspection.integrations import pdf_repository as repo
 from alarm_inspection.integrations.pdf_models import PdfIntegration, PdfIntegrationVersion, PdfIntegrationAuditEntry, InspectionFormDecision
 from alarm_inspection.integrations.pdf_sources import capture_snapshot, _catalog
-from alarm_inspection.storage import Inspection
+from alarm_inspection.storage import Inspection, NfpaFormDecisionLink
+from alarm_inspection.nfpa_forms import selected_form
 
 
 def policy_hash(config):
@@ -18,7 +19,7 @@ def saved_scope(session, inspection_id, key):
         PdfIntegrationAuditEntry.action=='form_scope_decision').order_by(PdfIntegrationAuditEntry.decided_at.desc(),PdfIntegrationAuditEntry.id.desc()))
     for row in rows:
         detail=json.loads(row.details_json)
-        if detail['inspection_id']==inspection_id: return row.id,detail
+        if detail['inspection_id']==inspection_id and detail.get('nfpa_form_id', '') == (selected_form.get() if key == 'nfpa72' else ''): return row.id,detail
     return '',None
 
 
@@ -79,7 +80,7 @@ def save_scope(store, inspection_id, key, payload, *, actor_id):
         errors=[b.message for b in snapshot.blockers if b.code in {'INVALID_SCOPE','UNCONFIGURED','DISABLED'}]
         if errors: raise ValueError('\n'.join(errors))
         repo._audit(session,key,config.version_id,'form_scope_decision',actor_id,
-                    {'inspection_id':inspection_id,'panel_ids':snapshot.panel_ids,'policy_hash':policy_hash(config)})
+                    {'inspection_id':inspection_id,'nfpa_form_id':selected_form.get() if key == 'nfpa72' else '', 'panel_ids':snapshot.panel_ids,'policy_hash':policy_hash(config)})
     return details(store,inspection_id,key,actor_id=actor_id)
 
 
@@ -106,5 +107,7 @@ def save_answer(store, inspection_id, key, payload, *, actor_id):
                 raise repo.ConflictError('Original source changed. Review the override again.')
         elif answer.overridden_source is not None or answer.source_fingerprint is not None:
             raise ValueError('Ordinary answers cannot carry override evidence.')
-        repo.append_decision(session,config.version_id,inspection_id,answer,actor_id=actor_id,point_list_id=panel)
+        decision = repo.append_decision(session,config.version_id,inspection_id,answer,actor_id=actor_id,point_list_id=panel)
+        if key == 'nfpa72' and selected_form.get():
+            session.add(NfpaFormDecisionLink(decision_id=decision.id, form_id=selected_form.get()))
     return details(store,inspection_id,key,actor_id=actor_id)

@@ -1,4 +1,5 @@
 """Snapshot-bound preview/confirmation and recoverable, immutable PDF retention."""
+from alarm_inspection.nfpa_forms import selected_form
 from datetime import date, datetime, timezone, timedelta
 from hashlib import sha256
 import hmac
@@ -84,6 +85,8 @@ def download_filename(context):
     stamp=date.fromisoformat(facts['completion_date'][:10]).strftime('%m-%d-%y')
     title='Fire Alarm Inspection' if config.integration_key=='nfpa72' else 'Compliance Inspection'
     panel='-Panel-'+clean(context.panel_ids[0],36) if len(context.panel_ids)==1 else ''
+    form = metadata['facts'].get('nfpa_form')
+    if form: panel += '-' + clean(form['name'],60) + '-' + clean(form.get('category',''),40) + ('-' + form['id'][:8] if form['id'] else '')
     return f"{clean(facts['store_number'],50)}-{clean(facts['city'],70)},{clean(facts['state'],2)}-{title}{panel}-{stamp}.pdf"
 
 
@@ -100,6 +103,8 @@ def _get(session,ident,inspection_id,key,actor_id):
     if row is None or row.inspection_id!=inspection_id:raise ValueError('Export is unavailable for this inspection.')
     context=ArtifactContext.model_validate_json(row.snapshot_json)
     if context.export_metadata.get('config',{}).get('integration_key')!=key or row.purpose=='test':raise ValueError('Export belongs to another integration.')
+    if key == 'nfpa72' and context.export_metadata.get('facts',{}).get('nfpa_form',{}).get('id','') != selected_form.get():
+        raise ValueError('Export belongs to another NFPA 72 form.')
     if row.purpose=='preview' and row.created_by!=actor_id:raise PermissionError('Preview belongs to another user.')
     return row,context
 
@@ -197,7 +202,7 @@ def history(store,inspection_id,key,*,actor_id):
     with store() as session:
         _authorize_history(session,inspection_id,actor_id)
         rows=session.scalars(select(PdfExportArtifact).where(PdfExportArtifact.inspection_id==inspection_id,PdfExportArtifact.purpose=='final').order_by(PdfExportArtifact.created_at.desc()))
-        return {'exports':[_info(row) for row in rows if ArtifactContext.model_validate_json(row.snapshot_json).export_metadata.get('config',{}).get('integration_key')==key]}
+        return {'exports':[_info(row) for row in rows if ArtifactContext.model_validate_json(row.snapshot_json).export_metadata.get('config',{}).get('integration_key')==key and (key != 'nfpa72' or ArtifactContext.model_validate_json(row.snapshot_json).export_metadata.get('facts',{}).get('nfpa_form',{}).get('id','') == selected_form.get())]}
 
 
 def download(store,inspection_id,key,ident,*,files,actor_id):

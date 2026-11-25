@@ -25,4 +25,8 @@ def create_router() -> APIRouter:
         script_path = Path(__file__).resolve().parents[1] / "integrations.js"
         return Response(content=script_path.read_text(encoding="utf-8"), media_type="application/javascript")
 
+    @router.get("/help.js")
+    def help_script() -> Response:
+        return Response(content=(Path(__file__).resolve().parents[1] / "help.js").read_text(encoding="utf-8"), media_type="application/javascript")
+
     return router

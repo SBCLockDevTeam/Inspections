@@ -132,6 +132,63 @@
   let renderedListIndex = null;
   let previewInputSignature = null;
   let currentInspectionId = null;
+  let selectedNfpaForm = '';
+  window.selectedNfpaForm = () => selectedNfpaForm;
+  const checklistUrl = id => `/api/inspections/${id}/checklist${selectedNfpaForm ? "?nfpa_form_id="+encodeURIComponent(selectedNfpaForm) : ""}`;
+  let nfpaForms = [];
+  let editingNfpaForm = false;
+  const nfpaSelect = document.getElementById('nfpa-form-selector');
+  async function loadNfpaForms() {
+    const id = currentInspectionId;
+    if (!id) return;
+    const response = await fetch(`/api/inspections/${id}/nfpa-forms`);
+    if (!response.ok || currentInspectionId !== id) return;
+    const result = await response.json();
+    if (JSON.stringify(nfpaForms) === JSON.stringify(result.forms) && nfpaSelect.options.length) { nfpaSelect.value = selectedNfpaForm; return; }
+    nfpaForms = result.forms;
+    nfpaSelect.replaceChildren(...result.forms.map(f => new Option(f.name + (f.category ? ' — '+f.category : ' — select Type'), f.id)));
+    nfpaSelect.value = selectedNfpaForm;
+  }
+  nfpaSelect.addEventListener('change', async () => {
+    await Promise.all([...checklistSaves]);
+    if (hasDraft(checklistContainer) || window.PdfIntegrations?.hasPendingFormSaves?.()) { nfpaSelect.value = selectedNfpaForm; checklistMessage.textContent = 'Save current edits before changing NFPA 72 forms.'; return; }
+    selectedNfpaForm = nfpaSelect.value; mutationVersion++;
+    document.dispatchEvent(new Event('nfpa-form-changed'));
+    await loadInspectionChecklist(currentInspectionId);
+  });
+  async function openNfpaFormDialog(edit) {
+    editingNfpaForm = edit;
+    const current = nfpaForms.find(f => f.id === selectedNfpaForm);
+    document.getElementById('nfpa-form-name').value = edit ? current?.name || '' : '';
+    document.getElementById('nfpa-form-dialog-title').textContent = edit ? 'NFPA 72 name and Type' : 'Add NFPA 72 form';
+    document.getElementById('nfpa-form-message').textContent = '';
+    try {
+      const response = await fetch('/api/point-lists/types'); const data = await response.json();
+      const select = document.getElementById('nfpa-form-category');
+      select.replaceChildren(new Option('Select Type…',''), ...data.panel_types.map(t => new Option(t.name,t.name)));
+      select.value = edit ? current?.category || '' : '';
+      document.getElementById('new-nfpa-form-dialog').showModal();
+    } catch { checklistMessage.textContent = 'Unable to load Points List Types.'; }
+  }
+  document.getElementById('add-nfpa-form').onclick = () => openNfpaFormDialog(false);
+  document.getElementById('edit-nfpa-form').onclick = () => openNfpaFormDialog(true);
+  document.getElementById('cancel-nfpa-form').onclick = () => document.getElementById('new-nfpa-form-dialog').close();
+  document.getElementById('new-nfpa-form').addEventListener('submit', async event => {
+    event.preventDefault();
+    const message = document.getElementById('nfpa-form-message');
+    const button = event.submitter; button.disabled = true;
+    try {
+      await Promise.all([...checklistSaves]);
+      if (hasDraft(checklistContainer) || window.PdfIntegrations?.hasPendingFormSaves?.()) throw new Error('Save current edits before adding a form.');
+      const response = await fetch(`/api/inspections/${currentInspectionId}/nfpa-forms${editingNfpaForm ? '/'+(selectedNfpaForm || 'original') : ''}`, {method:editingNfpaForm ? 'PUT' : 'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:document.getElementById('nfpa-form-name').value,category:document.getElementById('nfpa-form-category').value})});
+      const result = await response.json();
+      if (!response.ok) throw new Error(taskError(result,'Unable to add NFPA 72 form.'));
+      selectedNfpaForm = result.id; mutationVersion++;
+      await loadNfpaForms(); document.dispatchEvent(new Event('nfpa-form-changed'));
+      await loadInspectionChecklist(currentInspectionId);
+      document.getElementById('new-nfpa-form-dialog').close();
+    } catch(error) { message.textContent = error.message; } finally {button.disabled=false;}
+  });
   let inspectionPoints = [];
   let pendingEventDates = new Map();
   let showMissingOnly = false;
@@ -158,7 +215,7 @@
   const controlValue = (control) => control.type === 'checkbox' ? control.checked : control.value;
   const rememberControls = (root) => root?.querySelectorAll('input,select,textarea').forEach((control) => fieldBaselines.set(control, controlValue(control)));
   if (window.PdfIntegrations) window.PdfIntegrations.hasLegacyDrafts = () => checklistSaves.size > 0 || hasDraft(document.querySelector('#store-data-section')) || hasDraft(checklistContainer) || hasDraft(acceptedPointsBody);
-  const hasDraft = (root) => Boolean(root?.querySelector('[data-checklist-dirty="true"]')) || [...(root?.querySelectorAll('input,select,textarea') || [])].some((control) => fieldBaselines.has(control) && fieldBaselines.get(control) !== controlValue(control));
+  const hasDraft = (root) => Boolean(root?.querySelector('[data-checklist-dirty="true"]')) || [...(root?.querySelectorAll('input,select,textarea') || [])].some((control) => control.id !== "nfpa-form-selector" && fieldBaselines.has(control) && fieldBaselines.get(control) !== controlValue(control));
   const rememberResponse = (url, value) => liveSnapshots.set(url, JSON.stringify(value));
   const fetch = async (url, options = {}) => {
     const write = !['GET', 'HEAD'].includes((options.method || 'GET').toUpperCase());
@@ -308,12 +365,13 @@
         } else if (!inspectionPoints.some((point) => point.highlightSaving) && liveSnapshots.get('accepted-points') !== JSON.stringify(points)) {
           renderAcceptedPoints(points);
         }
+        if (valid() && document.activeElement !== nfpaSelect) await loadNfpaForms();
         if (valid()) void window.PdfIntegrations?.refreshDetails?.();
-        if (valid() && !checklistSaves.size && !hasDraft(checklistContainer)) await collection(`/api/inspections/${inspectionId}/checklist`, checklistContainer, (result) => loadInspectionChecklist(inspectionId, result), false);
+        if (valid() && !checklistSaves.size && !hasDraft(checklistContainer)) await collection(checklistUrl(inspectionId), checklistContainer, (result) => loadInspectionChecklist(inspectionId, result), false);
       }
       if (valid() && nfpaDraftModal?.classList.contains('open')) {
         const key = activePdfTemplateKey;
-        const result = await read(`/api/inspections/${inspectionId}/pdf-templates/${encodeURIComponent(key)}`);
+        const result = await read(`/api/inspections/${inspectionId}/pdf-templates/${encodeURIComponent(key)}?nfpa_form_id=${encodeURIComponent(selectedNfpaForm)}`);
         if (result && key === activePdfTemplateKey) {
           let changed = false;
           for (const control of pdfTemplateFieldsContainer.querySelectorAll('input')) {
@@ -693,14 +751,15 @@
   }
 
   async function loadInspectionChecklist(inspectionId, supplied = null) {
+    const formId = selectedNfpaForm;
     await Promise.all([...checklistSaves]);
-    if (currentInspectionId !== inspectionId) return;
+    if (currentInspectionId !== inspectionId || formId !== selectedNfpaForm) return;
     try {
-      const response = supplied ? { ok: true } : await fetch(`/api/inspections/${inspectionId}/checklist`);
+      const response = supplied ? { ok: true } : await fetch(checklistUrl(inspectionId));
       const result = supplied || await response.json();
-      if (currentInspectionId !== inspectionId) return;
+      if (currentInspectionId !== inspectionId || formId !== selectedNfpaForm) return;
       if (!response.ok) throw new Error(taskError(result, 'Unable to load Inspection fields.'));
-      rememberResponse(`/api/inspections/${inspectionId}/checklist`, result);
+      rememberResponse(checklistUrl(inspectionId), result);
       const focused = checklistContainer.contains(document.activeElement) ? document.activeElement : null;
       const focusedId = focused?.id;
       const selectionStart = focused?.selectionStart;
@@ -775,7 +834,7 @@
           checklistMessage.textContent = 'Saving checklist value...';
           const save = (async () => {
             try {
-              const response = await fetch(`/api/inspections/${inspectionId}/checklist/${task.id}`, {
+              const response = await fetch(`/api/inspections/${inspectionId}/checklist/${task.id}${formId ? "?nfpa_form_id="+encodeURIComponent(formId) : ""}`, {
                 method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ value }),
               });
               const result = await response.json();
@@ -1527,7 +1586,7 @@
       return;
     }
     const stamp = Date.now();
-    pdfTemplatePreviewFrame.src = `/api/inspections/${currentInspectionId}/pdf-templates/${encodeURIComponent(activePdfTemplateKey)}/preview?ts=${stamp}`;
+    pdfTemplatePreviewFrame.src = `/api/inspections/${currentInspectionId}/pdf-templates/${encodeURIComponent(activePdfTemplateKey)}/preview?ts=${stamp}&nfpa_form_id=${encodeURIComponent(selectedNfpaForm)}`;
   }
 
   async function loadPdfTemplateDraft() {
@@ -1536,7 +1595,7 @@
     }
     let response;
     try {
-      response = await fetch(`/api/inspections/${currentInspectionId}/pdf-templates/${encodeURIComponent(activePdfTemplateKey)}`);
+      response = await fetch(`/api/inspections/${currentInspectionId}/pdf-templates/${encodeURIComponent(activePdfTemplateKey)}?nfpa_form_id=${encodeURIComponent(selectedNfpaForm)}`);
     } catch {
       return { error: 'Unable to reach server while loading PDF template.' };
     }
@@ -1570,7 +1629,7 @@
       return false;
     }
     nfpaDraftMessage.textContent = 'Saving PDF fields...';
-    const response = await fetch(`/api/inspections/${currentInspectionId}/pdf-templates/${encodeURIComponent(activePdfTemplateKey)}`, {
+    const response = await fetch(`/api/inspections/${currentInspectionId}/pdf-templates/${encodeURIComponent(activePdfTemplateKey)}?nfpa_form_id=${encodeURIComponent(selectedNfpaForm)}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ fields: activePdfTemplateFields }),
@@ -1992,7 +2051,9 @@
     showMissingOnly = false;
     tableEditable = false;
     syncTableEditButtons();
+    if (currentInspectionId !== inspection.id) selectedNfpaForm = '';
     currentInspectionId = inspection.id;
+    loadNfpaForms();
     inspectionName.textContent = inspection.name;
     inspectionCity.value = inspection.city || '';
     inspectionState.value = inspection.state || '';
@@ -2248,6 +2309,11 @@
 
   saveAdminSettingsButton?.addEventListener('click', async () => {
     await saveAdminSettings();
+  });
+
+  avatarButton?.addEventListener('click', (event) => {
+    event.preventDefault();
+    avatarMenu?.classList.toggle('hidden');
   });
 
   avatarButton?.addEventListener('contextmenu', (event) => {
@@ -2799,7 +2865,7 @@
       return;
     }
     nfpaDraftMessage.textContent = 'Downloading updated template...';
-    const response = await fetch(`/api/inspections/${currentInspectionId}/pdf-templates/${encodeURIComponent(activePdfTemplateKey)}/download`);
+    const response = await fetch(`/api/inspections/${currentInspectionId}/pdf-templates/${encodeURIComponent(activePdfTemplateKey)}/download?nfpa_form_id=${encodeURIComponent(selectedNfpaForm)}`);
     const contentType = (response.headers.get('Content-Type') || '').toLowerCase();
     if (!response.ok || !contentType.includes('application/pdf')) {
       let details = 'NFPA template download failed.';

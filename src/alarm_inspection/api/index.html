@@ -1058,6 +1058,17 @@ button.inspection-menu-option {
 #inspection-export-dialog .pdf-form-card {border:0;padding:0;margin:0;}
 #inspection-export-dialog .pdf-form-card > h3, #inspection-export-dialog .pdf-export-action {display:none;}
 #form-details-message:empty, #inspection-export-dialog .pdf-readiness-blockers:empty {display:none;}
+
+.field-help-button { min-width: 44px; min-height: 44px; width: 44px; margin: 0 0 0 4px; padding: 4px; border-radius: 50%; flex-shrink: 0; }
+.field-help-dialog { position: fixed; left: 50vw; top: 50dvh; transform: translate(-50%, -50%); margin: 0; min-width: 0; overflow-wrap: anywhere; width: min(640px, calc(100vw - 24px)); max-height: 90dvh; overflow: auto; box-sizing: border-box; border: 1px solid #aaa; border-radius: 12px; padding: 16px; }
+.field-help-dialog::backdrop { background: #0008; }
+.field-help-dialog img, .field-help-dialog video { display: block; max-width: 100%; max-height: 60dvh; margin: 12px auto; }
+.field-help-dialog textarea, .field-help-dialog input, .field-help-dialog select { max-width: 100%; min-width: 0; box-sizing: border-box; }
+.field-help-dialog textarea { width: 100%; }
+.help-admin-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px; border-bottom: 1px solid #ddd; }
+.help-admin-row label { flex: 1; min-width: 180px; margin: 0; }
+.help-admin-row button { width: auto; min-height: 44px; }
+#admin-panel-help summary { padding: 14px; font-weight: bold; }
 </style></head>
 <body><div class="page-header"><h1>Inspections</h1><div id="user-bar" class="hidden"><span id="active-user-label"></span><span id="live-sync-status" role="status" style="font-size:0.8rem;color:var(--muted)">Live updates on</span><div id="avatar-wrap"><button type="button" id="avatar-button" class="secondary" title="Account menu">JP</button><div id="avatar-menu" class="hidden"><div id="avatar-menu-option-admin" class="avatar-menu-option hidden" role="menuitem" tabindex="0">Administration</div><div id="avatar-menu-option-logout" class="avatar-menu-option" role="menuitem" tabindex="0">Logout</div></div></div></div></div>
 
@@ -1093,6 +1104,7 @@ button.inspection-menu-option {
 <button type="button" id="admin-tab-users" role="tab" aria-controls="admin-panel-users" aria-selected="true">Users</button>
 <button type="button" id="admin-tab-panel-types" role="tab" aria-controls="admin-panel-panel-types" aria-selected="false" tabindex="-1">Panel Types</button>
 <button type="button" id="admin-tab-integrations" role="tab" aria-controls="admin-panel-integrations" aria-selected="false" tabindex="-1">PDF Templates</button>
+<button type="button" id="admin-tab-help" role="tab" aria-controls="admin-panel-help" aria-selected="false" tabindex="-1">Help Administration</button>
 <button type="button" id="admin-tab-inspection-tasks" role="tab" aria-controls="admin-panel-inspection-tasks" aria-selected="false" tabindex="-1">Data Sections</button>
 </div>
 <div id="admin-panel-users" role="tabpanel" aria-labelledby="admin-tab-users">
@@ -1110,6 +1122,7 @@ button.inspection-menu-option {
 <div id="panel-type-message" role="status"></div>
 <table class="table"><thead><tr><th>Panel Type</th></tr></thead><tbody id="panel-types-body"></tbody></table>
 </div>
+<div id="admin-panel-help" role="tabpanel" aria-labelledby="admin-tab-help" class="hidden"></div>
 <div id="admin-panel-integrations" role="tabpanel" aria-labelledby="admin-tab-integrations" class="hidden"></div>
 <div id="admin-panel-inspection-tasks" role="tabpanel" aria-labelledby="admin-tab-inspection-tasks" class="hidden">
 <h3>Data Sections</h3>
@@ -1141,7 +1154,7 @@ button.inspection-menu-option {
 <div class="nav"><button type="button" id="back-home-from-create" class="secondary">Back to Inspection</button></div>
 <h2>Add Points List</h2>
 <form id="inspection-form">
-<div class="form-field"><label for="point-list-category">Security Panel Type:</label><div id="point-lists"><div class="point-list"><select id="point-list-category" name="point_list_category" required disabled><option value="">Loading panel types...</option></select><input name="points_files" type="file" accept=".xls,.xlsx,.pdf" required></div></div></div><div class="create-actions"><button type="button" id="preview-list">Preview Points List</button></div><div id="preview"></div>
+<div class="form-field"><label for="point-list-category" data-help-field="points:category">Security Panel Type:</label><div id="point-lists"><div class="point-list"><select id="point-list-category" name="point_list_category" required disabled><option value="">Loading panel types...</option></select><input name="points_files" type="file" accept=".xls,.xlsx,.pdf" required></div></div></div><div class="create-actions"><span data-help-field="points:upload"></span><button type="button" id="preview-list">Preview Points List</button></div><div id="preview"></div>
 <input type="hidden" name="point_decisions" id="point-decisions" value="[]"></form><div id="message"></div></div>
 
 <div id="inspection-screen" class="card hidden">
@@ -1162,14 +1175,14 @@ button.inspection-menu-option {
 <div class="compact-field" data-inspection-field="due_date"><div class="form-field"><label for="inspection-due-date">Due By:</label><input id="inspection-due-date" type="date" ></div></div>
 </div>
 </div></details>
-<details id="export-form-details-section" class="inspection-section" open><summary>NFPA 72 <span id="nfpa72-progress"></span></summary><div class="inspection-section-body"><div id="nfpa72-fields" class="inspection-details inspection-data-grid"></div><button type="button" id="refresh-nfpa72" class="secondary">Refresh NFPA 72</button></div></details>
+<details id="export-form-details-section" class="inspection-section" open><summary>NFPA 72 <span id="nfpa72-progress"></span></summary><div class="inspection-section-body"><div class="form-field"><label for="nfpa-form-selector">NFPA 72 form:</label><select id="nfpa-form-selector"></select><button type="button" id="edit-nfpa-form" class="secondary">Name / Type</button><button type="button" id="add-nfpa-form" class="secondary">Add NFPA 72</button></div><div id="nfpa72-fields" class="inspection-details inspection-data-grid"></div><button type="button" id="refresh-nfpa72" class="secondary">Refresh NFPA 72</button></div></details>
 <details id="checklist-section" class="inspection-section" open><summary>Compliance <span id="checklist-progress"></span></summary><div class="inspection-section-body">
 <div id="compliance-fields" class="inspection-details inspection-data-grid"></div><button type="button" id="refresh-checklist" class="secondary">Refresh Compliance</button>
 </div></details><div id="checklist-message" role="status" aria-live="polite"></div></div>
 <details id="points-events-section" class="inspection-section" open><summary>Points Lists &amp; Events</summary><div class="inspection-section-body">
 <div class="inspection-actions-row">
   <div class="compact-field points-list-picker">
-    <div class="form-field"><label for="inspection-point-list-selector">Points List:</label><select id="inspection-point-list-selector"></select><button type="button" id="change-panel-type" class="secondary" disabled>Change Type</button></div>
+    <div class="form-field"><label for="inspection-point-list-selector" data-help-field="points:category">Points List:</label><select id="inspection-point-list-selector"></select><button type="button" id="change-panel-type" class="secondary" disabled>Change Type</button></div>
   </div>
 
   <form id="event-history-form" class="inline-form">
@@ -1179,7 +1192,7 @@ button.inspection-menu-option {
         <div class="file-left">
           <input id="event-file" class="visually-hidden-file" type="file" accept=".xls,.xlsx,.pdf" required>
           <button type="button" id="choose-event-file" class="file-trigger">Upload Events</button>
-          <span id="event-file-name" class="file-name">No file selected</span>
+          <span data-help-field="points:events"></span><span id="event-file-name" class="file-name">No file selected</span>
         </div>
       </div>
     </div>
@@ -1187,7 +1200,7 @@ button.inspection-menu-option {
 </div>
 
 <div class="accepted-header-row"><h3>Accepted Points</h3><div class="user-actions"><button type="button" id="edit-table" class="ghost">Edit</button><button type="button" id="save-table" class="ghost">Save</button><button type="button" id="save-event-dates" class="ghost">Accept Results</button></div></div>
-<div id="points-table-scroll" class="table-scroll" role="region" aria-label="Points List table, scroll horizontally to see all columns" tabindex="0"><table class="table"><thead><tr><th class="accepted-time-cell" scope="col" aria-label="Accepted test time" title="Accepted test time"></th><th>Device Type</th><th>Address</th><th>Location</th><th>Test Result</th><th id="accepted-point-delete-heading" hidden>Delete</th></tr></thead><tbody id="accepted-points-body"></tbody></table></div>
+<div id="points-table-scroll" class="table-scroll" role="region" aria-label="Points List table, scroll horizontally to see all columns" tabindex="0"><table class="table"><thead><tr><th class="accepted-time-cell" scope="col" aria-label="Accepted test time" title="Accepted test time"></th><th data-help-field="points:description">Device Type</th><th>Address</th><th data-help-field="points:location">Location</th><th data-help-field="points:result">Test Result</th><th id="accepted-point-delete-heading" hidden>Delete</th></tr></thead><tbody id="accepted-points-body"></tbody></table></div>
 </div></details>
 <div id="inspection-message"></div>
 <div id="inspection-busy-overlay" class="inspection-busy-overlay hidden"><div class="inspection-busy-card"><div class="inspection-busy-spinner" aria-hidden="true"></div><div id="inspection-busy-text" class="inspection-busy-text">Working...</div></div></div>
@@ -1197,7 +1210,7 @@ button.inspection-menu-option {
 
 <div id="delete-inspection-modal" class="modal"><div class="modal-card"><button class="close" id="close-delete-inspection">Close</button><h2>Delete Inspection</h2><div class="form-field"><label for="delete-inspection-selector">Select inspection:</label><select id="delete-inspection-selector"></select></div><div class="delete-actions"><button type="button" id="confirm-delete-inspection" class="danger">Delete</button><button type="button" id="cancel-delete-inspection" class="secondary">Cancel</button></div></div></div>
 
-<div id="preview-modal" class="modal"><div class="modal-card"><button class="close" id="close-preview">Close</button><h2>Points List Review</h2><div class="form-field"><label for="preview-list-selector">Points List:</label><select id="preview-list-selector"></select></div><p id="preview-summary"></p><p>Edit descriptions and use each row's status button to toggle Accept or Review. Rows remain visible until you delete them.</p><div class="nav"><button type="button" class="delete-review-action">Delete all Review rows</button><button type="button" class="save-review-action">Save Decisions</button></div><table class="table"><thead><tr><th>Point</th><th>Description</th><th>Status</th></tr></thead><tbody id="preview-body"></tbody></table></div></div>
+<div id="preview-modal" class="modal"><div class="modal-card"><button class="close" id="close-preview">Close</button><h2>Points List Review</h2><div class="form-field"><label for="preview-list-selector">Points List:</label><select id="preview-list-selector"></select></div><p id="preview-summary"></p><p>Edit descriptions and use each row's status button to toggle Accept or Review. Rows remain visible until you delete them.</p><div class="nav"><button type="button" class="delete-review-action">Delete all Review rows</button><button type="button" class="save-review-action">Save Decisions</button></div><table class="table"><thead><tr><th>Point</th><th data-help-field="points:description">Description</th><th data-help-field="points:status">Status</th></tr></thead><tbody id="preview-body"></tbody></table></div></div>
 <dialog id="event-upload-review" class="pdf-form-tools-dialog" aria-labelledby="event-upload-title">
 <h2 id="event-upload-title">Review Event Upload</h2>
 <p id="event-upload-summary"></p>
@@ -1241,5 +1254,7 @@ button.inspection-menu-option {
 <button type="button" id="cancel-inspection-name" class="secondary">Cancel</button>
 </form>
 </dialog>
+<dialog id="new-nfpa-form-dialog" class="field-help-dialog"><h2 id="nfpa-form-dialog-title">Add NFPA 72 form</h2><form id="new-nfpa-form"><label for="nfpa-form-name" data-help-field="nfpa:name">Form name</label><input id="nfpa-form-name" maxlength="120" required placeholder="e.g. Main building fire panel"><label for="nfpa-form-category" data-help-field="nfpa:type">Points List Type</label><select id="nfpa-form-category" required></select><p id="nfpa-form-message" role="status"></p><button type="submit">Save form</button><button type="button" id="cancel-nfpa-form" class="secondary">Cancel</button></form></dialog>
 <script src="/review.js"></script>
+<script src="/help.js"></script>
 </body></html>

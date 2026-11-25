@@ -8,6 +8,8 @@ from datetime import date, datetime, timezone
 import json
 import re
 
+from alarm_inspection.nfpa_forms import selected_form, validate_form
+from alarm_inspection.storage import NfpaFormDecisionLink
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool, SingletonThreadPool
@@ -133,6 +135,10 @@ def capture_snapshot_session(session, inspection_id, integration_key, *, actor_i
     else: blockers.append(issue('Panel applicability requires review.','UNCONFIGURED'))
     sources, facts, manual_values, catalog = {}, {}, {}, {}
     facts['inspection'] = _row(inspection)
+    form_id = selected_form.get() if integration_key == 'nfpa72' else ''
+    form = validate_form(session, inspection_id, form_id) if integration_key == "nfpa72" else None
+    if form:
+        facts['nfpa_form'] = {'id': form_id, 'name': form.name, 'category': form.category}
     facts['integration'] = {'key':integration.key,'enabled':integration.enabled,'active_version_id':integration.active_version_id,'revision':integration.revision}
     facts['mode'] = 'configuration_sample' if version_id is not None else 'inspection'
     facts['required_scope'] = eligible if config.applicability=='inspection' else requested
@@ -149,7 +155,10 @@ def capture_snapshot_session(session, inspection_id, integration_key, *, actor_i
     decisions = list(session.scalars(select(InspectionChecklistDecision).where(InspectionChecklistDecision.inspection_id==inspection_id)
         .order_by(InspectionChecklistDecision.decided_at.desc(),InspectionChecklistDecision.id.desc())))
     latest = {}
-    for decision in decisions: latest.setdefault(decision.task_id,decision)
+    sections = {task.id: task.section for task in tasks}
+    for decision in decisions:
+        if decision.nfpa_form_id == (form_id if sections.get(decision.task_id) == 'nfpa72' else ''):
+            latest.setdefault(decision.task_id,decision)
     for task in tasks:
         ref = SourceRef(kind='checklist',id=task.id); decision = latest.get(task.id)
         kind = {'checkbox':'yes_no_na','textbox':'text','dropdown':'choice'}.get(task.input_type,'text')
@@ -226,7 +235,10 @@ def capture_snapshot_session(session, inspection_id, integration_key, *, actor_i
         PdfIntegrationVersion.integration_key==integration_key)
         .order_by(InspectionFormDecision.decided_at.desc(),InspectionFormDecision.id.desc())))
     manual_latest = {}
-    for row in manual_rows: manual_latest.setdefault((row.input_id,row.point_list_id),row)
+    links = {link.decision_id: link.form_id for link in session.scalars(select(NfpaFormDecisionLink))}
+    for row in manual_rows:
+        if links.get(row.id, '') == form_id:
+            manual_latest.setdefault((row.input_id,row.point_list_id),row)
     manual_raw, overrides, scoped_values = {}, {}, {}
     for definition in config.manual_inputs:
         ref = SourceRef(kind='manual',id=definition.id)

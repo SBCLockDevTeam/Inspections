@@ -187,7 +187,7 @@ def test_data_sections_defaults_drag_delete_and_private_edits(tmp_path, monkeypa
                 await page.locator('#avatar-button').click(button='right'); await page.click('#avatar-menu-option-admin'); await page.click('#admin-tab-inspection-tasks')
                 assert await page.locator('.admin-data-section > summary > span').all_text_contents() == ['Store Data','NFPA 72','Compliance']
                 native = page.locator('.admin-data-section[data-section="store_data"]')
-                await playwright.expect(native.locator('tbody tr[data-task-id]')).to_have_count(8)
+                await playwright.expect(native.locator('tbody tr[data-task-id]')).to_have_count(9)
                 inspector = native.locator('tr[data-task-id="builtin:inspector_name"]')
                 await inspector.locator('.admin-task-text').fill('Lead Inspector')
                 await inspector.locator('.admin-task-default').fill('Office technician')

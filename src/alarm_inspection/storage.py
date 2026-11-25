@@ -129,6 +129,7 @@ class InspectionChecklistDecision(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     inspection_id: Mapped[str] = mapped_column(String(36), index=True)
     task_id: Mapped[str] = mapped_column(String(36), index=True)
+    nfpa_form_id: Mapped[str] = mapped_column(String(36), default="", server_default="", nullable=False)
     task_text: Mapped[str] = mapped_column(String(200))
     input_type: Mapped[str] = mapped_column(String(20), default="checkbox")
     value: Mapped[str] = mapped_column(String(2000), default="")
@@ -136,6 +137,42 @@ class InspectionChecklistDecision(Base):
     completed: Mapped[bool] = mapped_column(Boolean)
     decided_by: Mapped[str] = mapped_column(String(36))
     decided_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class NfpaForm(Base):
+    __tablename__ = "nfpa_forms"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    inspection_id: Mapped[str] = mapped_column(String(36), index=True)
+    name: Mapped[str] = mapped_column(String(120))
+    category: Mapped[str] = mapped_column(String(40), default="")
+    is_original: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_by: Mapped[str] = mapped_column(String(36))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class NfpaFormDecisionLink(Base):
+    __tablename__ = "nfpa_form_decision_links"
+    decision_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    form_id: Mapped[str] = mapped_column(String(36), index=True)
+
+
+class FieldHelp(Base):
+    __tablename__ = "field_help"
+    field_id: Mapped[str] = mapped_column(String(120), primary_key=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    body: Mapped[str] = mapped_column(Text, default="")
+    media_json: Mapped[str] = mapped_column(Text, default="[]")
+    revision: Mapped[int] = mapped_column(default=0)
+    updated_by: Mapped[str] = mapped_column(String(36))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class HelpMedia(Base):
+    __tablename__ = "help_media"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    field_id: Mapped[str] = mapped_column(String(120), index=True)
+    content_type: Mapped[str] = mapped_column(String(80))
+    filename: Mapped[str] = mapped_column(String(255))
 
 
 class SourceFile(Base):
@@ -304,7 +341,7 @@ def _ensure_point_list_decision_columns(engine) -> None:
 def _ensure_checklist_columns(engine) -> None:
     additions = {
         "inspection_tasks": {"section": "VARCHAR(20) NOT NULL DEFAULT 'compliance'", "input_type": "VARCHAR(20) DEFAULT 'checkbox'", "options_json": "TEXT DEFAULT '[]'", "default_value": "VARCHAR(2000) NOT NULL DEFAULT ''"},
-        "inspection_checklist_decisions": {"input_type": "VARCHAR(20) DEFAULT 'checkbox'", "value": "VARCHAR(2000) DEFAULT ''", "options_json": "TEXT DEFAULT '[]'"},
+        "inspection_checklist_decisions": {"nfpa_form_id": "VARCHAR(36) NOT NULL DEFAULT ''", "input_type": "VARCHAR(20) DEFAULT 'checkbox'", "value": "VARCHAR(2000) DEFAULT ''", "options_json": "TEXT DEFAULT '[]'"},
     }
     for table, columns in additions.items():
         existing = {column["name"] for column in inspect(engine).get_columns(table)}
